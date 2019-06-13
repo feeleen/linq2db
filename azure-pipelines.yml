@@ -4,6 +4,12 @@ jobs:
   pool:
     vmImage: 'vs2017-win2016'
 
+    services:
+        postgres:
+        image: postgres:9.4.5
+        environment:
+            - POSTGRES_USER=myapp
+
   steps:
     - checkout: none
 
