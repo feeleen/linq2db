@@ -6,9 +6,6 @@ jobs:
 
   steps:
     - checkout: none
-    - powershell: |
-        $dbName = "TestDatanet45"
-        $cmd = 'mysql -e "create database $dbName;" --user=root --password=Password12!'
-        iex "& $cmd"
-        
+
+
     - script: printenv
