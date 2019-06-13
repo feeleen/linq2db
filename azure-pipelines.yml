@@ -12,6 +12,11 @@ jobs:
 
   steps:
     - checkout: none
-
+    
+    - script: |
+        choco install postgresql10 --force --params '/Password:password'
+        set PATH=%PATH%;C:\Program Files\PostgreSQL\10\bin;C:\Program Files\PostgreSQL\10\lib"
+        echo "##vso[task.setvariable variable=PATH;]%PATH%;C:\Program Files\PostgreSQL\10\bin;C:\Program Files\PostgreSQL\10\lib"
+        displayName: Install postgresql
 
     - script: printenv
