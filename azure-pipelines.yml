@@ -12,7 +12,7 @@ jobs:
         $dbName = "TestDatanet45"
 
         choco install mysql --params "/port:3307 /serviceName:MySQL /installLocation:'C:'"
-        $cmd = '"C:\MySql\bin\mysql" -e "create database $dbName;" --user=root'
+        $cmd = '"C:\mysql\bin\mysql" -e "create database $dbName;" --user=root'
         iex "& $cmd"
       displayName: Install mysql
 
