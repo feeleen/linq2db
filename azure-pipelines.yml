@@ -11,7 +11,7 @@ jobs:
             $sqlInstance = "(local)\SQL2014"
             # create databases
             $dbName = "TestDatanet45"
-            sqlcmd -S "$sqlInstance" -Q "Use [master]; CREATE DATABASE [$dbName]"
+            Invoke-Sqlcmd -S "$sqlInstance" -Q "Use [master]; CREATE DATABASE [$dbName]"
       displayName: Install postgresql
 
 
