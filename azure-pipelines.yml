@@ -8,11 +8,12 @@ jobs:
     - checkout: none
 
     - powershell: |
-            $sqlInstance = "(local)\SQL2014"
-            # create databases
-            $dbName = "TestDatanet45"
-            Invoke-Sqlcmd -S "$sqlInstance" -Q "Use [master]; CREATE DATABASE [$dbName]"
-      displayName: Install postgresql
+        $env:MYSQL_PWD="Password12!"
+        $dbName = "TestDatanet45"
 
+        choco install mysql --params "/port:3307 /serviceName:MySQL  /installLocation:C:\MySQL\
+        $cmd = '"C:\MySql\bin\mysql" -e "create database $dbName;" --user=root'
+        iex "& $cmd"
+      displayName: Install mysql
 
     - script: printenv
