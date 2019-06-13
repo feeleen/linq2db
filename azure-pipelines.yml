@@ -14,9 +14,11 @@ jobs:
     - checkout: none
     
     - powershell: |
+        $dbName = "TestDatanet45"
         choco install postgresql10 --force --params '/Password:password'
         set PATH=%PATH%;"C:\Program Files\PostgreSQL\10\bin;C:\Program Files\PostgreSQL\10\lib"
-        C:\Program Files\PostgreSQL\10\bin\createdb TestDatanet45
+        $cmd = '"C:\Program Files\PostgreSQL\9.5\bin\createdb" $dbName'
+        iex "& $cmd"
       displayName: Install postgresql
 
     - script: printenv
