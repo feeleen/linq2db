@@ -8,5 +8,5 @@ jobs:
     - checkout: none
     - powershell: |
         $dbName = "TestDatanet45"
-        $cmd = 'mysql -e "create database $dbName;" --user=root --p=Password12!'
+        $cmd = 'mysql -e "create database $dbName;" --user=root --password=Password12!'
         iex "& $cmd"
