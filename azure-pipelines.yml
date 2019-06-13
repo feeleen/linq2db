@@ -1,243 +1,29 @@
-variables:
-  solution: 'linq2db.sln'
-  buildPlatform: 'Any CPU'
-  buildConfiguration: 'Azure'
-  netfxtests: 'netfxtests'
-  core2tests: 'core2tests'
+resources:
+  containers:
+  - container: u14
+    image: ubuntu:14.04
 
-trigger:
-  - master
+  - container: u16
+    image: ubuntu:16.04
 
-stages: 
+  - container: u18
+    image: ubuntu:18.04
 
-##############################
-#  Build
-##############################
-- stage: Build
-  displayName: 'Build'
-  jobs:
-  - job:
-    pool:
-      vmImage: 'vs2017-win2016'
-    displayName: 'Build (Windows)'
+jobs:
+- job: RunInContainer
+  pool:
+    vmImage: 'ubuntu-16.04'
 
-    steps:
+  strategy:
+    matrix:
+      ubuntu14:
+        containerResource: u14
+      ubuntu16:
+        containerResource: u16
+      ubuntu18:
+        containerResource: u18
 
-    - task: SqlDacpacDeploymentOnMachineGroup@0
-      inputs:
-        TaskType: 'sqlInline'
-        InlineSql: 'CREATE DATABASE [TestDatanet45]'
-        ServerName: 'localhost'
-        DatabaseName: 'master'
-        AuthScheme: 'sqlServerAuthentication'
-        SqlUsername: 'sa'
-        SqlPassword: 'Password12!'
+  container: $[ variables['containerResource'] ]
 
-    - task: NuGetToolInstaller@1
-      inputs:
-        versionSpec: '4.4.1'
-        checkLatest: true
-
-    - task: NuGetCommand@2
-      inputs:
-        restoreSolution: '$(solution)'
-        command: 'restore'
-
-    - task: VSBuild@1
-      inputs:
-        solution: '$(solution)'
-        platform: '$(buildPlatform)'
-        configuration: '$(buildConfiguration)'
-        msbuildArgs: /m
-
-    - task: DotNetCoreCLI@2
-      inputs:
-        command: 'publish'
-        projects: '**/Tests/Linq/Tests.csproj'
-        publishWebProjects: false
-        zipAfterPublish: false
-        arguments: -f netcoreapp2.0  -c $(buildConfiguration) 
-
-    - task: CopyFiles@2
-      inputs:
-        TargetFolder: '$(Build.SourcesDirectory)/Tests/Linq/bin/$(buildConfiguration)/net46'
-        sourceFolder: '$(Build.SourcesDirectory)/CI/'
-
-    - task: CopyFiles@2
-      inputs:
-        TargetFolder: '$(Build.SourcesDirectory)/Tests/Linq/bin/$(buildConfiguration)/netcoreapp2.0/publish'
-        sourceFolder: '$(Build.SourcesDirectory)/CI/'
-
-    - task: PublishBuildArtifacts@1
-      inputs:
-        pathtoPublish: '$(Build.SourcesDirectory)/Tests/Linq/bin/$(buildConfiguration)/net46'
-        artifactName: '$(netfxtests)'
-
-    - task: PublishBuildArtifacts@1
-      inputs:
-        pathtoPublish: '$(Build.SourcesDirectory)/Tests/Linq/bin/$(buildConfiguration)/netcoreapp2.0/publish'
-        artifactName: '$(core2tests)'
-
-
-- stage: Tests
-  dependsOn: Build
-  condition: succeeded()
-
-  jobs:
-
-##############################
-#  Linux tests
-##############################
-  - job: Linux
-    pool:
-      vmImage: 'ubuntu-16.04'
-    displayName: 'NETCORE Tests (Linux)'
-
-    variables:
-      file: 'lin_core2_job1.ps1'
-
-    steps:
-    - checkout: none 
-
-    - task: DownloadBuildArtifacts@0
-      inputs:
-        buildType: 'current'
-        downloadType: 'single'
-        artifactName: '$(core2tests)'
-        downloadPath: '$(System.DefaultWorkingDirectory)'
-
-    - task: PowerShell@2
-      inputs:
-        filePath: '$(core2tests)/$(file)'
-        workingDirectory: '$(core2tests)'
-
-    - script: dotnet vstest ./$(core2tests)/linq2db.Tests.Core2.dll /TestCaseFilter:"TestCategory != FreeText & TestCategory != Explicit & TestCategory != Ignored & TestCategory != WindowsOnly & TestCategory != ActiveIssue" /Framework:.NETCoreApp,Version=v2.0
-
-    - task: PublishTestResults@2
-      condition: succeededOrFailed()
-      inputs:
-        testRunner: VsTest
-        testResultsFiles: '**/*.trx'
-
-##############################
-#  OSX Tests
-##############################
-  - job: MacOS
-    pool:
-      vmImage: 'macOS-10.14'
-    displayName: 'NETCORE Tests (MacOS)'
-
-    variables:
-      file: 'osx_core2_job1.ps1'
-
-    steps:
-    - checkout: none 
-
-    - task: DownloadBuildArtifacts@0
-      inputs:
-        buildType: 'current'
-        downloadType: 'single'
-        artifactName: '$(core2tests)'
-        downloadPath: '$(System.DefaultWorkingDirectory)'
-
-    - task: PowerShell@2
-      inputs:
-        filePath: '$(core2tests)/$(file)'
-        workingDirectory: '$(core2tests)'
-
-    - script: dotnet vstest ./$(core2tests)/linq2db.Tests.Core2.dll /TestCaseFilter:"TestCategory != FreeText & TestCategory != Explicit & TestCategory != Ignored & TestCategory != WindowsOnly & TestCategory != ActiveIssue" /Framework:.NETCoreApp,Version=v2.0
-
-    - task: PublishTestResults@2
-      condition: succeededOrFailed()
-      inputs:
-        testRunner: VsTest
-        testResultsFiles: '**/*.trx'
-
-##############################
-#  Windows NETFX tests
-##############################
-  - job: 
-    pool:
-      vmImage: 'vs2017-win2016'
-    displayName: 'NETFX Tests (Windows)'
-
-    strategy:
-      maxParallel: 2
-      matrix:
-        job1: 
-          file: 'win_netfx_job1.ps1'
-        job2:
-          file: 'win_netfx_job2.ps1'
-
-    steps:
-    - checkout: none 
-
-    - task: DownloadBuildArtifacts@0
-      inputs:
-        buildType: 'current'
-        downloadType: 'single'
-        artifactName: '$(netfxtests)'
-        downloadPath: '$(System.DefaultWorkingDirectory)'
-
-    - task: PowerShell@2
-      inputs:
-        filePath: '$(netfxtests)/$(file)'
-        workingDirectory: '$(netfxtests)'
-
-    - task: VSTest@2
-      inputs:
-        testAssemblyVer2: |
-         **/$(netfxtests)/linq2db.Tests.dll
-        platform: '$(buildPlatform)'
-        configuration: '$(buildConfiguration)'
-        testFiltercriteria: 'TestCategory != Ignored & TestCategory != ActiveIssue & TestCategory != SkipCI'
-        otherConsoleOptions: '/Framework:.NETFramework,Version=v4.6'
-      displayName: 'Run tests NET46' 
-
-    - task: PublishTestResults@2
-      condition: succeededOrFailed()
-      inputs:
-        testRunner: VsTest
-        testResultsFiles: '**/*.trx'
-
-##############################
-#  Windows CORE tests job1
-##############################
-  - job:
-    pool:
-      vmImage: 'vs2017-win2016'
-    displayName: 'NETCORE Tests (Windows)'
-
-    variables:
-      file: 'win_core2_job1.ps1'
-
-    steps:
-    - checkout: none 
-
-    - task: DownloadBuildArtifacts@0
-      inputs:
-        buildType: 'current'
-        downloadType: 'single'
-        artifactName: '$(core2tests)'
-        downloadPath: '$(System.DefaultWorkingDirectory)'
-
-    - task: PowerShell@2
-      inputs:
-        filePath: '$(core2tests)/$(file)'
-        workingDirectory: '$(core2tests)'
-
-    - task: VSTest@2
-      inputs:
-        testAssemblyVer2: |
-          **/$(core2tests)/linq2db.Tests.Core2.dll
-        platform: '$(buildPlatform)'
-        configuration: '$(buildConfiguration)'
-        testFiltercriteria: 'TestCategory != Ignored & TestCategory != ActiveIssue & TestCategory != SkipCI'
-        otherConsoleOptions: '/Framework:.NETCoreApp,Version=v2.0'
-      displayName: 'Run tests Core2.0' 
-
-    - task: PublishTestResults@2
-      condition: succeededOrFailed()
-      inputs:
-        testRunner: VsTest
-        testResultsFiles: '**/*.trx'
+  steps:
+    - script: printenv
