@@ -8,14 +8,10 @@ jobs:
     - checkout: none
 
     - powershell: |
-        $env:PGUSER="postgres"
-        $env:PGPASSWORD="Password12!"
-        $dbName = "TestDatanet45"
-
-        choco install postgresql9 --force --params '/Password:Password12!'
-        set PATH=%PATH%;"C:\Program Files\PostgreSQL\9.6\bin;C:\Program Files\PostgreSQL\9.6\lib"
-        $cmd = '"C:\Program Files\PostgreSQL\9.6\bin\createdb" $dbName'
-        iex "& $cmd"
+            $sqlInstance = "(local)\SQL2014"
+            # create databases
+            $dbName = "TestDatanet45"
+            sqlcmd -S "$sqlInstance" -Q "Use [master]; CREATE DATABASE [$dbName]"
       displayName: Install postgresql
 
 
