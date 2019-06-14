@@ -14,6 +14,8 @@ services:
   pg10: pg10
 
 steps:
+  - checkout: none
+
   - script: |
       sudo apt-get install -y postgresql-client
       sudo psql -c 'create database testdata;' -U postgres;
