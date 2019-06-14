@@ -2,6 +2,8 @@ resources:
   containers:
   - container: my_container
     image: ubuntu:16.04
+    options: --hostname localhost --ip 192.168.0.1
+
   - container: pg10
     image: postgres:10
     environment:
@@ -19,4 +21,4 @@ services:
 steps:
   - script: |
       apt-get install -y postgresql-client
-      psql --host=postgres --username=postgres --command="SELECT 1;"
+      psql --host=192.168.0.1 --username=postgres --command="SELECT 1;"
