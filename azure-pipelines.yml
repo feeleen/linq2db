@@ -15,7 +15,5 @@ services:
 
 steps:
   - script: |
-      $env:PGUSER="postgres"
-      $env:PGPASSWORD="Password12!"
-      apt-get install -y postgresql-client
-      psql -c 'create database testdata;' -U postgres;
+      sudo apt-get install -y postgresql-client
+      sudo psql -c 'create database testdata;' -U postgres;
