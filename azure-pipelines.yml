@@ -10,11 +10,11 @@ pool:
 
 services:
   postgres: pg10
- 
+
 steps:
 
 - checkout: none
 
 - script: |
     sudo apt-get install -y postgresql-client
-    sudo psql --host=pg10 --username=postgres --command="SELECT 1;"
+    sudo psql --host=localhost --username=postgres --command="SELECT 1;"
