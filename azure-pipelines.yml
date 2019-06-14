@@ -11,8 +11,8 @@ jobs:
         $env:MYSQL_PWD="Password12!"
         $dbName = "TestDatanet45"
 
-        choco install mysql --params "/port:3307 /installLocation:'C:'"
-        $cmd = '"C:\mysql\current\bin\mysql" -e "create database $dbName;" --user=root --port:3307'
+        choco install mysql --params "/port:3306 /installLocation:'C:'"
+        $cmd = '"C:\mysql\current\bin\mysql" -e "create database $dbName;" --user=root'
         iex "& $cmd"
       displayName: Install mysql
 
