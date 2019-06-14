@@ -1,7 +1,7 @@
 resources:
   containers:
   - container: my_container
-    image: ubuntu:14.04
+    image: ubuntu:16.04
   - container: pg10
     image: postgres:10
     environment:
