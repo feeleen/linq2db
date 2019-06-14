@@ -10,9 +10,12 @@ pool:
   vmImage: 'ubuntu-16.04'
 
 services:
+
   pg10: pg10
 
 steps:
   - script: |
-      sudo apt-get install -y postgresql-client
-      sudo psql --username=postgres --password=Password12! --command="SELECT 1;"
+      $env:PGUSER="postgres"
+      $env:PGPASSWORD="Password12!"
+      apt-get install -y postgresql-client
+      psql -c 'create database testdata;' -U postgres;
