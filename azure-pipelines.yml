@@ -7,11 +7,7 @@ resources:
  
 pool:
   vmImage: 'ubuntu-16.04'
- 
 
- 
-container: my_container
- 
 services:
   postgres: pg10
  
@@ -20,5 +16,5 @@ steps:
 - checkout: none
 
 - script: |
-    apt-get install -y postgresql-client
-    psql --host=postgres --username=postgres --command="SELECT 1;"
+    sudo apt-get install -y postgresql-client
+    sudo psql --host=postgres --username=postgres --command="SELECT 1;"
