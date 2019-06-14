@@ -15,4 +15,4 @@ services:
 steps:
   - script: |
       sudo apt-get install -y postgresql-client
-      sudo psql --host=pg10 --username=postgres --command="SELECT 1;"
+      sudo psql --username=postgres --password=Password12! --command="SELECT 1;"
