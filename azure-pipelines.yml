@@ -1,9 +1,5 @@
 resources:
   containers:
-  - container: my_container
-    image: ubuntu:16.04
-    options: --hostname localhost
-
   - container: pg10
     image: postgres:10
     environment:
@@ -13,12 +9,10 @@ resources:
 pool:
   vmImage: 'ubuntu-16.04'
 
-container: my_container
-
 services:
-  postgres: pg10
+  pg10: pg10
 
 steps:
   - script: |
-      apt-get install -y postgresql-client
-      psql --host=localhost --username=postgres --command="SELECT 1;"
+      sudo apt-get install -y postgresql-client
+      sudo psql --host=pg10 --username=postgres --command="SELECT 1;"
