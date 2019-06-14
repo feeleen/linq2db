@@ -16,7 +16,7 @@ container: my_container
 services:
   postgres: pg10
 
-steps:
-- script: |
-    apt-get install -y postgresql-client
-    psql --host=postgres --username=postgres --command="SELECT 1;"
+  steps:
+  - script: |
+      apt-get install -y postgresql-client
+      psql --host=postgres --username=postgres --command="SELECT 1;"
