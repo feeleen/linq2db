@@ -17,4 +17,4 @@ steps:
 
 - script: |
     sudo apt-get install -y postgresql-client
-    sudo psql --host=postgres --username=postgres --command="SELECT 1;"
+    sudo psql --host=pg10 --username=postgres --command="SELECT 1;"
