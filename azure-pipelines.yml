@@ -1,7 +1,7 @@
 resources:
   containers:
-  - container: pg10
-    image: postgres:10
+  - container: pg11
+    image: postgres:11
     environment:
         POSTGRES_PASSWORD: Password12!
         POSTGRES_USER: postgres
@@ -11,10 +11,10 @@ pool:
 
 services:
 
-  pg10: pg10
+  pg10: pg11
 
 steps:
   - checkout: none
 
   - script: |
-      psql -h pg10 -c 'create database testdata;' -U postgres;
+      psql -h pg11 -c 'create database testdata;' -U postgres;
