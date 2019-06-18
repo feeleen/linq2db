@@ -13,5 +13,5 @@ steps:
   - checkout: none
 
   - script: |
-      docker run --name pg10 -e POSTGRES_PASSWORD=Password12! -d postgres:10
-      docker exec pg10 psql -h localhost -c 'create database testdata;' -U postgres
+      docker run -d --name postgres10 -e POSTGRES_PASSWORD=Password12! -p 54320:5432 postgres:10
+      docker exec -it postgres10 psql -U postgres -c "create database testdatabase"
