@@ -13,4 +13,5 @@ steps:
   - checkout: none
 
   - script: |
-      docker run -d --name postgres9 postgres:9.6 sh -c "exec psql -h \$POSTGRES_PORT_5432_TCP_ADDR -p \$POSTGRES_PORT_5432_TCP_PORT -U postgres"
+       docker run -d --name postgres10 -v my_dbdata:/var/lib/postgresql/data -p 5432:5432 postgres:9.6
+       docker exec -it postgres10 psql pfe -U postgres -c "create database my_database"
