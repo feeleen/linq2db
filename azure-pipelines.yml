@@ -14,4 +14,4 @@ steps:
 
   - script: |
       docker run --name pg10 -e POSTGRES_PASSWORD=Password12! -d postgres:10
-      docker exec pg10 psql -h \$POSTGRES_PORT_5432_TCP_ADDR -p \$POSTGRES_PORT_5432_TCP_PORT -c 'create database testdata;' -U postgres
+      docker exec p10 psql -h \$POSTGRES_PORT_5432_TCP_ADDR -c 'create database testdata;' -U postgres
