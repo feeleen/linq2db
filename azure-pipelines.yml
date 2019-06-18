@@ -13,5 +13,6 @@ steps:
   - checkout: none
 
   - script: |
+      docker pull postgres
       docker run --name some-postgres -e POSTGRES_PASSWORD=Password12! -d postgres
-      psql -c 'create database testdata;' -U postgres
+      docker run postgres psql -c 'create database testdata;' -U postgres
