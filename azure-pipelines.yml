@@ -9,12 +9,8 @@ resources:
 pool:
   vmImage: 'win1803'
 
-services:
-
-  pg10: pg11
-
 steps:
   - checkout: none
 
   - script: |
-      psql -h pg11 -c 'create database testdata;' -U postgres;
+      docker run --name some-postgres -e POSTGRES_PASSWORD=Password12! -d postgres
