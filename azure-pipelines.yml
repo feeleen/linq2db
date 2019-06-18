@@ -13,4 +13,4 @@ steps:
   - checkout: none
 
   - script: |
-      docker run --link postgres:postgres postgres:9.6 sh -c "exec psql -h \$POSTGRES_PORT_5432_TCP_ADDR -p \$POSTGRES_PORT_5432_TCP_PORT -U postgres"
+      docker run -d --name postgres9 sh -c "exec psql -h \$POSTGRES_PORT_5432_TCP_ADDR -p \$POSTGRES_PORT_5432_TCP_PORT -U postgres" postgres:9.6
