@@ -14,4 +14,4 @@ steps:
 
   - script: |
       docker run --name some-postgres -e POSTGRES_PASSWORD=Password12! -d postgres
-      docker run -it --rm --network some-network postgres psql -h some-postgres -U postgres
+      docker run --rm --network some-network postgres psql -h some-postgres -U postgres
