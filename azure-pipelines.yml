@@ -14,4 +14,5 @@ steps:
 
   - script: |
        docker run -d --name postgres10 -e POSTGRES_PASSWORD=Password12! -p 5432:5432 -v /var/run/postgresql:/var/run/postgresql postgres:9.6
-       docker exec postgres10 psql -h localhost -U postgres -c "create database my_database"
+       sudo apt-get update && apt-get install -y postgresql-client
+       sudo psql -h localhost -p 5432 -U postgres -c "\du"
