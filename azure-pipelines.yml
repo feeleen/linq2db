@@ -7,7 +7,7 @@ resources:
         POSTGRES_USER: postgres
 
 pool:
-  vmImage: 'ubuntu-16.04'
+  vmImage: 'win1803'
 
 services:
 
@@ -17,5 +17,4 @@ steps:
   - checkout: none
 
   - script: |
-      sudo apt-get install -y postgresql-client
-      sudo psql -h pg10 -c 'create database testdata;' -U postgres;
+      psql -h pg10 -c 'create database testdata;' -U postgres;
