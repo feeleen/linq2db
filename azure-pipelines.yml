@@ -13,5 +13,4 @@ steps:
   - checkout: none
 
   - script: |
-      docker run -d --name postgres10 -v my_dbdata:/var/lib/postgresql/data -e POSTGRES_PASSWORD=Password12! -p 5432:5432 postgres:10
-      docker exec postgres10 psql -U postgres
+      docker run --link postgres:postgres postgres:9.6 sh -c "exec psql -h \$POSTGRES_PORT_5432_TCP_ADDR -p \$POSTGRES_PORT_5432_TCP_PORT -U postgres"
