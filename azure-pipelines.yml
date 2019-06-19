@@ -16,11 +16,11 @@ steps:
   - checkout: none
 
   - script: |
-       docker run -d --name postgres10 -e POSTGRES_PASSWORD=Password12! -p 5432:5432 -v /var/run/postgresql:/var/run/postgresql postgres:10
+       docker run --name mysql57 -e MYSQL_ROOT_PASSWORD=Passworn12! -d mysql:5.7
 
   - script: |
-       until docker exec postgres10 psql -U postgres -c '\q'; do
-          >&2 echo "Postgres is unavailable - sleeping"
+       while ! mysqladmin ping --silent; do
+          >&2 echo "MySql is unavailable - sleeping"
           sleep 1
        done
-       docker exec postgres10 psql -U postgres -c "create database testdatabase"
+       docker exec mysql57 mysql -e 'CREATE DATABASE TestDatacore2 DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci'
