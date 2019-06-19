@@ -10,14 +10,14 @@ pool:
   #vmImage: 'ubuntu-16.04'
   vmImage: 'win1803'
 
+services:
+    postgres10: pg11
+
 steps:
   - checkout: none
 
-  - powershell: |
-      dockerd.exe -D --experimental
-
-  - script: |
-       docker run -d --name postgres10 --platform linux -e POSTGRES_PASSWORD=Password12! -p 5432:5432 -v /var/run/postgresql:/var/run/postgresql postgres:11
+#  - script: |
+#       docker run -d --name postgres10 --platform linux -e POSTGRES_PASSWORD=Password12! -p 5432:5432 -v /var/run/postgresql:/var/run/postgresql postgres:11
 
   - script: |
        until docker exec postgres10 psql -U postgres -c '\q'; do
