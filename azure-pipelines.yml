@@ -10,9 +10,6 @@ pool:
   #vmImage: 'ubuntu-16.04'
   vmImage: 'win1803'
 
-services:
-    postgres10: pg11
-
 steps:
   - checkout: none
 
