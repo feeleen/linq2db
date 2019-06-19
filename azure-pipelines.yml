@@ -16,10 +16,10 @@ steps:
   - checkout: none
 
   - script: |
-       docker run --name mysql57 -e MYSQL_ROOT_PASSWORD=Passworn12! -d mysql:5.7
+       docker run --name mysql57 -e MYSQL_ROOT_PASSWORD=Passworn12! -p 3306:3306 -d mysql:5.7
 
   - script: |
-       while ! mysqladmin -h localhost ping --silent; do
+       while ! mysqladmin -h localhost -p 3306 ping --silent; do
           >&2 echo "MySql is unavailable - sleeping"
           sleep 1
        done
