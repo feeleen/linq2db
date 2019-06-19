@@ -14,7 +14,7 @@ steps:
   - checkout: none
 
   - script: |
-       docker run -d --name postgres10 -e POSTGRES_PASSWORD=Password12! -p 5432:5432 -v /var/run/postgresql:/var/run/postgresql stellirin/postgres-windows #postgres:11
+       docker run -d --name postgres10 -e POSTGRES_PASSWORD=Password12! -p 5432:5432 -v /var/run/postgresql:/var/run/postgresql stellirin/postgres-windows:10 #postgres:11
 
   - script: |
        until docker exec postgres10 psql -U postgres -c '\q'; do
