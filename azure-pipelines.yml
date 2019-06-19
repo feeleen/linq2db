@@ -7,8 +7,8 @@ resources:
         POSTGRES_USER: postgres
 
 pool:
-  #vmImage: 'ubuntu-16.04'
-  vmImage: 'windows-2019'
+  vmImage: 'ubuntu-16.04'
+  #vmImage: 'windows-2019'
 
 #container: mcr.microsoft.com/windows/servercore:1803
 
@@ -16,11 +16,11 @@ steps:
   - checkout: none
 
   - script: |
-       docker run -d --name postgres10 -e POSTGRES_PASSWORD=Password12! -p 5432:5432 -v /var/run/postgresql:/var/run/postgresql postgres:11
+       docker run -d --name postgres10 -e POSTGRES_PASSWORD=Password12! -p 5432:5432 -v /var/run/postgresql:/var/run/postgresql postgres:10
 
   - script: |
        until docker exec postgres10 psql -U postgres -c '\q'; do
           >&2 echo "Postgres is unavailable - sleeping"
           sleep 1
        done
-       docker exec postgres10 psql -U postgres -c "create database my_database"
+       docker exec postgres10 psql -U postgres -c "create database testdatabase"
