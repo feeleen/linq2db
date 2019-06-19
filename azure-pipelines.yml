@@ -16,7 +16,7 @@ steps:
        docker run -d --name postgres10 -e POSTGRES_PASSWORD=Password12! -p 5432:5432 -v /var/run/postgresql:/var/run/postgresql postgres:11
 
   - script: |
-       until docker postgres10 exec psql -U postgres -c '\q'; do
+       until docker exec postgres10 psql -U postgres -c '\q'; do
           >&2 echo "Postgres is unavailable - sleeping"
           sleep 1
        done
