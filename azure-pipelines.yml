@@ -22,5 +22,5 @@ steps:
           sleep 5
        done
        docker exec mysql57 mysql -e 'CREATE DATABASE IF NOT EXISTS testdata DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;'
-       docker exec mysql57 mysql -e 'SHOW DATABASES;'
+       docker exec mysql57 mysql -e 'SELECT user,authentication_string,plugin,host FROM mysql.user;'
     displayName: Run MySQL container
