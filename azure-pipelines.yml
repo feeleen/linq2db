@@ -29,4 +29,4 @@ steps:
   - script:
       sudo apt-get -y -f install mysql-client
   - script: |
-      mysql -h localhost --user=root --password=Password12! -e 'SELECT * FROM mysql.user;'
+      mysql -h 0.0.0.0 --user=root --password=Password12! -e 'SELECT * FROM mysql.user;'
