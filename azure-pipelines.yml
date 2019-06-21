@@ -33,4 +33,4 @@ steps:
   - script:
       sudo apt-get -y -f install mysql-client
   - script: |
-      mysql -hlocalhost:3307 -uroot -pPassword12! -e 'SELECT * FROM mysql.user;'
+      mysql --port3307 -uroot -pPassword12! -e 'SELECT * FROM mysql.user;'
