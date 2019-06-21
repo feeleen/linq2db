@@ -31,4 +31,4 @@ steps:
     displayName: Run MySQL container
 
   - script: |
-      mysql --port3307 -uroot -pPassword12! -e 'SELECT * FROM mysql.user;'
+      mysql --port=3307 -uroot -pPassword12! -e 'SELECT * FROM mysql.user;'
