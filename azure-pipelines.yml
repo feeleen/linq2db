@@ -26,7 +26,7 @@ steps:
                                      SET PASSWORD FOR 'testuser'@'%' = PASSWORD('Password12!');
                                      GRANT ALL ON *.* to 'testuser'@'%';
                                      FLUSH PRIVILEGES;"
-       docker exec mysql57 mysql -uroot -pPassword12! -e 'SELECT host,user FROM mysql.user;'
+       docker exec mysql57 mysql -utestuser -pPassword12! -e 'SELECT host,user FROM mysql.user;'
     displayName: Run MySQL container
 
   - script:
