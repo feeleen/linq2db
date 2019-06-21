@@ -27,6 +27,6 @@ steps:
 
   - script:
       sudo apt-get -y -f install mysql-client
-  - script:
+  - script: |
       docker ps 
       mysql -h localhost --user=root --password=Password12! -e 'SELECT * FROM mysql.user;'
