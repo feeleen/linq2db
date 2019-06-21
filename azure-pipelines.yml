@@ -22,8 +22,9 @@ steps:
           sleep 5
        done
        docker exec mysql57 mysql -e 'CREATE DATABASE IF NOT EXISTS testdata DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;'
-       docker exec mysql57 mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'root@localhost' IDENTIFIED BY 'password' WITH GRANT OPTION;
-                                     SET PASSWORD FOR root@localhost = PASSWORD('Password12!');
+       docker exec mysql57 mysql -e "CREATE USER 'testuser'@'%' IDENTIFIED BY 'ThePassword';
+                                     SET PASSWORD FOR 'testuser'@'%' = PASSWORD('Password12!');
+                                     GRANT ALL ON *.* to 'testuser'@'%';
                                      FLUSH PRIVILEGES;"
        docker exec mysql57 mysql -uroot -pPassword12! -e 'SELECT host,user FROM mysql.user;'
     displayName: Run MySQL container
@@ -31,4 +32,4 @@ steps:
   - script:
       sudo apt-get -y -f install mysql-client
   - script: |
-      mysql --user=root --password=Password12! -e 'SELECT * FROM mysql.user;'
+      mysql -utestuser --password=Password12! -e 'SELECT * FROM mysql.user;'
