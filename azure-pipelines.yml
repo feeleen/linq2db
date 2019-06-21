@@ -16,8 +16,7 @@ steps:
   - checkout: none
 
   - script: |
-       sudo netstat -nlpt |grep 3306
-       docker run -p 33060:3306 -d --name mysql57 -e MYSQL_ROOT_PASSWORD=Password12! -e MYSQL_ROOT_HOST=% mysql/mysql-server:5.7
+       docker run -p 3307:3306 -d --name mysql57 -e MYSQL_ROOT_PASSWORD=Password12! -e MYSQL_ROOT_HOST=% mysql/mysql-server:5.7
        until docker exec mysql57 mysql -e 'SELECT 1'; do
           >&2 echo "MySql is unavailable - sleeping"
           sleep 5
@@ -28,9 +27,10 @@ steps:
        #                              GRANT ALL ON *.* to 'testuser'@'%';
        #                              FLUSH PRIVILEGES;"
        #docker exec mysql57 mysql -utestuser -pPassword12! -e 'SELECT host,user FROM mysql.user;'
+       docker exec mysql57 mysql -e 'SELECT * FROM mysql.user;'
     displayName: Run MySQL container
 
   - script:
       sudo apt-get -y -f install mysql-client
   - script: |
-      mysql -P33060 -uroot -pPassword12! -e 'SELECT * FROM mysql.user;'
+      mysql -hlocalhost:33060 -uroot -pPassword12! -e 'SELECT * FROM mysql.user;'
