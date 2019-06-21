@@ -32,4 +32,4 @@ steps:
   - script:
       sudo apt-get -y -f install mysql-client
   - script: |
-      mysql -utestuser --password=Password12! -e 'SELECT * FROM mysql.user;'
+      mysql -h0.0.0.0 -utestuser --password=Password12! -e 'SELECT * FROM mysql.user;'
