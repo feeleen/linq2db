@@ -16,20 +16,20 @@ steps:
   - checkout: none
 
   - script: |
-       docker run -d -P --name mysql57 -e MYSQL_ROOT_PASSWORD=Password12! -e MYSQL_ROOT_HOST=% mysql/mysql-server:5.7
+       docker run -p 3306:3306 -d --name mysql57 -e MYSQL_ROOT_PASSWORD=Password12! -e MYSQL_ROOT_HOST=% mysql/mysql-server:5.7
        until docker exec mysql57 mysql -e 'SELECT 1'; do
           >&2 echo "MySql is unavailable - sleeping"
           sleep 5
        done
        docker exec mysql57 mysql -e 'CREATE DATABASE IF NOT EXISTS testdata DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;'
-       docker exec mysql57 mysql -e "CREATE USER 'testuser'@'%' IDENTIFIED BY 'ThePassword';
-                                     SET PASSWORD FOR 'testuser'@'%' = PASSWORD('Password12!');
-                                     GRANT ALL ON *.* to 'testuser'@'%';
-                                     FLUSH PRIVILEGES;"
-       docker exec mysql57 mysql -utestuser -pPassword12! -e 'SELECT host,user FROM mysql.user;'
+       #docker exec mysql57 mysql -e "CREATE USER 'testuser'@'%' IDENTIFIED BY 'ThePassword';
+       #                              SET PASSWORD FOR 'testuser'@'%' = PASSWORD('Password12!');
+       #                              GRANT ALL ON *.* to 'testuser'@'%';
+       #                              FLUSH PRIVILEGES;"
+       #docker exec mysql57 mysql -utestuser -pPassword12! -e 'SELECT host,user FROM mysql.user;'
     displayName: Run MySQL container
 
   - script:
       sudo apt-get -y -f install mysql-client
   - script: |
-      mysql -h0.0.0.0 -utestuser --password=Password12! -e 'SELECT * FROM mysql.user;'
+      mysql -h0.0.0.0 -uroot -pPassword12! -e 'SELECT * FROM mysql.user;'
