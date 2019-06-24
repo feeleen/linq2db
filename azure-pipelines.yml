@@ -28,6 +28,7 @@ steps:
        #docker exec mysql57 mysql -utestuser -pPassword12! -e 'SELECT host,user FROM mysql.user;'
        #docker exec mysql57 mysql -e 'SELECT * FROM mysql.user;'
        docker port mysql57
+       docker stats
     displayName: Run MySQL container
 
   - script: |
