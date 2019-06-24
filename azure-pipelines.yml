@@ -21,8 +21,5 @@ steps:
     displayName: Run firebird container
 
   - bash: |
-      until [! -f "localhost:databases/testdata.fdb"]; do
-        >&2 echo "File not found"
-        sleep 5
-      done
+      $ if [! -f "localhost:databases/testdata.fdb"] "File not found" ; fi
 
