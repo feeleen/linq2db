@@ -21,4 +21,8 @@ steps:
     displayName: Run firebird container
 
   - script: |
-      if test -f "localhost:databases/testdata.fdb"; then echo "Файл существует"; fi
+      until !test -f "localhost:databases/testdata.fdb"; docker
+        >&2 echo "File not found"
+        sleep 5
+      done
+
