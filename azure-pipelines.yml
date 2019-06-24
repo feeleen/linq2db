@@ -34,4 +34,4 @@ steps:
     displayName: Run MySQL container
 
   - script: |
-      mysql hlocalhost -P33000 -uroot -pPassword12! -e'SELECT * FROM mysql.user;'
+      mysql h0.0.0.0 -P33000 -uroot -pPassword12! -e'SELECT * FROM mysql.user;'
