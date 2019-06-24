@@ -18,8 +18,7 @@ steps:
   - script: |
        docker run -d --name firebird -p 3050:3050 -v /data/firebird/databases:/databases --env ISC_PASSWORD=Password12! --env FIREBIRD_DATABASE=testdata jacobalberty/firebird
        sleep 15
-       if [ -f "localhost:databases/testdata.fdb" ]; then echo "Файл существует"; fi
     displayName: Run firebird container
 
-  #- script: |
-  #    mysql h0.0.0.0 -P33000 -uroot -pPassword12! -e'SELECT * FROM mysql.user;'
+  - script: |
+      if [ -f "localhost:databases/testdata.fdb" ]; then echo "Файл существует"; fi
