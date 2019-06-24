@@ -21,4 +21,4 @@ steps:
     displayName: Run firebird container
 
   - script: |
-      test -f "localhost:databases/testdata.fdb";
+     $ if [ -f "localhost:databases/testdata.fdb" ]; then echo "Файл существует"; fi
