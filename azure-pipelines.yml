@@ -23,7 +23,7 @@ steps:
        MYSQL_USER=test
        MYSQL_PASSWORD=test
        EOL
-       docker run -d --name mysql57 -p 33000:3306 --env-file env.list mysql/mysql-server:5.7
+       docker run -d --name mysql57 -p 33000:3306 --env-file env.list mysql:5.7
        until docker exec mysql57 mysql -e 'SELECT 1'; do
           >&2 echo "MySql is unavailable - sleeping"
           sleep 5
