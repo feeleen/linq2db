@@ -7,34 +7,19 @@ resources:
         POSTGRES_USER: postgres
 
 pool:
-  #vmImage: 'ubuntu-16.04'
-  vmImage: 'vs2017-win2016'
+  vmImage: 'ubuntu-16.04'
+  #vmImage: 'vs2017-win2016'
 
 #container: mcr.microsoft.com/windows/servercore:1803
 
 steps:
   - checkout: none
-#-e MYSQL_PASSWORD=Password12! -e MYSQL_ROOT_HOST=% -e MYSQL_DATABASE=testdata -e MYSQL_USER=test
+
   - script: |
-       mysql -e 'SHOW DATABASES;'
-
-#       docker run -d --name mysql57 -p 33000:3306 --env MYSQL_ROOT_HOST=% --env MYSQL_ROOT_PASSWORD=Password12! mysql/mysql-server:5.7
-#       until docker exec mysql57 mysql -e 'SELECT 1'; do
-#          >&2 echo "MySql is unavailable - sleeping"
-#          sleep 5
-#       done
-#       docker exec mysql57 mysql -e "CREATE USER 'root'@'%' IDENTIFIED WITH mysql_native_password BY 'Password12!';
-#                                     GRANT ALL PRIVILEGES ON *.* TO 'root'@'%';
-#                                     FLUSH PRIVILEGES;"
-       #docker exec mysql57 mysql -e 'CREATE DATABASE IF NOT EXISTS testdata DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;'
-       #docker exec mysql57 mysql -e 'SELECT host,user FROM mysql.user;'
-       #docker exec mysql57 mysql -u'root'@'%' -pPassword12! -e 'SELECT * FROM mysql.user;'
-       #docker exec mysql57 mysql -e 'SHOW DATABASES;'
-       #docker port mysql57
-       #docker ps
-       
-
-    #displayName: Run MySQL container
+       docker run -d --name firebird -p 3050:3050 -v /data/firebird/databases:/databases --env ISC_PASSWORD=Password12! --env FIREBIRD_DATABASE=testdata jacobalberty/firebird
+       sleep 15
+       if [ -f "localhost:databases/testdata.fdb" ]; then echo "Файл существует"; fi
+    displayName: Run firebird container
 
   #- script: |
   #    mysql h0.0.0.0 -P33000 -uroot -pPassword12! -e'SELECT * FROM mysql.user;'
