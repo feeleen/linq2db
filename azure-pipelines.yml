@@ -33,7 +33,7 @@ steps:
                                      FLUSH PRIVILEGES;"
        #docker exec mysql57 mysql -e 'CREATE DATABASE IF NOT EXISTS testdata DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;'
        #docker exec mysql57 mysql -e 'SELECT host,user FROM mysql.user;'
-       docker exec mysql57 mysql -uroot -pPassword12! -e 'SELECT * FROM mysql.user;'
+       docker exec mysql57 mysql -u'root'@'%' -pPassword12! -e 'SELECT * FROM mysql.user;'
        #docker exec mysql57 mysql -e 'SHOW DATABASES;'
        #docker port mysql57
        #docker ps
