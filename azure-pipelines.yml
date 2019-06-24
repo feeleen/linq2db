@@ -25,8 +25,8 @@ steps:
        docker exec mysql57 mysql -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('Password12!');
                                      GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost';
                                      FLUSH PRIVILEGES;"
-       #docker exec mysql57 mysql -utestuser -pPassword12! -e 'SELECT host,user FROM mysql.user;'
-       docker exec mysql57 mysql -e 'SELECT host,user FROM mysql.user;'
+       docker exec mysql57 mysql -uroot -pPassword12! -e 'SELECT host,user FROM mysql.user;'
+       #docker exec mysql57 mysql -e 'SELECT host,user FROM mysql.user;'
        docker port mysql57
        docker ps
     displayName: Run MySQL container
