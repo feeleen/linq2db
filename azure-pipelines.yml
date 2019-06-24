@@ -26,7 +26,7 @@ steps:
        #                              GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost';
        #                              FLUSH PRIVILEGES;"
        #docker exec mysql57 mysql -uroot -pPassword12! -e 'SELECT host,user FROM mysql.user;'
-       #docker exec mysql57 mysql -e 'SELECT host,user FROM mysql.user;'
+       docker exec mysql57 mysql -e 'SELECT * FROM mysql.user;'
        docker exec mysql57 mysql -e 'SHOW DATABASES;'
        docker port mysql57
        docker ps
