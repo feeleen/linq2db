@@ -16,7 +16,7 @@ steps:
   - checkout: none
 
   - script: |
-       docker run -p 33006:3306 -d --name mysql57 -e MYSQL_ROOT_PASSWORD=Password12! -e MYSQL_ROOT_HOST=localhost mysql/mysql-server:5.7
+       docker run -p 33006:3306 -d --name mysql57 -e MYSQL_ROOT_PASSWORD=Password12! -e MYSQL_ROOT_HOST=locahost mysql/mysql-server:5.7
        until docker exec mysql57 mysql -e 'SELECT 1'; do
           >&2 echo "MySql is unavailable - sleeping"
           sleep 5
@@ -32,4 +32,4 @@ steps:
     displayName: Run MySQL container
 
   - script: |
-      mysql hlocalhost -P33006 -uroot -pPassword12! -e 'SELECT * FROM mysql.user;'
+      mysql h0.0.0.0 -P33006 -uroot -pPassword12! -e 'SELECT * FROM mysql.user;'
