@@ -22,7 +22,7 @@ steps:
           sleep 5
        done
        docker exec mysql57 mysql -e 'CREATE DATABASE IF NOT EXISTS testdata DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;'
-       docker exec mysql57 mysql -e "ALTER USER root IDENTIFIED WITH mysql_native_password BY 'Password12!';"
+       #docker exec mysql57 mysql -e "ALTER USER root IDENTIFIED WITH mysql_native_password BY 'Password12!';"
        #                              GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost';
        #                              FLUSH PRIVILEGES;"
        docker exec mysql57 mysql -uroot -pPassword12! -e 'SELECT host,user FROM mysql.user;'
