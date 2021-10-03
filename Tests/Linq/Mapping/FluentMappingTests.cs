@@ -10,6 +10,7 @@ using NUnit.Framework;
 
 namespace Tests.Mapping
 {
+	using LinqToDB.Data;
 	using Model;
 
 	[TestFixture]
@@ -151,7 +152,7 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.That(ed["ID"].IsPrimaryKey);
+			Assert.That(ed["ID"]!.IsPrimaryKey);
 		}
 
 		[Test]
@@ -164,8 +165,8 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.That(ed["ID1"].IsPrimaryKey);
-			Assert.That(ed["ID1"].PrimaryKeyOrder, Is.EqualTo(3));
+			Assert.That(ed["ID1"]!.IsPrimaryKey);
+			Assert.That(ed["ID1"]!.PrimaryKeyOrder, Is.EqualTo(3));
 		}
 
 		[Test]
@@ -178,10 +179,10 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.That(ed["ID"]. IsPrimaryKey);
-			Assert.That(ed["ID"]. PrimaryKeyOrder, Is.EqualTo(3));
-			Assert.That(ed["ID1"].IsPrimaryKey);
-			Assert.That(ed["ID1"].PrimaryKeyOrder, Is.EqualTo(4));
+			Assert.That(ed["ID"]!. IsPrimaryKey);
+			Assert.That(ed["ID"]!. PrimaryKeyOrder, Is.EqualTo(3));
+			Assert.That(ed["ID1"]!.IsPrimaryKey);
+			Assert.That(ed["ID1"]!.PrimaryKeyOrder, Is.EqualTo(4));
 		}
 
 		[Test]
@@ -194,7 +195,7 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.That(ed["ID"].IsPrimaryKey);
+			Assert.That(ed["ID"]!.IsPrimaryKey);
 		}
 
 		[Test]
@@ -210,8 +211,8 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.That(ed["ID"].IsPrimaryKey);
-			Assert.That(ed["ID"].IsIdentity);
+			Assert.That(ed["ID"]!.IsPrimaryKey);
+			Assert.That(ed["ID"]!.IsIdentity);
 		}
 
 		[Test]
@@ -505,9 +506,9 @@ namespace Tests.Mapping
 
 			Assert.AreEqual(nameof(IInterfaceBase), ed.TableName);
 
-			Assert.AreEqual(true, ed[nameof(MyInheritedClass4.IntValue)]    .SkipOnUpdate);
-			Assert.AreEqual(true, ed[nameof(MyInheritedClass4.StringValue)] .SkipOnInsert);
-			Assert.AreEqual(true, ed[nameof(MyInheritedClass4.MarkedOnType)].SkipOnInsert);
+			Assert.AreEqual(true, ed[nameof(MyInheritedClass4.IntValue)]!    .SkipOnUpdate);
+			Assert.AreEqual(true, ed[nameof(MyInheritedClass4.StringValue)]! .SkipOnInsert);
+			Assert.AreEqual(true, ed[nameof(MyInheritedClass4.MarkedOnType)]!.SkipOnInsert);
 		}
 
 		/// issue 291 Tests
@@ -570,7 +571,7 @@ namespace Tests.Mapping
 					DerivedClass1 item1 = new DerivedClass1 { NotACol = "test" };
 					db.Insert(item1);
 
-					DerivedClass res = db.GetTable<DerivedClass>().FirstOrDefault();
+					DerivedClass res = db.GetTable<DerivedClass>().First();
 					var count = db.GetTable<DerivedClass>().Count();
 
 					Assert.AreEqual(item.MyCol1, res.MyCol1);
@@ -605,7 +606,7 @@ namespace Tests.Mapping
 					DerivedClass1 item1 = new DerivedClass1 { NotACol = "test", MyCol1 = "MyCol2" };
 					db.Insert(item1);
 
-					DerivedClass res = db.GetTable<DerivedClass>().Where(o => o.MyCol1 == "MyCol1").FirstOrDefault();
+					DerivedClass res = db.GetTable<DerivedClass>().Where(o => o.MyCol1 == "MyCol1").First();
 					var count = db.GetTable<DerivedClass>().Count();
 
 					Assert.AreEqual(item.MyCol1, res.MyCol1);
@@ -643,7 +644,7 @@ namespace Tests.Mapping
 
 				var query = db.GetTable<PersonCustom>().Where(p => p.Name != "");
 				var sql1 = query.ToString();
-				Console.WriteLine(sql1);
+				TestContext.WriteLine(sql1);
 
 				if (finalAliases)
 					Assert.That(sql1, Does.Contain("[AGE]"));
@@ -651,7 +652,7 @@ namespace Tests.Mapping
 					Assert.That(sql1, Does.Not.Contain("[AGE]"));
 
 				var sql2 = query.Select(q => new { q.Name, q.Age }).ToString();
-				Console.WriteLine(sql2);
+				TestContext.WriteLine(sql2);
 
 				if (finalAliases)
 					Assert.That(sql2, Does.Contain("[Age]"));
@@ -676,7 +677,7 @@ namespace Tests.Mapping
 
 				var query = db.GetTable<PersonCustom>().Where(p => p.Name != "");
 				var sql1 = query.ToString();
-				Console.WriteLine(sql1);
+				TestContext.WriteLine(sql1);
 
 				if (finalAliases)
 					Assert.That(sql1, Does.Contain("[MONEY]"));
@@ -684,7 +685,7 @@ namespace Tests.Mapping
 					Assert.That(sql1, Does.Not.Contain("[MONEY]"));
 
 				var sql2 = query.Select(q => new { q.Name, q.Money }).ToString();
-				Console.WriteLine(sql2);
+				TestContext.WriteLine(sql2);
 
 				if (finalAliases)
 					Assert.That(sql2, Does.Contain("[Money]"));
@@ -692,6 +693,5 @@ namespace Tests.Mapping
 					Assert.That(sql2, Does.Not.Contain("[Money]"));
 			}
 		}
-
 	}
 }

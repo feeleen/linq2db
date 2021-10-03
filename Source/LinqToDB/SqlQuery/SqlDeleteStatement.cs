@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 namespace LinqToDB.SqlQuery
@@ -24,31 +23,10 @@ namespace LinqToDB.SqlQuery
 			set => SelectQuery.IsParameterDependent = value;
 		}
 
-		public SqlTable?       Table { get; set; }
-		public ISqlExpression? Top   { get; set; }
+		public SqlTable?       Table   { get; set; }
+		public ISqlExpression? Top     { get; set; }
 
-		public override ICloneableElement Clone(Dictionary<ICloneableElement, ICloneableElement> objectTree, Predicate<ICloneableElement> doClone)
-		{
-			if (!doClone(this))
-				return this;
-
-			var clone = new SqlDeleteStatement();
-
-			if (SelectQuery != null)
-				clone.SelectQuery = (SelectQuery)SelectQuery.Clone(objectTree, doClone);
-
-			if (Table != null)
-				clone.Table = (SqlTable)Table.Clone(objectTree, doClone);
-
-			if (With != null)
-				clone.With = (SqlWithClause)With.Clone(objectTree, doClone);
-
-			clone.Parameters.AddRange(Parameters.Select(p => (SqlParameter)p.Clone(objectTree, doClone)));
-
-			objectTree.Add(this, clone);
-
-			return clone;
-		}
+		public SqlOutputClause? Output { get; set; }
 
 		public override ISqlExpression? Walk(WalkOptions options, Func<ISqlExpression,ISqlExpression> func)
 		{

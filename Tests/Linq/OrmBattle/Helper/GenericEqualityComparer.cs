@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -9,7 +10,7 @@ namespace Tests.OrmBattle.Helper
 {
 	public class GenericEqualityComparer<T> : IComparable<T>, IEqualityComparer<T>
 	{
-		private readonly List<PropertyInfo> _propertyInfos = new List<PropertyInfo>();
+		private readonly List<PropertyInfo> _propertyInfos = new ();
 
 		public GenericEqualityComparer(params Expression<Func<T, object>>[] property)
 		{
@@ -20,7 +21,7 @@ namespace Tests.OrmBattle.Helper
 
 		#region IEqualityComparer Members
 
-		public bool Equals(T x, T y)
+		public bool Equals(T? x, T? y)
 		{
 			foreach (var propertyInfo in _propertyInfos)
 			{
@@ -42,19 +43,19 @@ namespace Tests.OrmBattle.Helper
 
 		public int GetHashCode(T obj)
 		{
-			var values = new List<object>();
+			var values = new List<object?>();
 			foreach (var propertyInfo in _propertyInfos)
 			{
 				//get the current value of the comparison property of x and of y
 				var xValue = propertyInfo.GetValue(obj, null);
 				values.Add(xValue);
 			}
-			return HashCodeBuilder.Hash(values.ToList());
+			return HashCodeBuilder.Hash(values.ToArray());
 		}
 
 		#endregion
 
-		public int CompareTo(T other)
+		public int CompareTo(T? other)
 		{
 			var x = this;
 			var y = other;
@@ -82,7 +83,7 @@ namespace Tests.OrmBattle.Helper
 
 	public static class HashCodeBuilder
 	{
-		public static int Hash(params object[] args)
+		public static int Hash(params object?[]? args)
 		{
 			if (args == null)
 			{

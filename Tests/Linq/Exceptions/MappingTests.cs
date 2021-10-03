@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 
 using LinqToDB;
 using LinqToDB.Common;
@@ -14,7 +13,7 @@ namespace Tests.Exceptions
 	public class MappingTests : TestBase
 	{
 		[Test]
-		public void MapIgnore1([DataSources] string context)
+		public void MapIgnore1([IncludeDataSources(TestProvName.AllSQLite)] string context)
 		{
 			using (var db = GetDataContext(context))
 			{
@@ -31,7 +30,7 @@ namespace Tests.Exceptions
 		}
 
 		[Test]
-		public void MapIgnore2([DataSources] string context)
+		public void MapIgnore2([IncludeDataSources(TestProvName.AllSQLite)] string context)
 		{
 			using (var db = GetDataContext(context))
 				Assert.Throws(typeof(LinqException), () => db.GetTable<TestPerson1>().FirstOrDefault(_ => _.FirstName == null));

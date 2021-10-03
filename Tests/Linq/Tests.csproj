@@ -5,17 +5,22 @@
 		<AssemblyName>linq2db.Tests</AssemblyName>
 		<!--suppress complains about IBM.Data.DB2.Core.dll-->
 		<ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
+
+		<AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
 	</PropertyGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\..\Source\LinqToDB.AspNet\LinqToDB.AspNet.csproj" />
 		<ProjectReference Include="..\VisualBasic\Tests.VisualBasic.vbproj" />
 		<ProjectReference Include="..\FSharp\Tests.FSharp.fsproj" />
+
+		<PackageReference Include="NodaTime" />
+
 	</ItemGroup>
 
-	<ItemGroup Condition=" '$(TargetFramework)' == 'netcoreapp2.1' ">
-		<Compile Remove="Metadata\AttributeReaderTests.cs" />
-		<Compile Remove="Linq\DataServiceTests.cs" />
-		<Compile Remove="Metadata\XmlReaderTests.cs" />
+	<ItemGroup Condition=" '$(TargetFramework)' == 'netcoreapp3.1' ">
+		<!-- transient -->
+		<PackageReference Include="System.Security.Cryptography.Cng" />
 	</ItemGroup>
 
 </Project>

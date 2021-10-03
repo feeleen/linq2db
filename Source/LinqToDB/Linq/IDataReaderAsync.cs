@@ -5,7 +5,12 @@ using System.Threading.Tasks;
 
 namespace LinqToDB.Linq
 {
-	public interface IDataReaderAsync : IDisposable
+	public interface IDataReaderAsync : IDisposable,
+#if NATIVE_ASYNC
+		IAsyncDisposable
+#else
+		Async.IAsyncDisposable
+#endif
 	{
 		IDataReader DataReader { get; }
 		Task<bool>  ReadAsync(CancellationToken cancellationToken);

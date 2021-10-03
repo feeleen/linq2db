@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace LinqToDB.Linq.Builder
 {
 	using LinqToDB.Expressions;
+	using Reflection;
 	using Extensions;
 
 	partial class TableBuilder : ISequenceBuilder
@@ -21,7 +23,8 @@ namespace LinqToDB.Linq.Builder
 			TableFunctionAttribute,
 			AsCteMethod,
 			CteConstant,
-			FromSqlMethod
+			FromSqlMethod,
+			FromSqlScalarMethod
 		}
 
 		static BuildContextType FindBuildContext(ExpressionBuilder builder, BuildInfo buildInfo, out IBuildContext? parentContext)
@@ -62,15 +65,19 @@ namespace LinqToDB.Linq.Builder
 						switch (mc.Method.Name)
 						{
 							case "GetTable":
-							if (typeof(ITable<>).IsSameOrParentOf(expression.Type))
-									return BuildContextType.GetTableMethod;
-								break;
+								{
+									if (typeof(ITable<>).IsSameOrParentOf(expression.Type))
+										return BuildContextType.GetTableMethod;
+									break;
+								}
 
 							case "AsCte":
 								return BuildContextType.AsCteMethod;
 
 							case "FromSql":
 								return BuildContextType.FromSqlMethod;
+							case "FromSqlScalar":
+								return BuildContextType.FromSqlScalarMethod;
 						}
 
 						var attr = builder.GetTableFunctionAttribute(mc.Method);
@@ -95,7 +102,7 @@ namespace LinqToDB.Linq.Builder
 
 					// Looking for association.
 					//
-					if (buildInfo.IsSubQuery && buildInfo.SelectQuery.From.Tables.Count == 0)
+					if (buildInfo.IsSubQuery/* && buildInfo.SelectQuery.From.Tables.Count == 0*/)
 					{
 						parentContext = builder.GetContext(buildInfo.Parent, expression);
 						if (parentContext != null)
@@ -108,9 +115,16 @@ namespace LinqToDB.Linq.Builder
 					{
 						if (buildInfo.IsSubQuery && buildInfo.SelectQuery.From.Tables.Count == 0)
 						{
+							// It should be handled by GroupByElementBuilder 
+							//
+							if (typeof(IGrouping<,>).IsSameOrParentOf(expression.Type))
+								break;
+							
 							parentContext = builder.GetContext(buildInfo.Parent, expression);
 							if (parentContext != null)
+							{
 								return BuildContextType.Association;
+							}
 						}
 
 						break;
@@ -125,6 +139,55 @@ namespace LinqToDB.Linq.Builder
 			return FindBuildContext(builder, buildInfo, out var _) != BuildContextType.None;
 		}
 
+		IBuildContext ApplyQueryFilters(ExpressionBuilder builder, BuildInfo buildInfo, MemberInfo? memberInfo, TableContext tableContext)
+		{
+			var entityType = tableContext.ObjectType;
+			if (builder.IsFilterDisabled(entityType))
+				return tableContext;
+
+			var ed = builder.MappingSchema.GetEntityDescriptor(entityType);
+			var filterFunc = ed.QueryFilterFunc;
+			if (filterFunc == null)
+				return tableContext;
+
+			if (memberInfo == null)
+			{
+				memberInfo = Methods.LinqToDB.GetTable.MakeGenericMethod(entityType);
+			}
+
+			var fakeQuery = ExpressionQueryImpl.CreateQuery(entityType, builder.DataContext, null);
+
+			// Here we tell for Equality Comparer to compare optimized expressions 
+			//
+			builder.AddQueryableMemberAccessors(new AccessorMember(memberInfo), builder.DataContext, (mi, dc) =>
+			{
+				var filtered      = (IQueryable)filterFunc.DynamicInvoke(fakeQuery, dc)!;
+
+				// here we use light version of optimization, only for comparing trees
+				var optimizationContext = new ExpressionTreeOptimizationContext(dc);
+				var optimizedExpr =
+					ExpressionBuilder.CorrectDataConnectionReference(filtered.Expression, ExpressionBuilder.DataContextParam);
+				    optimizedExpr = optimizationContext.ExposeExpression(optimizedExpr);
+				    optimizedExpr = optimizationContext.ExpandQueryableMethods(optimizedExpr);
+				return optimizedExpr;
+			});
+
+			var filtered = (IQueryable)filterFunc.DynamicInvoke(fakeQuery, builder.DataContext)!;
+			var optimized = ExpressionBuilder.CorrectDataConnectionReference(filtered.Expression, ExpressionBuilder.DataContextParam);
+
+			optimized = builder.ConvertExpressionTree(optimized);
+			optimized = builder.ConvertExpression(optimized);
+
+			var refExpression = new ContextRefExpression(typeof(IQueryable<>).MakeGenericType(entityType), tableContext);
+			var replaced = optimized.Replace(fakeQuery.Expression, refExpression);
+			if (replaced == optimized)
+				throw new LinqException("Could not correct query result for processing.");
+
+			var context   = builder.BuildSequence(new BuildInfo(buildInfo, replaced));
+			return context;
+
+		}
+
 		public IBuildContext? BuildSequence(ExpressionBuilder builder, BuildInfo buildInfo)
 		{
 			var type = FindBuildContext(builder, buildInfo, out var parentContext);
@@ -132,14 +195,24 @@ namespace LinqToDB.Linq.Builder
 			switch (type)
 			{
 				case BuildContextType.None                   : return null;
-				case BuildContextType.TableConstant          : return new TableContext(builder, buildInfo, ((IQueryable)buildInfo.Expression.EvaluateExpression()!).ElementType);
+				case BuildContextType.TableConstant:
+					{
+						return ApplyQueryFilters(builder, buildInfo, null,
+							new TableContext(builder, buildInfo, ((IQueryable)buildInfo.Expression.EvaluateExpression()!).ElementType));
+					}
 				case BuildContextType.GetTableMethod         :
-				case BuildContextType.MemberAccess           : return new TableContext(builder, buildInfo, buildInfo.Expression.Type.GetGenericArguments()[0]);
+				case BuildContextType.MemberAccess           :
+					{
+						return ApplyQueryFilters(builder, buildInfo, null,
+							new TableContext(builder, buildInfo,
+								buildInfo.Expression.Type.GetGenericArguments()[0]));
+					}
 				case BuildContextType.Association            : return parentContext!.GetContext(buildInfo.Expression, 0, buildInfo);
 				case BuildContextType.TableFunctionAttribute : return new TableContext    (builder, buildInfo);
 				case BuildContextType.AsCteMethod            : return BuildCteContext     (builder, buildInfo);
 				case BuildContextType.CteConstant            : return BuildCteContextTable(builder, buildInfo);
-				case BuildContextType.FromSqlMethod          : return BuildRawSqlTable(builder, buildInfo);
+				case BuildContextType.FromSqlMethod          : return BuildRawSqlTable(builder, buildInfo, false);
+				case BuildContextType.FromSqlScalarMethod    : return BuildRawSqlTable(builder, buildInfo, true);
 			}
 
 			throw new InvalidOperationException();

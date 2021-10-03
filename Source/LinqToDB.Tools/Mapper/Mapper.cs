@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq.Expressions;
 
 using JetBrains.Annotations;
+using LinqToDB.Common;
 
 namespace LinqToDB.Tools.Mapper
 {
@@ -33,7 +34,7 @@ namespace LinqToDB.Tools.Mapper
 		/// <returns>Mapping expression.</returns>
 		[Pure]
 		public Expression<Func<TFrom,TTo>> GetMapperExpression()
-			=> _mapperExpressionEx ?? (_mapperExpressionEx = _mapperBuilder.GetMapperExpression());
+			=> _mapperExpressionEx ??= _mapperBuilder.GetMapperExpression();
 
 		/// <summary>
 		/// Returns a mapper expression to map an object of <i>TFrom</i> type to an object of <i>TTo</i> type.
@@ -41,7 +42,7 @@ namespace LinqToDB.Tools.Mapper
 		/// <returns>Mapping expression.</returns>
 		[Pure]
 		public Expression<Func<TFrom,TTo,IDictionary<object,object>?,TTo>> GetMapperExpressionEx()
-			=> _mapperExpression ?? (_mapperExpression = _mapperBuilder.GetMapperExpressionEx());
+			=> _mapperExpression ??= _mapperBuilder.GetMapperExpressionEx();
 
 		/// <summary>
 		/// Returns a mapper to map an object of <i>TFrom</i> type to an object of <i>TTo</i> type.
@@ -49,7 +50,7 @@ namespace LinqToDB.Tools.Mapper
 		/// <returns>Mapping expression.</returns>
 		[Pure]
 		public Func<TFrom,TTo> GetMapper()
-			=> _mapper ?? (_mapper = GetMapperExpression().Compile());
+			=> _mapper ??= GetMapperExpression().CompileExpression();
 
 		/// <summary>
 		/// Returns a mapper to map an object of <i>TFrom</i> type to an object of <i>TTo</i> type.
@@ -57,7 +58,7 @@ namespace LinqToDB.Tools.Mapper
 		/// <returns>Mapping expression.</returns>
 		[Pure]
 		public Func<TFrom,TTo,IDictionary<object,object>?,TTo> GetMapperEx()
-			=> _mapperEx ?? (_mapperEx = GetMapperExpressionEx().Compile());
+			=> _mapperEx ??= GetMapperExpressionEx().CompileExpression();
 
 		/// <summary>
 		/// Returns a mapper to map an object of <i>TFrom</i> type to an object of <i>TTo</i> type.

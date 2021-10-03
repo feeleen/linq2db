@@ -5,11 +5,59 @@ namespace LinqToDB.DataProvider.Informix
 	using Extensions;
 	using SqlProvider;
 	using SqlQuery;
+	using Mapping;
 
 	class InformixSqlOptimizer : BasicSqlOptimizer
 	{
 		public InformixSqlOptimizer(SqlProviderFlags sqlProviderFlags) : base(sqlProviderFlags)
 		{
+		}
+
+		public override bool IsParameterDependedElement(IQueryElement element)
+		{
+			if (base.IsParameterDependedElement(element))
+				return true;
+
+			switch (element.ElementType)
+			{
+				case QueryElementType.LikePredicate:
+				{
+					var like = (SqlPredicate.Like)element;
+					if (like.Expr2.ElementType != QueryElementType.SqlValue)
+						return true;
+					break;
+				}
+
+				case QueryElementType.SearchStringPredicate:
+				{
+					var containsPredicate = (SqlPredicate.SearchString)element;
+					if (containsPredicate.Expr2.ElementType != QueryElementType.SqlValue)
+						return true;
+
+					return false;
+				}
+
+			}
+
+			return false;
+		}
+
+		public override ISqlPredicate ConvertLikePredicate(MappingSchema mappingSchema, SqlPredicate.Like predicate,
+			EvaluationContext context)
+		{
+			//Informix cannot process parameter in Like template (only Informix provider, not InformixDB2)
+			//
+			if (context.ParameterValues != null)
+			{
+				var exp2 = TryConvertToValue(predicate.Expr2, context);
+
+				if (!ReferenceEquals(exp2, predicate.Expr2))
+				{
+					predicate = new SqlPredicate.Like(predicate.Expr1, predicate.IsNot, exp2, predicate.Escape);
+				}
+			}
+
+			return predicate;
 		}
 
 		static void SetQueryParameter(IQueryElement element)
@@ -34,16 +82,16 @@ namespace LinqToDB.DataProvider.Informix
 		{
 			CheckAliases(statement, int.MaxValue);
 
-			new QueryVisitor().VisitAll(statement, SetQueryParameter);
+			statement.VisitAll(SetQueryParameter);
 
 			// TODO: test if it works and enable support with type-cast like it is done for Firebird
 			// Informix doesn't support parameters in select list
 			var ignore = statement.QueryType == QueryType.Insert && statement.SelectQuery!.From.Tables.Count == 0;
 			if (!ignore)
-				new QueryVisitor().VisitAll(statement, e =>
+				statement.VisitAll(static e =>
 				{
 					if (e is SqlSelectClause select)
-						new QueryVisitor().VisitAll(select, ClearQueryParameter);
+						select.VisitAll(ClearQueryParameter);
 				});
 
 			return base.Finalize(statement);
@@ -68,47 +116,48 @@ namespace LinqToDB.DataProvider.Informix
 			return statement;
 		}
 
-		public override ISqlExpression ConvertExpression(ISqlExpression expr)
+		public override ISqlExpression ConvertExpressionImpl<TContext>(ISqlExpression expression, ConvertVisitor<TContext> visitor,
+			EvaluationContext context)
 		{
-			expr = base.ConvertExpression(expr);
+			expression = base.ConvertExpressionImpl(expression, visitor, context);
 
-			if (expr is SqlBinaryExpression)
+			if (expression is SqlBinaryExpression be)
 			{
-				var be = (SqlBinaryExpression)expr;
-
 				switch (be.Operation)
 				{
-					case "%": return new SqlFunction(be.SystemType, "Mod",    be.Expr1, be.Expr2);
+					case "%": return new SqlFunction(be.SystemType, "Mod", be.Expr1, be.Expr2);
 					case "&": return new SqlFunction(be.SystemType, "BitAnd", be.Expr1, be.Expr2);
-					case "|": return new SqlFunction(be.SystemType, "BitOr",  be.Expr1, be.Expr2);
+					case "|": return new SqlFunction(be.SystemType, "BitOr", be.Expr1, be.Expr2);
 					case "^": return new SqlFunction(be.SystemType, "BitXor", be.Expr1, be.Expr2);
-					case "+": return be.SystemType == typeof(string)? new SqlBinaryExpression(be.SystemType, be.Expr1, "||", be.Expr2, be.Precedence): expr;
+					case "+": return be.SystemType == typeof(string) ? new SqlBinaryExpression(be.SystemType, be.Expr1, "||", be.Expr2, be.Precedence) : expression;
 				}
 			}
-			else if (expr is SqlFunction)
+			else if (expression is SqlFunction func)
 			{
-				var func = (SqlFunction)expr;
-
 				switch (func.Name)
 				{
-					case "Coalesce" : return new SqlFunction(func.SystemType, "Nvl", func.Parameters);
+					case "Coalesce" : return ConvertCoalesceToBinaryFunc(func, "Nvl");
 					case "Convert"  :
-						{
-							var par0 = func.Parameters[0];
-							var par1 = func.Parameters[1];
+					{
+						var par0 = func.Parameters[0];
+						var par1 = func.Parameters[1];
 
+						var isNull = par1 is SqlValue sqlValue && sqlValue.Value == null;
+
+						if (!isNull)
+						{
 							switch (Type.GetTypeCode(func.SystemType.ToUnderlying()))
 							{
 								case TypeCode.String   : return new SqlFunction(func.SystemType, "To_Char", func.Parameters[1]);
 								case TypeCode.Boolean  :
-									{
-										var ex = AlternativeConvertToBoolean(func, 1);
-										if (ex != null)
-											return ex;
-										break;
-									}
+								{
+									var ex = AlternativeConvertToBoolean(func, 1);
+									if (ex != null)
+										return ex;
+									break;
+								}
 
-								case TypeCode.UInt64:
+								case TypeCode.UInt64   :
 									if (func.Parameters[1].SystemType!.IsFloatType())
 										par1 = new SqlFunction(func.SystemType, "Floor", func.Parameters[1]);
 									break;
@@ -137,14 +186,20 @@ namespace LinqToDB.DataProvider.Informix
 										goto case TypeCode.DateTime;
 									break;
 							}
-
-							return new SqlExpression(func.SystemType, "Cast({0} as {1})", Precedence.Primary, par1, par0);
 						}
+
+						return new SqlExpression(func.SystemType, "Cast({0} as {1})", Precedence.Primary, par1, par0);
+					}
 				}
 			}
 
-			return expr;
+			return expression;
 		}
 
+		protected override ISqlExpression ConvertFunction(SqlFunction func)
+		{
+			func = ConvertFunctionParameters(func, false);
+			return base.ConvertFunction(func);
+		}
 	}
 }

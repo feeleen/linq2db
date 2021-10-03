@@ -1,17 +1,19 @@
-﻿using LinqToDB.Expressions;
-using LinqToDB.SqlQuery;
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 
 namespace LinqToDB.Linq.Builder
 {
+	using LinqToDB.Expressions;
+	using SqlQuery;
+
+	using static LinqToDB.Reflection.Methods.LinqToDB.Merge;
+
 	internal partial class MergeBuilder
 	{
 		internal class UpdateWhenNotMatchedBySource : MethodCallBuilder
 		{
 			protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 			{
-				return methodCall.Method.IsGenericMethod
-					&& LinqExtensions.UpdateWhenNotMatchedBySourceAndMethodInfo == methodCall.Method.GetGenericMethodDefinition();
+				return methodCall.IsSameGenericMethod(UpdateWhenNotMatchedBySourceAndMethodInfo);
 			}
 
 			protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
@@ -37,15 +39,8 @@ namespace LinqToDB.Linq.Builder
 				if (!(predicate is ConstantExpression constPredicate) || constPredicate.Value != null)
 				{
 					var condition = (LambdaExpression)predicate.Unwrap();
-					var conditionExpr = builder.ConvertExpression(condition.Body.Unwrap());
 
-					operation.Where = new SqlSearchCondition();
-
-					builder.BuildSearchCondition(
-						new ExpressionContext(null, new[] { mergeContext.TargetContext }, condition),
-						conditionExpr,
-						operation.Where.Conditions,
-						false);
+					operation.Where = BuildSearchCondition(builder, statement, mergeContext.TargetContext, null, condition);
 				}
 
 				return mergeContext;

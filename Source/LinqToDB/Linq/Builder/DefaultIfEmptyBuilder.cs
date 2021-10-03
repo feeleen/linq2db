@@ -18,11 +18,9 @@ namespace LinqToDB.Linq.Builder
 			var sequence     = builder.BuildSequence(new BuildInfo(buildInfo, methodCall.Arguments[0]));
 			var defaultValue = methodCall.Arguments.Count == 1 ? null : methodCall.Arguments[1].Unwrap();
 
-			if (buildInfo.Parent is SelectManyBuilder.SelectManyContext)
+			if (buildInfo.Parent is SelectManyBuilder.SelectManyContext context)
 			{
-				var groupJoin = ((SelectManyBuilder.SelectManyContext)buildInfo.Parent).Sequence[0] as JoinBuilder.GroupJoinContext;
-
-				if (groupJoin != null)
+				if (context.Sequence[0] is JoinBuilder.GroupJoinContext groupJoin)
 				{
 					groupJoin.SelectQuery.From.Tables[0].Joins[0].JoinType = JoinType.Left;
 					groupJoin.SelectQuery.From.Tables[0].Joins[0].IsWeak   = false;
@@ -43,15 +41,17 @@ namespace LinqToDB.Linq.Builder
 			public DefaultIfEmptyContext(IBuildContext? parent, IBuildContext sequence, Expression? defaultValue)
 				: base(parent, sequence, null)
 			{
-				_defaultValue = defaultValue;
+				DefaultValue = defaultValue;
 			}
 
-			private readonly Expression? _defaultValue;
+			public Expression? DefaultValue { get; }
 
 			public bool Disabled { get; set; }
 
 			public override Expression BuildExpression(Expression? expression, int level, bool enforceServerSide)
 			{
+				expression = SequenceHelper.CorrectExpression(expression, this, Sequence);
+
 				var expr = Sequence.BuildExpression(expression, level, enforceServerSide);
 
 				if (!Disabled && expression == null)
@@ -64,7 +64,10 @@ namespace LinqToDB.Linq.Builder
 					var idx = q.DefaultIfEmpty(-1).First();
 
 					if (idx == -1)
+					{
 						idx = SelectQuery.Select.Add(new SqlValue((int?)1));
+						SelectQuery.Select.Columns[idx].RawAlias = "is_empty";
+					}
 
 					var n = ConvertToParentIndex(idx, this);
 
@@ -73,7 +76,7 @@ namespace LinqToDB.Linq.Builder
 						ReflectionHelper.DataReader.IsDBNull,
 						Expression.Constant(n));
 
-					var defaultValue = _defaultValue ?? new DefaultValueExpression(Builder.MappingSchema, expr.Type);
+					var defaultValue = DefaultValue ?? new DefaultValueExpression(Builder.MappingSchema, expr.Type);
 
 					if (expr.NodeType == ExpressionType.Parameter)
 					{
@@ -110,21 +113,25 @@ namespace LinqToDB.Linq.Builder
 
 			public override SqlInfo[] ConvertToSql(Expression? expression, int level, ConvertFlags flags)
 			{
+				expression = SequenceHelper.CorrectExpression(expression, this, Sequence);
 				return Sequence.ConvertToSql(expression, level, flags);
 			}
 
 			public override SqlInfo[] ConvertToIndex(Expression? expression, int level, ConvertFlags flags)
 			{
+				expression = SequenceHelper.CorrectExpression(expression, this, Sequence);
 				return Sequence.ConvertToIndex(expression, level, flags);
 			}
 
 			public override IsExpressionResult IsExpression(Expression? expression, int level, RequestFor requestFlag)
 			{
+				expression = SequenceHelper.CorrectExpression(expression, this, Sequence);
 				return Sequence.IsExpression(expression, level, requestFlag);
 			}
 
 			public override IBuildContext? GetContext(Expression? expression, int level, BuildInfo buildInfo)
 			{
+				expression = SequenceHelper.CorrectExpression(expression, this, Sequence);
 				return Sequence.GetContext(expression, level, buildInfo);
 			}
 		}

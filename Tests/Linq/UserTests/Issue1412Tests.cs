@@ -2,7 +2,6 @@
 using System.Linq;
 using LinqToDB;
 using NUnit.Framework;
-using Tests.Tools;
 
 namespace Tests.UserTests
 {
@@ -87,7 +86,7 @@ namespace Tests.UserTests
 				return Id.Equals(other.Id) && TypeID.Equals(other.TypeID);
 			}
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 			{
 				if (ReferenceEquals(null, obj)) return false;
 				if (ReferenceEquals(this, obj)) return true;
@@ -128,7 +127,7 @@ namespace Tests.UserTests
 				return Id.Equals(other.Id) && string.Equals(Name, other.Name) && string.Equals(ShortName, other.ShortName) && Height == other.Height && Depth == other.Depth && Width == other.Width;
 			}
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 			{
 				if (ReferenceEquals(null, obj)) return false;
 				if (ReferenceEquals(this, obj)) return true;
@@ -154,12 +153,12 @@ namespace Tests.UserTests
 		[Test]
 		public void Test([IncludeDataSources(TestProvName.AllSQLite)] string context)
 		{
-			var typeId = Guid.NewGuid();
+			var typeId = TestData.Guid1;
 
 			var resources = new[]{ new WmsResourceTypeDTO{Depth = 256, Height = 110, Id = typeId, Name = "Resource Name", ShortName = "RN", Width = 333 } };
 
-			var carriersA = new[] { new WmsLoadCarrierDTO { Id = Guid.NewGuid(), TypeID = typeId } };
-			var carriersB = new[] { new WmsLoadCarrierDTO { Id = Guid.NewGuid(), TypeID = typeId } };
+			var carriersA = new[] { new WmsLoadCarrierDTO { Id = TestData.Guid2, TypeID = typeId } };
+			var carriersB = new[] { new WmsLoadCarrierDTO { Id = TestData.Guid3, TypeID = typeId } };
 
 			using (var db = GetDataContext(context))
 			using (db.CreateLocalTable<WmsResourceTypeDTO>(resources))

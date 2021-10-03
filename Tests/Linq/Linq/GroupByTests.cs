@@ -2,12 +2,12 @@
 using System.Linq;
 
 using LinqToDB;
-
+using LinqToDB.SqlQuery;
 using NUnit.Framework;
 
 namespace Tests.Linq
 {
-	using LinqToDB.Common;
+	using LinqToDB.Linq;
 	using LinqToDB.Mapping;
 	using Model;
 
@@ -260,7 +260,7 @@ namespace Tests.Linq
 			public GroupByInfo? Prev;
 			public object?      Field;
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 			{
 				return Equals(obj as GroupByInfo);
 			}
@@ -648,13 +648,17 @@ namespace Tests.Linq
 		public void Sum3([DataSources(ProviderName.SqlCe)] string context)
 		{
 			using (var db = GetDataContext(context))
+			{
 				AreEqual(
 					from ch in Child
-					group ch by ch.Parent into g
+					group ch by ch.Parent
+					into g
 					select g.Key.Children.Sum(p => p.ChildID),
 					from ch in db.Child
-					group ch by ch.Parent into g
+					group ch by ch.Parent
+					into g
 					select g.Key.Children.Sum(p => p.ChildID));
+			}
 		}
 
 		[Test]
@@ -932,7 +936,7 @@ namespace Tests.Linq
 						from sub in Types
 						where
 							sub.ID == 1 &&
-							sub.DateTimeValue <= DateTime.Today
+							sub.DateTimeValue <= TestData.Date
 						group sub by new
 						{
 							sub.ID
@@ -949,7 +953,7 @@ namespace Tests.Linq
 						from sub in db.Types
 						where
 							sub.ID == 1 &&
-							sub.DateTimeValue <= DateTime.Today
+							sub.DateTimeValue <= TestData.Date
 						group sub by new
 						{
 							sub.ID
@@ -1015,7 +1019,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void GroupByAssociation102([DataSources(TestProvName.AllInformix)] string context)
+		public void GroupByAssociation102([DataSources()] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -1032,7 +1036,7 @@ namespace Tests.Linq
 
 		[Test]
 		public void GroupByAssociation1022([DataSources(
-			ProviderName.SqlCe, ProviderName.Access, TestProvName.AllInformix /* Can be fixed*/)]
+			ProviderName.SqlCe, TestProvName.AllAccess /* Can be fixed*/)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -1050,7 +1054,7 @@ namespace Tests.Linq
 
 		[Test]
 		public void GroupByAssociation1023([DataSources(
-			ProviderName.SqlCe, ProviderName.Access, TestProvName.AllInformix /* Can be fixed.*/)]
+			ProviderName.SqlCe, TestProvName.AllAccess /* Can be fixed.*/)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -1074,7 +1078,7 @@ namespace Tests.Linq
 
 		[Test]
 		public void GroupByAssociation1024([DataSources(
-			ProviderName.SqlCe, ProviderName.Access, TestProvName.AllInformix) /* Can be fixed. */]
+			ProviderName.SqlCe, TestProvName.AllAccess) /* Can be fixed. */]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -1156,7 +1160,7 @@ namespace Tests.Linq
 					select g.Key
 					,
 					from p in db.Parent
-					group p by p.Children.Average(c => c.ParentID) > 3 into g
+					group p by  p.Children.Count > 0 && p.Children.Average(c => c.ParentID) > 3 into g
 					select g.Key);
 		}
 
@@ -1313,7 +1317,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Scalar4([DataSources(ProviderName.SqlCe, ProviderName.Access, TestProvName.AllInformix)] string context)
+		public void Scalar4([DataSources(ProviderName.SqlCe, TestProvName.AllAccess)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -1329,7 +1333,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Scalar41([DataSources(ProviderName.SqlCe, ProviderName.Access, TestProvName.AllInformix)] string context)
+		public void Scalar41([DataSources(ProviderName.SqlCe, TestProvName.AllAccess)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -1753,7 +1757,6 @@ namespace Tests.Linq
 		public void FirstGroupBy([DataSources] string context)
 		{
 			using (new GuardGrouping(false))
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			{
 				Assert.AreEqual(
@@ -1770,10 +1773,11 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		[ActiveIssue("AseException : There is no host variable corresponding to the one specified by the PARAM datastream. This means that this variable '@rand' was not used in the preceding DECLARE CURSOR or SQL command.", Configuration = TestProvName.AllSybase)]
 		public void GroupByCustomEntity1([DataSources] string context)
 		{
-			var rand = new Random().Next(5);
+			// I definitly selected it by random
+			var rand = 3;
+			//var rand = new Random().Next(5);
 			//var rand = new Random();
 
 			using (var db = GetDataContext(context))
@@ -1813,9 +1817,10 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void GroupByCustomEntity2([DataSources(TestProvName.AllInformix, TestProvName.AllSybase)] string context)
+		public void GroupByCustomEntity2([DataSources(TestProvName.AllSybase)] string context)
 		{
-			var rand = new Random().Next(5);
+			// pure random
+			var rand = 3;
 
 			using (var db = GetDataContext(context))
 			{
@@ -1867,7 +1872,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void JoinGroupBy2([DataSources(ProviderName.Access)] string context)
+		public void JoinGroupBy2([DataSources()] string context)
 		{
 			using (var db = GetDataContext(context))
 			{
@@ -1886,9 +1891,45 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void GroupByGuard([DataSources] string context)
+		public void OrderByGroupBy([DataSources()] string context)
 		{
-			using(new AllowMultipleQuery())
+			using (var db = GetDataContext(context))
+			{
+				var query1 = from c in db.Child
+							 orderby c.ChildID, c.ParentID
+							 select c;
+
+				var query2 = from c1 in query1
+							 group c1 by c1.ParentID
+					into c2
+							 select c2.Key;
+
+				Assert.DoesNotThrow(() => query2.ToArray());
+
+				var orderItems = query2.GetSelectQuery().OrderBy.Items;
+
+				Assert.That(orderItems.Count, Is.EqualTo(1));
+				Assert.That(QueryHelper.GetUnderlyingField(orderItems[0].Expression)!.Name, Is.EqualTo("ParentID"));
+			}
+		}
+
+		void CheckGuardedQuery<TKey, TEntity>(IQueryable<IGrouping<TKey, TEntity>> grouping)
+			where TKey: notnull
+		{
+			Assert.Throws<LinqToDBException>(() =>
+			{
+				grouping.ToDictionary(_ => _.Key, _ => _.ToList());
+			});
+
+			Assert.DoesNotThrow(() =>
+			{
+				grouping.DisableGuard().ToDictionary(_ => _.Key, _ => _.ToList());
+			});
+		}
+
+		[Test]
+		public void GroupByGuard([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
 			using(new GuardGrouping(true))
 			using (var db = GetDataContext(context))
 			{
@@ -1914,20 +1955,8 @@ namespace Tests.Linq
 				)
 				.ToDictionary(_ => _.Key);
 
-				Assert.Throws<LinqToDBException>(() =>
-				{
-					// group on server
-					db.Person
-						.GroupBy(_ => _.Gender)
-						.ToDictionary(_ => _.Key, _ => _.ToList());
-				});
-
-				Assert.Throws<LinqToDBException>(() =>
-				{
-					db.Person
-						.GroupBy(_ => _)
-						.ToDictionary(_ => _.Key, _ => _.ToList());
-				});
+				CheckGuardedQuery(db.Person.GroupBy(_ => _.Gender));
+				CheckGuardedQuery(db.Person.GroupBy(_ => _));
 
 				Assert.Throws<LinqToDBException>(() =>
 				{
@@ -1935,6 +1964,15 @@ namespace Tests.Linq
 						.GroupBy(_ => _)
 						.ToList();
 				});
+
+				Assert.DoesNotThrow(() =>
+				{
+					db.Person
+						.GroupBy(_ => _)
+						.DisableGuard()
+						.ToList();
+				});
+
 			}
 		}
 
@@ -2010,7 +2048,7 @@ namespace Tests.Linq
 							  group record by record.TimeStamp into g
 							  select new
 							  {
-								  res = g.Count(r => r.TimeStamp > DateTime.Now),
+								  res = g.Count(r => r.TimeStamp > TestData.DateTime),
 							  }).ToList();
 
 				var index = db.LastQuery!.IndexOf("SELECT");
@@ -2020,19 +2058,11 @@ namespace Tests.Linq
 			}
 		}
 
-		// check why firebird and access fails on generated sql
-		// FirebirdSql.Data.Common.IscException : arithmetic exception, numeric overflow, or string truncation string right truncation
-		//
-		// OleDbException : IErrorInfo.GetDescription failed with E_FAIL(0x80004005).
-		// Access issue could be related to reserved words but I don't see anything suspicious in failed query
-		// https://support.microsoft.com/en-us/office/learn-about-access-reserved-words-and-symbols-ae9d9ada-3255-4b12-91a9-f855bdd9c5a2?ocmsassetid=ha010030643&correlationid=13c0f607-b794-4387-b8d9-bdffce04d996&ui=en-us&rs=en-us&ad=us
-		[ActiveIssue(Configurations = new[] { TestProvName.AllFirebird, ProviderName.Access })]
 		[Test]
 		public void Issue434Test1([DataSources] string context)
 		{
 			var input = "test";
 
-			using (new AllowMultipleQuery(true))
 			using (var db = GetDataContext(context))
 			{
 				var result = db.Person.GroupJoin(db.Patient, re => re.ID, ri => ri.PersonID, (re, ri) => new
@@ -2046,7 +2076,6 @@ namespace Tests.Linq
 		[Test]
 		public void Issue434Test2([DataSources] string context)
 		{
-			using (new AllowMultipleQuery(true))
 			using (var db = GetDataContext(context))
 			{
 				var result = db.Person.GroupJoin(db.Patient, re => re.ID, ri => ri.PersonID, (re, ri) => new
@@ -2077,7 +2106,6 @@ namespace Tests.Linq
 			[MapValue("D")] Delisted,
 		}
 
-		[ActiveIssue(913)]
 		[Test]
 		public void Issue913Test([DataSources] string context)
 		{
@@ -2147,7 +2175,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Issue1198Test([DataSources(ProviderName.Access)] string context)
+		public void Issue1198Test([DataSources(TestProvName.AllAccess)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (var table = db.CreateLocalTable<Issue1192Table>())
@@ -2159,6 +2187,116 @@ namespace Tests.Linq
 							 {
 								 MyGroupedCount = g.Count(i => i.Status == 3),
 							 }).FirstOrDefault();
+			}
+		}
+
+		[Test]
+		public void Issue2306Test1([DataSources] string context)
+		{
+			Query.ClearCaches();
+			using (var db = GetDataContext(context))
+			using (new GuardGrouping(false))
+			{
+				db.Person.GroupBy(p => p.ID).ToDictionary(g => g.Key, g => g.Select(p => p.LastName).ToList());
+			}
+
+			Query.ClearCaches();
+			using (var db = GetDataContext(context))
+			using (new GuardGrouping(true))
+			{
+				Assert.Throws<LinqToDBException>(() => db.Person.GroupBy(p => p.ID).ToDictionary(g => g.Key, g => g.Select(p => p.LastName).ToList()));
+			}
+
+			Query.ClearCaches();
+			using (var db = GetDataContext(context))
+			using (new GuardGrouping(true))
+			{
+				db.Person.GroupBy(p => p.ID).DisableGuard().ToDictionary(g => g.Key, g => g.Select(p => p.LastName).ToList());
+			}
+
+			Query.ClearCaches();
+		}
+
+		[Test]
+		public void Issue2306Test2([DataSources] string context)
+		{
+			Query.ClearCaches();
+			using (var db = GetDataContext(context))
+			using (new GuardGrouping(false))
+			{
+				db.Person.GroupBy(p => p.ID).ToDictionary(g => g.Key, g => g.Select(p => p.LastName).ToList());
+			}
+
+			using (var db = GetDataContext(context))
+			using (new GuardGrouping(true))
+			{
+				Assert.Throws<LinqToDBException>(() => db.Person.GroupBy(p => p.ID).ToDictionary(g => g.Key, g => g.Select(p => p.LastName).ToList()));
+			}
+
+			using (var db = GetDataContext(context))
+			using (new GuardGrouping(true))
+			{
+				db.Person.GroupBy(p => p.ID).DisableGuard().ToDictionary(g => g.Key, g => g.Select(p => p.LastName).ToList());
+			}
+			Query.ClearCaches();
+		}
+
+		[Test]
+		public void Issue2306Test3([DataSources] string context)
+		{
+			Query.ClearCaches();
+			using (var db = GetDataContext(context))
+			using (new GuardGrouping(true))
+			{
+				Assert.Throws<LinqToDBException>(() => db.Person.GroupBy(p => p.ID).ToDictionary(g => g.Key, g => g.Select(p => p.LastName).ToList()));
+			}
+
+			using (var db = GetDataContext(context))
+			using (new GuardGrouping(false))
+			{
+				db.Person.GroupBy(p => p.ID).ToDictionary(g => g.Key, g => g.Select(p => p.LastName).ToList());
+			}
+
+			using (var db = GetDataContext(context))
+			using (new GuardGrouping(true))
+			{
+				db.Person.GroupBy(p => p.ID).DisableGuard().ToDictionary(g => g.Key, g => g.Select(p => p.LastName).ToList());
+			}
+			Query.ClearCaches();
+		}
+
+		[Test]
+		public void IssueGroupByNonTableColumn([DataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				var query = db.Person
+					.Select(_ => 1)
+					.Concat(db.Person.Select(_ => 2))
+					.GroupBy(_ => _)
+					.Select(_ => new { _.Key, Count = _.Count() })
+					.Where(_ => _.Key == 1)
+					.Select(_ => _.Count)
+					.Where(_ => _ > 1)
+					.Count();
+			}
+		}
+
+		[Test]
+		public void GroupByWithSubquery([DataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				var emptyEquery = db.Person
+					.Select(_ => 1)
+					.Where(_ => false);
+
+				var query = emptyEquery
+					.GroupBy(_ => _)
+					.Select(_ => new { _.Key, Count = _.Count() })
+					.ToList();
+
+				Assert.AreEqual(0, query.Count);
 			}
 		}
 	}

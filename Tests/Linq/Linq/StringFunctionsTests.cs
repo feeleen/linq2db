@@ -96,7 +96,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void AggregationOrderTest([IncludeDataSources(ProviderName.SqlServer2017)] string context)
+		public void AggregationOrderTest([IncludeDataSources(TestProvName.AllSqlServer2017Plus)] string context)
 		{
 			var data = GenerateData();
 
@@ -301,6 +301,26 @@ namespace Tests.Linq
 		}
 
 		[Test]
+		public void FinalAggregationSubqueryTest([StringTestSources] string context)
+		{
+			var data = GenerateData();
+
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable(data))
+			{
+				var query = from t in table
+					select new
+					{
+						Count = table.CountExt(e => e.Value1, Sql.AggregateModifier.Distinct),
+						Aggregated = table.AsQueryable().StringAggregate(" -> ", t => t.Value1).ToValue()
+					};
+				
+				
+				var result = query.ToArray();
+			}
+		}
+
+		[Test]
 		public void ConcatStringsTest([
 			IncludeDataSources(
 				TestProvName.AllSqlServer,
@@ -440,7 +460,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Issue1765TestParameter3([StringTestOrderSources] string context, [Values(" -> ", " => ", " -> ")] string separator)
+		public void Issue1765TestParameter3([StringTestOrderSources] string context, [Values(" -> ", " => ")] string separator)
 		{
 			var data = GenerateData();
 
@@ -468,7 +488,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Issue1765TestParameter4([StringTestSources] string context, [Values(" -> ", " => ", " -> ")] string separator)
+		public void Issue1765TestParameter4([StringTestSources] string context, [Values(" -> ", " => ")] string separator)
 		{
 			var data = GenerateData();
 

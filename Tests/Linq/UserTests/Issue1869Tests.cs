@@ -119,11 +119,11 @@ namespace Tests.UserTests
 	    {
 	        [Column]
 	        public int MonthNumber { get; set; }
-	    }				
+	    }
 
 
 		[Test]
-		public void TestLeftJoin([IncludeDataSources(ProviderName.Access)] string context)
+		public void TestLeftJoin([IncludeDataSources(TestProvName.AllAccess)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (db.CreateLocalTable<Month>())
@@ -132,8 +132,8 @@ namespace Tests.UserTests
 			using (db.CreateLocalTable<Workstation>())
 			using (db.CreateLocalTable<WorkstationGroup>())
 			{
-				var dateMin = DateTime.Now;
-				var dateMax = DateTime.Now;
+				var dateMin = TestData.DateTime;
+				var dateMax = TestData.DateTime;
 				var sectorId = 1;
 
 				var query1 = from q in db.GetTable<FtqData>()

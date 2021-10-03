@@ -1,11 +1,12 @@
-﻿using LinqToDB.Expressions;
-using LinqToDB.SqlQuery;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 
 namespace LinqToDB.Linq.Builder
 {
+	using LinqToDB.Expressions;
+	using SqlQuery;
+
 	internal partial class MergeBuilder
 	{
 		private class MergeContext : SequenceContextBase
@@ -29,16 +30,17 @@ namespace LinqToDB.Linq.Builder
 				Statement = merge;
 			}
 
-			public MergeContext(SqlMergeStatement merge, IBuildContext target, IBuildContext source)
+			public MergeContext(SqlMergeStatement merge, IBuildContext target, TableLikeQueryContext source)
 				: base(null, new[] { target, source }, null)
 			{
-				Statement = merge;
+				Statement    = merge;
+				merge.Source = source.Source;
 			}
 
 			public SqlMergeStatement Merge => (SqlMergeStatement)Statement!;
 
 			public IBuildContext           TargetContext => Sequence;
-			public MergeSourceQueryContext SourceContext => (MergeSourceQueryContext)Sequences[1];
+			public TableLikeQueryContext SourceContext => (TableLikeQueryContext)Sequences[1];
 
 			public override void BuildQuery<T>(Query<T> query, ParameterExpression queryParameter)
 			{
@@ -63,17 +65,19 @@ namespace LinqToDB.Linq.Builder
 					{
 						case ConvertFlags.Field:
 							{
-								var root = expression.GetRootObject(Builder.MappingSchema);
+								var root = Builder.GetRootObject(expression);
 
 								if (root.NodeType == ExpressionType.Parameter)
 								{
 									if (_sourceParameters.Contains(root))
 										return SourceContext.ConvertToSql(expression, level, flags);
 
-									if (_targetParameters.Contains(root))
-										return TargetContext.ConvertToSql(expression, level, flags);
-
 									return TargetContext.ConvertToSql(expression, level, flags);
+								}
+
+								if (root is ContextRefExpression contextRef)
+								{
+									return contextRef.BuildContext.ConvertToSql(expression, level, flags);
 								}
 
 								break;
@@ -91,7 +95,7 @@ namespace LinqToDB.Linq.Builder
 
 			public override IsExpressionResult IsExpression(Expression? expression, int level, RequestFor requestFlag)
 			{
-				throw new NotImplementedException();
+				return SourceContext.IsExpression(expression, level, requestFlag);
 			}
 		}
 	}

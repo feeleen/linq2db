@@ -24,7 +24,7 @@ namespace LinqToDB.Common
 			}
 			catch (Exception ex)
 			{
-				throw new LinqToDBConvertException($"Cannot convert value '{value}' to type '{conversionType.FullName}'", ex);
+				throw new LinqToDBConvertException($"Cannot convert value '{value}: {value.GetType().FullName}' to type '{conversionType.FullName}'", ex);
 			}
 		}
 
@@ -65,6 +65,21 @@ namespace LinqToDB.Common
 			var op =
 				to.GetMethodEx("op_Implicit", from) ??
 				to.GetMethodEx("op_Explicit", from);
+
+			if (op != null)
+			{
+				Type oppt = op.GetParameters()[0].ParameterType;
+				Type pt   = p.Type;
+
+				if (oppt.IsNullable() && !pt.IsNullable())
+					p = GetCtor(pt, oppt, p)!;
+
+				return Expression.Convert(p, to, op);
+			}
+
+			op =
+				from.GetMethodEx(to, "op_Implicit", from) ??
+				from.GetMethodEx(to, "op_Explicit", from);
 
 			if (op != null)
 			{
@@ -142,7 +157,7 @@ namespace LinqToDB.Common
 		{
 			if (to == typeof(string) && !from.IsNullable())
 			{
-				var mi = from.GetMethodEx("ToString", new Type[0]);
+				var mi = from.GetMethodEx("ToString", Array<Type>.Empty);
 				return mi != null ? Expression.Call(p, mi) : null;
 			}
 
@@ -160,8 +175,8 @@ namespace LinqToDB.Common
 
 				for (var i = 0; i < values.Length; i++)
 				{
-					var val = values.GetValue(i);
-					var lv  = (long)Convert.ChangeType(val, typeof(long), Thread.CurrentThread.CurrentCulture);
+					var val = values.GetValue(i)!;
+					var lv  = (long)Convert.ChangeType(val, typeof(long), Thread.CurrentThread.CurrentCulture)!;
 
 					dic[lv.ToString()] = val;
 
@@ -170,10 +185,10 @@ namespace LinqToDB.Common
 				}
 
 				for (var i = 0; i < values.Length; i++)
-					dic[names[i].ToLowerInvariant()] = values.GetValue(i);
+					dic[names[i].ToLowerInvariant()] = values.GetValue(i)!;
 
 				for (var i = 0; i < values.Length; i++)
-					dic[names[i]] = values.GetValue(i);
+					dic[names[i]] = values.GetValue(i)!;
 
 				var cases =
 					from v in dic
@@ -246,7 +261,7 @@ namespace LinqToDB.Common
 
 					if (ambiguityMapping != null)
 					{
-						var enums = ambiguityMapping.ToArray();
+						var enums = ambiguityMapping.ToList();
 
 						return Expression.Convert(
 							Expression.Call(
@@ -273,7 +288,7 @@ namespace LinqToDB.Common
 					return expr;
 				}
 
-				if (fromTypeFields.Any(f => f.attrs.Count(a => a.Value != null) != 0))
+				if (fromTypeFields.Any(f => f.attrs.Any(a => a.Value != null)))
 				{
 					var field = fromTypeFields.First(f => f.attrs.Count == 0);
 
@@ -363,7 +378,7 @@ namespace LinqToDB.Common
 						.ToList();
 
 					var dic = new Dictionary<EnumValues,EnumValues>();
-					var cl  = mappingSchema.ConfigurationList.Concat(new[] { "", null }).Select((c,i) => new { c, i }).ToArray();
+					var cl  = mappingSchema.ConfigurationList.Concat(new[] { "", null }).Select((c,i) => (c, i)).ToArray();
 
 					foreach (var toField in toFields)
 					{

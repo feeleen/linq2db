@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 
@@ -8,17 +9,18 @@ namespace LinqToDB.Linq.Builder
 	using Extensions;
 	using SqlQuery;
 	using Common;
-	using System.Diagnostics.CodeAnalysis;
+	using Reflection;
 
 	class FirstSingleBuilder : MethodCallBuilder
 	{
-		public static string[] MethodNames = { "First", "FirstOrDefault", "Single", "SingleOrDefault" };
+		public  static readonly string[] MethodNames      = { "First"     , "FirstOrDefault"     , "Single"     , "SingleOrDefault"      };
+		private static readonly string[] MethodNamesAsync = { "FirstAsync", "FirstOrDefaultAsync", "SingleAsync", "SingleOrDefaultAsync" };
 
 		protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 		{
 			return
-				methodCall.IsQueryable     (MethodNames) && methodCall.Arguments.Count == 1 ||
-				methodCall.IsAsyncExtension(MethodNames) && methodCall.Arguments.Count == 2;
+				methodCall.IsQueryable     (MethodNames     ) && methodCall.Arguments.Count == 1 ||
+				methodCall.IsAsyncExtension(MethodNamesAsync) && methodCall.Arguments.Count == 2;
 		}
 
 		protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
@@ -50,7 +52,15 @@ namespace LinqToDB.Linq.Builder
 			}
 
 			if (take != 0)
-				builder.BuildTake(sequence, new SqlValue(take), null);
+			{
+				var takeExpression = Configuration.Linq.ParameterizeTakeSkip
+					? (ISqlExpression)new SqlParameter(new DbDataType(typeof(int)), "take", take)
+					{
+						IsQueryParameter = !builder.DataContext.InlineParameters
+					}
+					: new SqlValue(take);
+				builder.BuildTake(sequence, takeExpression, null);
+			}
 
 			return new FirstSingleContext(buildInfo.Parent, sequence, methodCall);
 		}
@@ -67,7 +77,9 @@ namespace LinqToDB.Linq.Builder
 
 				if (info != null)
 				{
-					info.Expression = methodCall.Transform(ex => ConvertMethod(methodCall, 0, info, predicate.Parameters[0], ex));
+					info.Expression = methodCall.Transform(
+						(methodCall, info, predicate),
+						static (context, ex) => ConvertMethod(context.methodCall, 0, context.info, context.predicate.Parameters[0], ex));
 					info.Parameter  = param;
 
 					return info;
@@ -75,12 +87,40 @@ namespace LinqToDB.Linq.Builder
 			}
 			else
 			{
-				var info = builder.ConvertSequence(new BuildInfo(buildInfo, methodCall.Arguments[0]), null, true);
+				var argument = methodCall.Arguments[0];
+				var info     = builder.ConvertSequence(new BuildInfo(buildInfo, argument), null, true);
 
 				if (info != null)
 				{
-					info.Expression = methodCall.Transform(ex => ConvertMethod(methodCall, 0, info, null, ex));
-					info.Parameter  = param;
+					var prevGenericType = typeof(IEnumerable<>).GetGenericType(argument.Type);
+					var genericType     = typeof(IEnumerable<>).GetGenericType(info.Expression.Type);
+
+					if (genericType == null || prevGenericType == null)
+						throw new InvalidOperationException();
+
+					var newArgument = info.Expression;
+					var elementType = genericType.GetGenericArguments()[0];
+
+					if (typeof(ExpressionHolder<,>).IsSameOrParentOf(elementType))
+					{
+						var selectMethod = typeof(IQueryable<>).IsSameOrParentOf(info.Expression.Type)
+							? Methods.Queryable.Select
+							: Methods.Enumerable.Select;
+
+						var entityParam     = Expression.Parameter(elementType);
+						var selectCall = TypeHelper.MakeMethodCall(selectMethod, info.Expression,
+							Expression.Quote(
+								Expression.Lambda(
+									Expression.PropertyOrField(entityParam, nameof(ExpressionHolder<int, int>.ex)),
+									entityParam)
+							));
+
+						newArgument = selectCall;
+					}
+
+					info.Expression = methodCall.Update(methodCall.Object, new[] {newArgument});
+
+					info.Parameter = param;
 
 					return info;
 				}
@@ -189,7 +229,7 @@ namespace LinqToDB.Linq.Builder
 
 			static object SequenceException()
 			{
-				return new object[0].First();
+				return Array<object>.Empty.First();
 			}
 
 			bool _isJoinCreated;
@@ -212,11 +252,69 @@ namespace LinqToDB.Linq.Builder
 			{
 				if (_checkNullIndex < 0)
 				{
-					_checkNullIndex = SelectQuery.Select.Add(new SqlValue(1));
+					//TODO: Check maybe we have to use DefaultIfEmptyContext
+					var q =
+						from col in SelectQuery.Select.Columns
+						where !col.CanBeNull
+						select SelectQuery.Select.Columns.IndexOf(col);
+
+					_checkNullIndex = q.DefaultIfEmpty(-1).First();
+
+					if (_checkNullIndex < 0)
+					{
+						_checkNullIndex = SelectQuery.Select.Add(new SqlValue(1));
+						SelectQuery.Select.Columns[_checkNullIndex].RawAlias = "is_empty";
+					}
+
 					_checkNullIndex = ConvertToParentIndex(_checkNullIndex, this);
 				}
 
 				return _checkNullIndex;
+			}
+
+
+			static bool HasSubQuery(IBuildContext context)
+			{
+				//TODO: candidate for refactor. We need better way for detecting such cases.
+
+				Expression? expressionToCheck = null;
+
+				var ctx = context;
+
+				while (true)
+				{
+					if (ctx is SelectContext sc)
+					{
+						expressionToCheck = sc.Body;
+						break;
+					}
+
+					if (ctx is SubQueryContext sub)
+					{
+						ctx = sub.SubQuery;
+					}
+					else if (ctx is PassThroughContext pass)
+					{
+						ctx = pass.Context;
+					}
+					else
+					{
+						break;
+					}
+				}
+				if (expressionToCheck != null)
+				{
+					var found = null != expressionToCheck.Find(ctx, static(c, e) =>
+					{
+						if (e is MethodCallExpression mc && c.Builder.IsSubQuery(c, mc))
+							return true;
+						return false;
+					});
+
+					return found;
+				}
+
+				return false;
 			}
 
 			public override Expression BuildExpression(Expression? expression, int level, bool enforceServerSide)
@@ -224,8 +322,9 @@ namespace LinqToDB.Linq.Builder
 				if (expression == null || level == 0)
 				{
 					if (Builder.DataContext.SqlProviderFlags.IsApplyJoinSupported &&
-						Parent!.SelectQuery.GroupBy.IsEmpty &&
-						Parent.SelectQuery.From.Tables.Count > 0)
+					    Parent!.SelectQuery.GroupBy.IsEmpty                       &&
+					    Parent.SelectQuery.From.Tables.Count > 0                  &&
+					    !HasSubQuery(Sequence))
 					{
 						CreateJoin();
 
@@ -256,14 +355,14 @@ namespace LinqToDB.Linq.Builder
 					if (expression == null)
 					{
 						if (   !Builder.DataContext.SqlProviderFlags.IsSubQueryColumnSupported 
-						    || Sequence.IsExpression(null, level, RequestFor.Object).Result)
+						       || Sequence.IsExpression(null, level, RequestFor.Object).Result)
 						{
 							return Builder.BuildMultipleQuery(Parent!, _methodCall, enforceServerSide);
 						}
 
 						var idx = Parent!.SelectQuery.Select.Add(SelectQuery);
-						    idx = Parent.ConvertToParentIndex(idx, Parent);
-						return Builder.BuildSql(_methodCall.Type, idx);
+						idx = Parent.ConvertToParentIndex(idx, Parent);
+						return Builder.BuildSql(_methodCall.Type, idx, SelectQuery);
 					}
 
 					return null!; // ???

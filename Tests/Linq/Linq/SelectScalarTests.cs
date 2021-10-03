@@ -181,24 +181,6 @@ namespace Tests.Linq
 			}
 		}
 
-		[ActiveIssue(
-			Configurations = new[]
-			{
-				ProviderName.Access,
-				ProviderName.DB2,
-				TestProvName.AllFirebird,
-				TestProvName.AllInformix,
-				TestProvName.AllMySql,
-				TestProvName.AllOracle,
-				TestProvName.AllPostgreSQL,
-				TestProvName.AllSQLite,
-				TestProvName.AllSapHana,
-				ProviderName.SqlCe,
-				TestProvName.AllSqlServer,
-				TestProvName.AllSybase
-			},
-			SkipForNonLinqService = true,
-			Details = "SELECT * query")]
 		[Test]
 		public void Scalar3([DataSources] string context)
 		{
@@ -210,24 +192,6 @@ namespace Tests.Linq
 			}
 		}
 
-		[ActiveIssue(
-			Configurations = new[]
-			{
-				ProviderName.Access,
-				ProviderName.DB2,
-				TestProvName.AllFirebird,
-				TestProvName.AllInformix,
-				TestProvName.AllMySql,
-				TestProvName.AllOracle,
-				TestProvName.AllPostgreSQL,
-				TestProvName.AllSQLite,
-				TestProvName.AllSapHana,
-				ProviderName.SqlCe,
-				TestProvName.AllSqlServer,
-				TestProvName.AllSybase
-			},
-			SkipForNonLinqService = true,
-			Details = "SELECT * query")]
 		[Test]
 		public void Scalar31([DataSources] string context)
 		{
@@ -274,7 +238,7 @@ namespace Tests.Linq
 
 		[Test]
 		public void SubQueryTest([DataSources(
-			ProviderName.Access, TestProvName.AllInformix, ProviderName.SqlCe,
+			TestProvName.AllAccess, TestProvName.AllInformix, ProviderName.SqlCe,
 			TestProvName.AllSybase, TestProvName.AllSapHana)]
 			string context)
 		{

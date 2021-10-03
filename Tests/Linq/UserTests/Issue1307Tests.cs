@@ -3,11 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 
 using LinqToDB;
-using LinqToDB.Data;
-using LinqToDB.DataProvider.Informix;
 using LinqToDB.Mapping;
 using NUnit.Framework;
-using Tests.Model;
 
 namespace Tests.UserTests
 {
@@ -89,16 +86,15 @@ namespace Tests.UserTests
 
 		private static string GetQuantifierName(DateTimeQuantifiers quantifier)
 		{
-			switch (quantifier)
+			return quantifier switch
 			{
-				case DateTimeQuantifiers.Fraction1: return "fraction(1)";
-				case DateTimeQuantifiers.Fraction2: return "fraction(2)";
-				case DateTimeQuantifiers.Fraction3: return "fraction(3)";
-				case DateTimeQuantifiers.Fraction4: return "fraction(4)";
-				case DateTimeQuantifiers.Fraction5: return "fraction(5)";
-			}
-
-			return quantifier.ToString();
+				DateTimeQuantifiers.Fraction1 => "fraction(1)",
+				DateTimeQuantifiers.Fraction2 => "fraction(2)",
+				DateTimeQuantifiers.Fraction3 => "fraction(3)",
+				DateTimeQuantifiers.Fraction4 => "fraction(4)",
+				DateTimeQuantifiers.Fraction5 => "fraction(5)",
+				_                             => quantifier.ToString(),
+			};
 		}
 
 		private DateTime GetExpectedDatetime(bool isIDS, DateTime input, DateTimeQuantifiers largest, DateTimeQuantifiers smallest)

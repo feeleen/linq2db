@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 using JetBrains.Annotations;
 using LinqToDB;
 using LinqToDB.Mapping;
@@ -40,7 +39,6 @@ namespace Tests.xUpdate
 			[Column]                       public decimal Field1;
 		}
 
-		[ActiveIssue(SkipForNonLinqService = true, Details = "SELECT * query", Configuration = ProviderName.DB2)]
 		[Test]
 		public void TruncateIdentityTest([DataSources(TestProvName.AllInformix, TestProvName.AllSapHana)]
 			string context)
@@ -71,32 +69,26 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[ActiveIssue(SkipForNonLinqService = true, Details = "SELECT * query", Configuration = ProviderName.DB2)]
 		[Test]
 		public void TruncateIdentityNoResetTest([DataSources] string context)
 		{
-			using (var db = GetDataContext(context))
-			{
-				db.DropTable<TestIdTrun>(throwExceptionIfNotExists:false);
+			using var db = GetDataContext(context);
 
-				var table = db.CreateTable<TestIdTrun>();
+			using var table = db.CreateTempTable<TestIdTrun>("test_temp", tableOptions:TableOptions.CheckExistence);
 
-				table.Insert(() => new TestIdTrun { Field1 = 1m });
-				table.Insert(() => new TestIdTrun { Field1 = 1m });
+			table.Insert(() => new TestIdTrun { Field1 = 1m });
+			table.Insert(() => new TestIdTrun { Field1 = 1m });
 
-				var id = table.OrderBy(t => t.ID).Skip(1).Single().ID;
+			var id = table.OrderBy(t => t.ID).Skip(1).Single().ID;
 
-				table.Truncate(false);
+			table.Truncate(false);
 
-				table.Insert(() => new TestIdTrun { Field1 = 1m });
-				table.Insert(() => new TestIdTrun { Field1 = 1m });
+			table.Insert(() => new TestIdTrun { Field1 = 1m });
+			table.Insert(() => new TestIdTrun { Field1 = 1m });
 
-				var r = table.OrderBy(t => t.ID).Skip(1).Single();
+			var r = table.OrderBy(t => t.ID).Skip(1).Single();
 
-				Assert.That(r.ID, Is.EqualTo(id + 2));
-
-				table.Drop();
-			}
+			Assert.That(r.ID, Is.EqualTo(id + 2));
 		}
 	}
 }

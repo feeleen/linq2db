@@ -65,9 +65,8 @@ namespace Tests.UserTests
 
 		// https://stackoverflow.com/questions/58738542
 		[Test]
-		public void Test([IncludeDataSources(true, TestProvName.AllSQLite)] string context)
+		public void Issue1968Test([IncludeDataSources(true, TestProvName.AllSQLite)] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (db.CreateLocalTable<University>())
 			using (db.CreateLocalTable<Faculty>())

@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 
 using LinqToDB;
 
@@ -7,8 +6,6 @@ using NUnit.Framework;
 
 namespace Tests.xUpdate
 {
-	using Model;
-
 	public partial class MergeTests
 	{
 		[Test]
@@ -128,19 +125,21 @@ namespace Tests.xUpdate
 					.Using(GetSource1(db).Select(_ => new TestMapping1() { Id = _.Id, Field1 = _.Field1 }))
 					.OnTargetKey()
 					.DeleteWhenMatchedAnd((t, s) => s.Field2 == 4)
-					.Merge());
+					.Merge())!;
 
 				Assert.IsInstanceOf<LinqToDBException>(exception);
-				Assert.AreEqual("'s.Field2' cannot be converted to SQL.", exception.Message);
+				Assert.That(exception.Message,  Does.EndWith(".Field2' cannot be converted to SQL."));
 			}
 		}
 
 		[Test]
 		public void SameSourceDeleteWithPredicateDelete([MergeDataContextSource(
 			TestProvName.AllOracle,
-			ProviderName.Sybase, ProviderName.SybaseManaged, ProviderName.SqlServer2008,
-			ProviderName.SqlServer2012, ProviderName.SqlServer2014, ProviderName.SqlServer2017, TestProvName.SqlAzure,
-			TestProvName.AllInformix, TestProvName.AllSapHana, ProviderName.Firebird)]
+			TestProvName.AllSybase,
+			TestProvName.AllSqlServer2008Plus,
+			TestProvName.AllInformix,
+			TestProvName.AllSapHana,
+			ProviderName.Firebird)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -217,10 +216,10 @@ namespace Tests.xUpdate
 					.Using(GetSource1(db).Select(_ => new TestMapping1() { Id = _.Id, Field1 = _.Field1 }))
 					.On((t, s) => s.Field2 == 3)
 					.DeleteWhenMatched()
-					.Merge());
+					.Merge())!;
 
 				Assert.IsInstanceOf<LinqToDBException>(exception);
-				Assert.AreEqual("'s.Field2' cannot be converted to SQL.", exception.Message);
+				Assert.That(exception.Message, Does.EndWith(".Field2' cannot be converted to SQL."));
 			}
 		}
 
@@ -435,10 +434,10 @@ namespace Tests.xUpdate
 						.Using(table.Select(_ => new TestMapping1() { Field1 = _.Field1 }))
 						.OnTargetKey()
 						.DeleteWhenMatched()
-						.Merge());
+						.Merge())!;
 
 				Assert.IsInstanceOf<LinqToDBException>(exception);
-				Assert.AreEqual("'s.Id' cannot be converted to SQL.", exception.Message);
+				Assert.That(exception.Message, Does.EndWith(".Id' cannot be converted to SQL."));
 			}
 		}
 	}

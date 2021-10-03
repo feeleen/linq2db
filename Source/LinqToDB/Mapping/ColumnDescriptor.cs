@@ -21,12 +21,17 @@ namespace LinqToDB.Mapping
 		/// Creates descriptor instance.
 		/// </summary>
 		/// <param name="mappingSchema">Mapping schema, associated with descriptor.</param>
+		/// <param name="entityDescriptor">Entity descriptor.</param>
 		/// <param name="columnAttribute">Column attribute, from which descriptor data should be extracted.</param>
 		/// <param name="memberAccessor">Column mapping member accessor.</param>
-		public ColumnDescriptor(MappingSchema mappingSchema, ColumnAttribute? columnAttribute, MemberAccessor memberAccessor)
+		/// <param name="hasInheritanceMapping">Owning entity included in inheritance mapping.</param>
+		public ColumnDescriptor(MappingSchema mappingSchema, EntityDescriptor entityDescriptor, ColumnAttribute? columnAttribute, MemberAccessor memberAccessor, bool hasInheritanceMapping)
 		{
-			MemberAccessor = memberAccessor;
-			MemberInfo     = memberAccessor.MemberInfo;
+			MappingSchema         = mappingSchema;
+			EntityDescriptor      = entityDescriptor;
+			MemberAccessor        = memberAccessor;
+			MemberInfo            = memberAccessor.MemberInfo;
+			HasInheritanceMapping = hasInheritanceMapping;
 
 			if (MemberInfo.IsFieldEx())
 			{
@@ -41,7 +46,7 @@ namespace LinqToDB.Mapping
 
 			var dataType = mappingSchema.GetDataType(MemberType);
 			if (dataType.Type.DataType == DataType.Undefined)
-				dataType = mappingSchema.GetUnderlyingDataType(dataType.SystemType, out var _);
+				dataType = mappingSchema.GetUnderlyingDataType(MemberType, out var _);
 
 			if (columnAttribute == null)
 			{
@@ -61,14 +66,15 @@ namespace LinqToDB.Mapping
 				if (dataType.Type.Scale     != null && !columnAttribute.HasScale())     columnAttribute.Scale     = dataType.Type.Scale.Value;
 			}
 
-			MemberName      = columnAttribute.MemberName ?? MemberInfo.Name;
-			ColumnName      = columnAttribute.Name       ?? MemberInfo.Name;
-			Storage         = columnAttribute.Storage;
-			PrimaryKeyOrder = columnAttribute.PrimaryKeyOrder;
-			IsDiscriminator = columnAttribute.IsDiscriminator;
-			DataType        = columnAttribute.DataType;
-			DbType          = columnAttribute.DbType;
-			CreateFormat    = columnAttribute.CreateFormat;
+			MemberName        = columnAttribute.MemberName ?? MemberInfo.Name;
+			ColumnName        = columnAttribute.Name       ?? MemberInfo.Name;
+			Storage           = columnAttribute.Storage;
+			PrimaryKeyOrder   = columnAttribute.PrimaryKeyOrder;
+			IsDiscriminator   = columnAttribute.IsDiscriminator;
+			SkipOnEntityFetch = columnAttribute.SkipOnEntityFetch;
+			DataType          = columnAttribute.DataType;
+			DbType            = columnAttribute.DbType;
+			CreateFormat      = columnAttribute.CreateFormat;
 
 			if (columnAttribute.HasLength   ()) Length    = columnAttribute.Length;
 			if (columnAttribute.HasPrecision()) Precision = columnAttribute.Precision;
@@ -155,42 +161,11 @@ namespace LinqToDB.Mapping
 				}
 			}
 
-			if (MemberType.ToNullableUnderlying().IsEnum)
+			var vc = mappingSchema.GetAttribute<ValueConverterAttribute>(memberAccessor.TypeAccessor.Type, MemberInfo, attr => attr.Configuration);
+			if (vc != null)
 			{
-				if (DataType == DataType.Undefined)
-				{
-					var enumtype = mappingSchema.GetDefaultFromEnumType(MemberType);
-
-					if (enumtype != null)
-						DataType = mappingSchema.GetDataType(enumtype).Type.DataType;
-				}
-
-				if (DataType == DataType.Undefined && MemberType.IsNullable())
-				{
-					var enumtype = mappingSchema.GetDefaultFromEnumType(MemberType.ToNullableUnderlying());
-
-					if (enumtype != null)
-						DataType = mappingSchema.GetDataType(enumtype).Type.DataType;
-				}
-
-				if (DataType == DataType.Undefined)
-				{
-					var enumtype = mappingSchema.GetDefaultFromEnumType(typeof(Enum));
-
-					if (enumtype != null)
-						DataType = mappingSchema.GetDataType(enumtype).Type.DataType;
-				}
-
-				if (DataType == DataType.Undefined)
-				{
-					DataType = mappingSchema.GetUnderlyingDataType(MemberType, out var canBeNull).Type.DataType;
-					if (canBeNull)
-						CanBeNull = canBeNull;
-				}
+				ValueConverter = vc.GetValueConverter(this);
 			}
-
-			if (DataType == DataType.Undefined)
-				DataType = mappingSchema.GetDataType(MemberType).Type.DataType;
 
 			var skipValueAttributes = mappingSchema.GetAttributes<SkipBaseAttribute>(MemberAccessor.TypeAccessor.Type, MemberInfo, attr => attr.Configuration);
 			if (skipValueAttributes.Length > 0)
@@ -201,9 +176,24 @@ namespace LinqToDB.Mapping
 		}
 
 		/// <summary>
+		/// Gets MappingSchema for current ColumnDescriptor.
+		/// </summary>
+		public MappingSchema  MappingSchema   { get; }
+
+		/// <summary>
+		/// Gets Entity descriptor.
+		/// </summary>
+		public EntityDescriptor EntityDescriptor { get; }
+
+		/// <summary>
 		/// Gets column mapping member accessor.
 		/// </summary>
 		public MemberAccessor MemberAccessor  { get; }
+
+		/// <summary>
+		/// Indicates that owning entity included in inheritance mapping.
+		/// </summary>
+		public bool HasInheritanceMapping { get; }
 
 		/// <summary>
 		/// Gets column mapping member (field or property).
@@ -300,10 +290,16 @@ namespace LinqToDB.Mapping
 		/// <summary>
 		/// Gets whether a column is insertable.
 		/// This flag will affect only insert operations with implicit columns specification like
-		/// <see cref="DataExtensions.Insert{T}(IDataContext, T, string, string, string, string)"/>
+		/// <see cref="DataExtensions.Insert{T}(IDataContext, T, string?, string?, string?, string?, TableOptions)"/>
 		/// method and will be ignored when user explicitly specifies value for this column.
 		/// </summary>
 		public bool           SkipOnInsert    { get; }
+
+		/// <summary>
+		/// Gets whether a column must be explicitly defined in a Select statement to be fetched. If <c>true</c>, a "SELECT *"-ish statement won't retrieve this column.
+		/// Default value: <c>false</c>.
+		/// </summary>
+		public bool           SkipOnEntityFetch { get; }
 
 		/// <summary>
 		/// Gets whether the column has specific values that should be skipped on insert.
@@ -325,8 +321,8 @@ namespace LinqToDB.Mapping
 		/// </summary>
 		public SkipModification SkipModificationFlags { get; }
 
-		/// <summary> 
-		/// Checks if the passed object has values that should bes skipped based on the given flags. 
+		/// <summary>
+		/// Checks if the passed object has values that should bes skipped based on the given flags.
 		/// </summary>
 		/// <param name="obj">The object containing the values for the operation.</param>
 		/// <param name="descriptor"><see cref="EntityDescriptor"/> of the current instance.</param>
@@ -336,7 +332,7 @@ namespace LinqToDB.Mapping
 		{
 			if (SkipBaseAttributes == null)
 				return false;
-	
+
 			foreach (var skipBaseAttribute in SkipBaseAttributes)
 				if ((skipBaseAttribute.Affects & flags) != 0 && skipBaseAttribute.ShouldSkip(obj, descriptor, this))
 					return true;
@@ -347,7 +343,7 @@ namespace LinqToDB.Mapping
 		/// <summary>
 		/// Gets whether a column is updatable.
 		/// This flag will affect only update operations with implicit columns specification like
-		/// <see cref="DataExtensions.Update{T}(IDataContext, T, string, string, string, string)"/>
+		/// <see cref="DataExtensions.Update{T}(IDataContext, T, string?, string?, string?, string?, TableOptions)"/>
 		/// method and will be ignored when user explicitly specifies value for this column.
 		/// </summary>
 		public bool           SkipOnUpdate    { get; }
@@ -387,7 +383,7 @@ namespace LinqToDB.Mapping
 
 		/// <summary>
 		/// Custom template for column definition in create table SQL expression, generated using
-		/// <see cref="DataExtensions.CreateTable{T}(IDataContext, string, string, string, string, string, DefaultNullable, string)"/> methods.
+		/// <see cref="DataExtensions.CreateTable{T}(IDataContext, string?, string?, string?, string?, string?, DefaultNullable, string?, TableOptions)"/> methods.
 		/// Template accepts following string parameters:
 		/// - {0} - column name;
 		/// - {1} - column type;
@@ -407,49 +403,350 @@ namespace LinqToDB.Mapping
 		/// </summary>
 		public SequenceNameAttribute? SequenceName { get; }
 
+		/// <summary>
+		/// Gets value converter for specific column.
+		/// </summary>
+		public IValueConverter? ValueConverter  { get; }
+
+		LambdaExpression?    _getDbValueLambda;
+		Expression?          _getDefaultDbValueExpression;
+		LambdaExpression?    _getDbParamLambda;
+		Expression?          _getDefaultDbParamExpression;
+
 		Func<object,object>? _getter;
 
-		// TODO: passing mapping schema to generate converter in combination with converter caching looks wrong
 		/// <summary>
-		/// Extracts column value, converted to database type, from entity object.
+		/// Returns DbDataType for current column.
 		/// </summary>
-		/// <param name="mappingSchema">Mapping schema with conversion information.</param>
-		/// <param name="obj">Entity object to extract column value from.</param>
-		/// <returns>Returns column value, converted to database type.</returns>
-		public virtual object? GetValue(MappingSchema mappingSchema, object obj)
+		/// <returns></returns>
+		public DbDataType GetDbDataType(bool completeDataType)
 		{
-			if (_getter == null)
+			var systemType = MemberType;
+			var dataType   = DataType;
+
+			if (completeDataType && dataType == DataType.Undefined)
 			{
-				var objParam   = Expression.Parameter(typeof(object), "obj");
-				var getterExpr = MemberAccessor.GetterExpression.GetBody(Expression.Convert(objParam, MemberAccessor.TypeAccessor.Type));
+				dataType = CalculateDataType(MappingSchema, systemType);
+			}
 
-				var expr = mappingSchema.GetConvertExpression(
-					new DbDataType(MemberType, DataType, DbType, Length), 
-					new DbDataType(typeof(DataParameter), DataType, DbType, Length), createDefault : false);
+			return new DbDataType(systemType, dataType, DbType, Length, Precision, Scale);
+		}
 
-				if (expr != null)
+
+		/// <summary>
+		/// Returns DbDataType for current column after conversions.
+		/// </summary>
+		/// <returns></returns>
+		public DbDataType GetConvertedDbDataType()
+		{
+			var dbDataType = GetDbDataType(true);
+
+			var systemType = dbDataType.SystemType;
+
+			if (ValueConverter != null)
+				systemType = ValueConverter.ToProviderExpression.Body.Type;
+			else
+			{
+				var convertLambda = MappingSchema.GetConvertExpression(
+					dbDataType.WithSystemType(dbDataType.SystemType),
+					dbDataType.WithSystemType(typeof(DataParameter)), createDefault: false);
+
+				// it is conversion via DataParameter, so we don't know destination type
+				if (convertLambda != null)
 				{
-					var variable = Expression.Variable(typeof(DataParameter), "p");
-					getterExpr = Expression.Block(new[] { variable },
-						Expression.Assign(variable, expr.GetBody(getterExpr)),
-						Expression.Condition(Expression.NotEqual(variable, Expression.Constant(null)),
-							ExpressionHelper.PropertyOrField(variable, "Value"), Expression.Constant(null))
+					systemType = typeof(object);
+				}
+				else
+					if (systemType.IsEnum)
+					{
+						var type = Converter.GetDefaultMappingFromEnumType(MappingSchema, dbDataType.SystemType);
+						if (type != null)
+						{
+							systemType = type;
+						}
+					}
+			}
+
+			if (dbDataType.SystemType != systemType)
+				dbDataType = dbDataType.WithSystemType(systemType);
+
+			return dbDataType;
+		}
+
+		public static DataType CalculateDataType(MappingSchema mappingSchema, Type systemType)
+		{
+			var dataType = DataType.Undefined;
+			if (systemType.ToNullableUnderlying().IsEnum)
+			{
+				var enumType = mappingSchema.GetDefaultFromEnumType(systemType);
+
+				if (enumType != null)
+					dataType = mappingSchema.GetDataType(enumType).Type.DataType;
+
+				if (dataType == DataType.Undefined && systemType.IsNullable())
+				{
+					enumType = mappingSchema.GetDefaultFromEnumType(systemType.ToNullableUnderlying());
+
+					if (enumType != null)
+						dataType = mappingSchema.GetDataType(enumType).Type.DataType;
+				}
+
+				if (dataType == DataType.Undefined)
+				{
+					enumType = mappingSchema.GetDefaultFromEnumType(typeof(Enum));
+
+					if (enumType != null)
+						dataType = mappingSchema.GetDataType(enumType).Type.DataType;
+				}
+
+				if (dataType == DataType.Undefined)
+				{
+					dataType = mappingSchema.GetUnderlyingDataType(systemType, out var canBeNull).Type.DataType;
+				}
+			}
+
+			if (dataType == DataType.Undefined)
+				dataType = mappingSchema.GetDataType(systemType).Type.DataType;
+			if (dataType == DataType.Undefined)
+				dataType = mappingSchema.GetUnderlyingDataType(systemType, out var _).Type.DataType;
+
+			return dataType;
+		}
+
+		/// <summary>
+		/// Returns Lambda for extracting column value, converted to database type, from entity object.
+		/// </summary>
+		/// <returns>Returns Lambda which extracts member value to database type.</returns>
+		public LambdaExpression GetDbValueLambda()
+		{
+			if (_getDbValueLambda != null)
+				return _getDbValueLambda;
+
+			var paramGetter = GetDbParamLambda();
+
+			if (typeof(DataParameter).IsSameOrParentOf(paramGetter.Body.Type))
+			{
+				var param = Expression.Parameter(typeof(DataParameter), "p");
+				var convertExpression = Expression.Lambda(ExpressionHelper.PropertyOrField(param, "Value"), param);
+				convertExpression = MappingSchema.AddNullCheck(convertExpression);
+				paramGetter =
+					Expression.Lambda(InternalExtensions.ApplyLambdaToExpression(convertExpression, paramGetter.Body),
+						paramGetter.Parameters);
+			}
+
+			_getDbValueLambda = paramGetter;
+			return _getDbValueLambda;
+		}
+
+		/// <summary>
+		/// Returns Lambda for extracting column value, converted to database type, from entity object.
+		/// </summary>
+		/// <returns>Returns Lambda which extracts member value to database type.</returns>
+		public Expression GetDefaultDbValueExpression()
+		{
+			if (_getDefaultDbValueExpression != null)
+				return _getDefaultDbValueExpression;
+
+			var paramGetter = GetDefaultDbParamExpression();
+
+			if (typeof(DataParameter).IsSameOrParentOf(paramGetter.Type))
+			{
+				var param             = Expression.Parameter(typeof(DataParameter), "p");
+				var convertExpression = Expression.Lambda(ExpressionHelper.PropertyOrField(param, "Value"), param);
+
+				convertExpression = MappingSchema.AddNullCheck(convertExpression);
+				paramGetter       = InternalExtensions.ApplyLambdaToExpression(convertExpression, paramGetter);
+			}
+
+			_getDefaultDbValueExpression = paramGetter;
+			return _getDefaultDbValueExpression;
+		}
+
+		/// <summary>
+		/// Returns Lambda for extracting column value, converted to database type or <see cref="DataParameter"/>, from entity object.
+		/// </summary>
+		/// <returns>Returns Lambda which extracts member value to database type or <see cref="DataParameter"/>.</returns>
+		public LambdaExpression GetDbParamLambda()
+		{
+			if (_getDbParamLambda != null)
+				return _getDbParamLambda;
+
+			var objParam   = Expression.Parameter(MemberAccessor.TypeAccessor.Type, "obj");
+			var getterExpr = MemberAccessor.GetterExpression.GetBody(objParam);
+			var dbDataType = GetDbDataType(true);
+
+			if (IsDiscriminator && MemberAccessor.HasSetter)
+			{
+				var param = Expression.Parameter(getterExpr.Type, "v");
+
+				var current = EntityDescriptor;
+				do
+				{
+					if (current.InheritanceMapping.Count > 0)
+						break;
+
+					if (current.ObjectType.BaseType == typeof(object) || current.ObjectType.BaseType == null)
+						break;
+
+					current = MappingSchema.GetEntityDescriptor(current.ObjectType.BaseType!);
+
+				} while (true);
+
+
+				if (current.InheritanceMapping.Count > 0)
+				{
+					// suggest default discriminator value
+
+					var defaultValue = current.InheritanceMapping.FirstOrDefault(m => m.IsDefault);
+					var valueExpr = MappingSchema.GenerateConvertedValueExpression(defaultValue?.Code, param.Type);
+
+					for (var index = current.InheritanceMapping.Count - 1; index >= 0; index--)
+					{
+						var mapping = current.InheritanceMapping[index];
+						valueExpr = Expression.Condition(Expression.TypeIs(objParam, mapping.Type),
+							MappingSchema.GenerateConvertedValueExpression(mapping.Code, param.Type), valueExpr);
+					}
+
+					Expression defaultCheckExpression = param.Type == typeof(string)
+						? Expression.Call(typeof(string), nameof(string.IsNullOrEmpty), Type.EmptyTypes, param)
+						: Expression.Equal(param, new DefaultValueExpression(MappingSchema, param.Type));
+
+					var suggestLambda = Expression.Lambda(
+						Expression.Condition(
+							defaultCheckExpression,
+							valueExpr,
+							param
+						),
+						param
 					);
+
+					getterExpr = InternalExtensions.ApplyLambdaToExpression(suggestLambda, getterExpr);
+				}
+
+			}
+
+			getterExpr = ApplyConversions(getterExpr, dbDataType, true);
+
+			_getDbParamLambda = Expression.Lambda(getterExpr, objParam);
+			return _getDbParamLambda;
+		}
+
+		/// <summary>
+		/// Returns default column value, converted to database type or <see cref="DataParameter"/>.
+		/// </summary>
+		public Expression GetDefaultDbParamExpression()
+		{
+			if (_getDefaultDbParamExpression != null)
+				return _getDefaultDbParamExpression;
+
+			Expression defaultExpression = new DefaultValueExpression(MappingSchema, MemberAccessor.Type);
+
+			var dbDataType = GetDbDataType(true);
+
+			defaultExpression = ApplyConversions(defaultExpression, dbDataType, true);
+
+			_getDefaultDbParamExpression = defaultExpression;
+			return _getDefaultDbParamExpression;
+		}
+
+		/// <summary>
+		/// Helper function for applying all needed conversions for converting value to database type.
+		/// </summary>
+		/// <param name="mappingSchema">Mapping schema.</param>
+		/// <param name="getterExpr">Expression which returns value which has to be converted.</param>
+		/// <param name="dbDataType">Database type.</param>
+		/// <param name="valueConverter">Optional <see cref="IValueConverter"/></param>
+		/// <param name="includingEnum">Provides default enum conversion.</param>
+		/// <returns>Expression with applied conversions.</returns>
+		public static Expression ApplyConversions(MappingSchema mappingSchema, Expression getterExpr, DbDataType dbDataType, IValueConverter? valueConverter, bool includingEnum)
+		{
+			// search for type preparation converter
+			var prepareConverter = mappingSchema.GetConvertExpression(getterExpr.Type, getterExpr.Type, false, false);
+
+			if (prepareConverter != null)
+				getterExpr = InternalExtensions.ApplyLambdaToExpression(prepareConverter, getterExpr);
+
+			if (valueConverter != null)
+			{
+				var toProvider = valueConverter.ToProviderExpression;
+				if (!valueConverter.HandlesNulls)
+					toProvider = mappingSchema.AddNullCheck(toProvider);
+				getterExpr = InternalExtensions.ApplyLambdaToExpression(toProvider, getterExpr);
+			}
+
+			if (!getterExpr.Type.IsSameOrParentOf(typeof(DataParameter)))
+			{
+				var convertLambda = mappingSchema.GetConvertExpression(
+					dbDataType.WithSystemType(getterExpr.Type),
+					dbDataType.WithSystemType(typeof(DataParameter)), createDefault: false);
+
+				if (convertLambda != null)
+				{
+					getterExpr = InternalExtensions.ApplyLambdaToExpression(convertLambda, getterExpr);
 				}
 				else
 				{
-					var type = Converter.GetDefaultMappingFromEnumType(mappingSchema, MemberType);
-
-					if (type != null)
+					if (valueConverter == null && includingEnum)
 					{
-						expr = mappingSchema.GetConvertExpression(MemberType, type)!;
-						getterExpr = expr.GetBody(getterExpr);
+						var type = Converter.GetDefaultMappingFromEnumType(mappingSchema, getterExpr.Type);
+						if (type != null)
+						{
+							var enumConverter = mappingSchema.GetConvertExpression(getterExpr.Type, type)!;
+							getterExpr = InternalExtensions.ApplyLambdaToExpression(enumConverter, getterExpr);
+
+							convertLambda = mappingSchema.GetConvertExpression(
+								dbDataType.WithSystemType(getterExpr.Type),
+								dbDataType.WithSystemType(typeof(DataParameter)), createDefault: false);
+
+							if (convertLambda != null)
+							{
+								getterExpr = InternalExtensions.ApplyLambdaToExpression(convertLambda, getterExpr);
+							}
+						}
 					}
 				}
+			}
 
-				var getter = Expression.Lambda<Func<object,object>>(Expression.Convert(getterExpr, typeof(object)), objParam);
+			return getterExpr;
+		}
 
-				_getter = getter.Compile();
+		/// <summary>
+		/// Helper function for applying all needed conversions for converting value to database type.
+		/// </summary>
+		/// <param name="getterExpr">Expression which returns value which has to be converted.</param>
+		/// <param name="dbDataType">Database type.</param>
+		/// <param name="includingEnum">Provides default enum conversion.</param>
+		/// <returns>Expression with applied conversions.</returns>
+		public Expression ApplyConversions(Expression getterExpr, DbDataType dbDataType, bool includingEnum)
+		{
+			return ApplyConversions(MappingSchema, getterExpr, dbDataType, ValueConverter, includingEnum);
+		}
+
+		/// <summary>
+		/// Extracts column value, converted to database type, from entity object.
+		/// </summary>
+		/// <param name="obj">Entity object to extract column value from.</param>
+		/// <returns>Returns column value, converted to database type.</returns>
+		public virtual object? GetValue(object obj)
+		{
+			if (_getter == null)
+			{
+				var objParam      = Expression.Parameter(typeof(object), "obj");
+
+				var objExpression = Expression.Convert(objParam, MemberAccessor.TypeAccessor.Type);
+				var getterExpr    = InternalExtensions.ApplyLambdaToExpression(GetDbValueLambda(), objExpression);
+
+				if (HasInheritanceMapping)
+				{
+					// Additional check that column member belong to proper entity
+					// 
+					getterExpr = Expression.Condition(Expression.TypeIs(objParam, MemberAccessor.TypeAccessor.Type),
+						getterExpr, GetDefaultDbValueExpression());
+				}
+
+				var getterLambda = Expression.Lambda<Func<object, object>>(Expression.Convert(getterExpr, typeof(object)), objParam);
+
+				_getter = getterLambda.CompileExpression();
 			}
 
 			return _getter(obj);

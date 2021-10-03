@@ -8,6 +8,7 @@ namespace LinqToDB.DataProvider.SapHana
 	using System.Globalization;
 	using System.Linq.Expressions;
 	using System.Reflection;
+	using LinqToDB.SqlProvider;
 	using SqlQuery;
 
 	public class CalculationViewInputParametersExpressionAttribute : Sql.TableExpressionAttribute
@@ -20,7 +21,7 @@ namespace LinqToDB.DataProvider.SapHana
 		// we can't use BasicSqlBuilder.GetValueBuilder, because
 		// a) we need to escape with ' every value,
 		// b) we don't have dataprovider here ether
-		private static string ValueToString(object value)
+		private static string? ValueToString(object value)
 		{
 			if (value is string stringValue)
 				return stringValue;
@@ -34,15 +35,15 @@ namespace LinqToDB.DataProvider.SapHana
 			return value.ToString();
 		}
 
-		public override void SetTable(MappingSchema mappingSchema, SqlTable table, MemberInfo member, IEnumerable<Expression> expArgs, IEnumerable<ISqlExpression> sqlArgs)
+		public override void SetTable(ISqlBuilder sqlBuilder, MappingSchema mappingSchema, SqlTable table, MethodCallExpression methodCall, Func<Expression, ColumnDescriptor?, ISqlExpression> converter)
 		{
-			var method = member as MethodInfo;
+			var method = methodCall.Method;
 
 			if (method == null)
-				throw new ArgumentNullException("member");
+				throw new ArgumentNullException(nameof(methodCall));
 
 			var paramsList = method.GetParameters().ToList();
-			var valuesList = expArgs.Cast<ConstantExpression>().ToList();
+			var valuesList = methodCall.Arguments.Cast<ConstantExpression>().ToList();
 
 			if (paramsList.Count != valuesList.Count)
 				throw new TargetParameterCountException("Invalid number of parameters");
@@ -56,7 +57,7 @@ namespace LinqToDB.DataProvider.SapHana
 					continue;
 				var p = paramsList[i];
 				sqlValues.Add(new SqlValue("$$" + p.Name + "$$"));
-				sqlValues.Add(new SqlValue(ValueToString(val)));
+				sqlValues.Add(new SqlValue(ValueToString(val)!));
 			}
 
 			var arg = new ISqlExpression[1];

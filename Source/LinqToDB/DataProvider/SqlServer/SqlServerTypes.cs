@@ -70,9 +70,9 @@ namespace LinqToDB.DataProvider.SqlServer
 
 			TypeInfo loadType(string typeName)
 			{
-				var type = assembly.GetType($"{TypesNamespace}.{typeName}", true);
+				var type = assembly.GetType($"{TypesNamespace}.{typeName}", true)!;
 
-				var getNullValue = Expression.Lambda<Func<object>>(Expression.Convert(ExpressionHelper.Property(type, "Null"), typeof(object))).Compile();
+				var getNullValue = Expression.Lambda<Func<object>>(Expression.Convert(ExpressionHelper.Property(type, "Null"), typeof(object))).CompileExpression();
 
 				return new TypeInfo()
 				{ 

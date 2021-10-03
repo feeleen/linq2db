@@ -6,10 +6,8 @@ using LinqToDB.Mapping;
 
 using NUnit.Framework;
 
-namespace Tests.Playground
+namespace Tests.Linq
 {
-	using Tools;
-
 	[TestFixture]
 	public class ExpandTests : TestBase
 	{
@@ -89,6 +87,10 @@ namespace Tests.Playground
 				var query = from t in table
 					from t2 in table.Where(predicate)
 					select t;
+
+				//DO NOT REMOVE, it forces caching query
+				var str = query.ToString();
+				TestContext.WriteLine(str);
 
 				var expected = from t in sampleData
 					from t2 in sampleData.Where(predicate.Compile())

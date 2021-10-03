@@ -15,6 +15,7 @@ using NUnit.Framework;
 
 namespace Tests.xUpdate
 {
+	using LinqToDB.Common;
 	using Model;
 
 	[TestFixture]
@@ -164,6 +165,25 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
+		public void Update4String([DataSources(TestProvName.AllInformix)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				var id = 1001;
+
+				var updatable =
+					db.Child
+						.Where(c => c.ChildID == id && c.Parent!.Value1 == 1)
+						.Set(c => c.ChildID, c => c.ChildID + 1);
+
+				var sql = updatable.ToString();
+				TestContext.WriteLine(sql);
+
+				Assert.That(sql, Does.Contain("UPDATE"));
+			}
+		}
+
+		[Test]
 		public async Task Update4Async([DataSources(TestProvName.AllInformix)] string context)
 		{
 			using (var db = GetDataContext(context))
@@ -200,7 +220,7 @@ namespace Tests.xUpdate
 					var id = 1001;
 
 					db.Child.Delete(c => c.ChildID > 1000);
-					db.Child.Insert(() => new Child { ParentID = 1, ChildID = id});
+					db.Child.Insert(() => new Child { ParentID = 1, ChildID = id });
 
 					Assert.AreEqual(1, db.Child.Count(c => c.ChildID == id));
 					Assert.AreEqual(1,
@@ -504,8 +524,95 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
+		public void TestUpdateWithColumnFilter1([DataSources] string context, [Values] bool withMiddleName)
+		{
+			ResetPersonIdentity(context);
+
+			using (var db = GetDataContext(context))
+			{
+				var newName = "UpdateColumnFilterUpdated";
+				try
+				{
+					var p = new Person()
+					{
+						FirstName = newName,
+						LastName = "whatever",
+						MiddleName = "som middle name",
+						Gender = Gender.Male
+					};
+
+					db.Insert(p);
+
+					p = db.GetTable<Person>().Where(x => x.FirstName == p.FirstName).First();
+
+					p.MiddleName = "updated name";
+
+					db.Update(p, (a, b) => b.ColumnName != nameof(Model.Person.MiddleName) || withMiddleName);
+
+					p = db.GetTable<Person>().Where(x => x.FirstName == p.FirstName).First();
+
+					if (withMiddleName)
+						Assert.AreEqual("updated name", p.MiddleName);
+					else
+						Assert.AreNotEqual("updated name", p.MiddleName);
+				}
+				finally
+				{
+					db.Person.Where(x => x.FirstName == newName).Delete();
+				}
+			}
+		}
+
+		[Test]
+		public void TestUpdateWithColumnFilter2([DataSources] string context)
+		{
+			ResetPersonIdentity(context);
+
+			using (var db = GetDataContext(context))
+			{
+				var newName = "UpdateColumnFilterUpdated";
+				var p = new Person()
+				{
+					FirstName = "UpdateColumnFilter",
+					LastName  = "whatever"
+				};
+
+				db.Insert(p);
+
+				try
+				{
+					p = db.GetTable<Person>().Where(x => x.FirstName == p.FirstName).Single();
+
+					p.FirstName = newName;
+					p.LastName  = newName;
+
+					var columsToUpdate = new HashSet<string> { nameof(p.FirstName) };
+
+					db.Update(p, (a, b) => columsToUpdate.Contains(b.ColumnName));
+
+					var updatedPerson = db.GetTable<Person>().Where(x => x.ID == p.ID).Single();
+					Assert.AreEqual("whatever", updatedPerson.LastName);
+					Assert.AreEqual(newName   , updatedPerson.FirstName);
+
+					// test for cached update query - must update both columns
+					db.Update(p);
+					updatedPerson = db.GetTable<Person>().Where(_ => _.ID == p.ID).Single();
+
+					Assert.AreEqual(newName, updatedPerson.LastName);
+					Assert.AreEqual(newName, updatedPerson.FirstName);
+				}
+				finally
+				{
+					db.Person.Where(x => x.ID == p.ID).Delete();
+				}
+			}
+		}
+
+		[Test]
 		public void UpdateComplex1([DataSources] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				db.Person.Where(_ => _.FirstName.StartsWith("UpdateComplex")).Delete();
@@ -541,6 +648,8 @@ namespace Tests.xUpdate
 		[Test]
 		public async Task UpdateComplex1Async([DataSources] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				await db.Person.DeleteAsync(_ => _.FirstName.StartsWith("UpdateComplex"));
@@ -577,6 +686,8 @@ namespace Tests.xUpdate
 		[Test]
 		public void UpdateComplex2([DataSources] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				db.Person.Where(_ => _.FirstName.StartsWith("UpdateComplex")).Delete();
@@ -807,7 +918,7 @@ namespace Tests.xUpdate
 		public void UpdateAssociation5(
 			[DataSources(
 				false,
-				ProviderName.Access,
+				TestProvName.AllAccess,
 				ProviderName.DB2,
 				TestProvName.AllInformix,
 				TestProvName.AllOracle,
@@ -828,13 +939,22 @@ namespace Tests.xUpdate
 					.Set(y => y.BoolValue, y => y.Tables2.All(x => x.Value1 == 1))
 					.Update();
 
-				var idx = db.LastQuery!.IndexOf("INNER JOIN");
+				if (!context.StartsWith(ProviderName.Sybase))
+				{
+					var idx = db.LastQuery!.IndexOf("INNER JOIN");
 
-				Assert.That(idx, Is.Not.EqualTo(-1));
+					Assert.That(idx, Is.Not.EqualTo(-1));
 
-				idx = db.LastQuery.IndexOf("INNER JOIN", idx + 1);
+					idx = db.LastQuery.IndexOf("INNER JOIN", idx + 1);
 
-				Assert.That(idx, Is.EqualTo(-1));
+					Assert.That(idx, Is.EqualTo(-1));
+				}
+				else
+				{
+					var idx = db.LastQuery!.IndexOf("INNER JOIN");
+
+					Assert.That(idx, Is.EqualTo(-1));
+				}
 			}
 		}
 
@@ -859,6 +979,36 @@ namespace Tests.xUpdate
 
 					Assert.AreEqual(1, uq.Update());
 					Assert.AreEqual(1, db.Child.Count(c => c.ChildID == id + 1));
+				}
+				finally
+				{
+					db.Child.Delete(c => c.ChildID > 1000);
+				}
+			}
+		}
+
+		[Test]
+		public void AsUpdatableDuplicate([DataSources(TestProvName.AllInformix)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				try
+				{
+					var id = 1001;
+
+					db.Child.Delete(c => c.ChildID > 1000);
+					db.Child.Insert(() => new Child { ParentID = 1, ChildID = id });
+
+					Assert.AreEqual(1, db.Child.Count(c => c.ChildID == id));
+
+					var q  = db.Child.Where(c => c.ChildID == id && c.Parent!.Value1 == 1);
+					var uq = q.AsUpdatable();
+
+					uq = uq.Set(c => c.ChildID, c => c.ChildID + 1);
+					uq = uq.Set(c => c.ChildID, c => c.ChildID + 2);
+
+					Assert.AreEqual(1, uq.Update());
+					Assert.AreEqual(1, db.Child.Count(c => c.ChildID == id + 2));
 				}
 				finally
 				{
@@ -895,7 +1045,7 @@ namespace Tests.xUpdate
 		[Test]
 		public void UpdateTop(
 			[DataSources(
-				ProviderName.Access,
+				TestProvName.AllAccess,
 				ProviderName.DB2,
 				TestProvName.AllInformix,
 				TestProvName.AllFirebird,
@@ -982,7 +1132,7 @@ namespace Tests.xUpdate
 		[Test]
 		public void TestUpdateSkipTake(
 			[DataSources(
-				ProviderName.Access,
+				TestProvName.AllAccess,
 				ProviderName.DB2,
 				TestProvName.AllInformix,
 				ProviderName.SqlCe,
@@ -1031,7 +1181,7 @@ namespace Tests.xUpdate
 		[Test]
 		public void TestUpdateTakeNotOrdered(
 			[DataSources(
-				ProviderName.Access,
+				TestProvName.AllAccess,
 				ProviderName.DB2,
 				TestProvName.AllInformix,
 				TestProvName.AllFirebird,
@@ -1072,7 +1222,7 @@ namespace Tests.xUpdate
 
 		[Test]
 		public void UpdateSetSelect([DataSources(
-			ProviderName.Access, TestProvName.AllInformix, ProviderName.SqlCe)]
+			TestProvName.AllAccess, TestProvName.AllInformix, ProviderName.SqlCe)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -1086,7 +1236,7 @@ namespace Tests.xUpdate
 					where p.ParentID == 1
 					select p
 				)
-				.Set(p => p.ParentID, p => db.Child.SingleOrDefault(c => c.ChildID == 11).ParentID + 1000)
+				.Set(p => p.ParentID, p => db.Child.SingleOrDefault(c => c.ChildID == 11)!.ParentID + 1000)
 				.Update();
 
 				Assert.AreEqual(1, res);
@@ -1099,7 +1249,7 @@ namespace Tests.xUpdate
 		[Test]
 		public void UpdateIssue319Regression(
 			[DataSources(
-				ProviderName.Access,
+				TestProvName.AllAccess,
 				TestProvName.AllInformix,
 				TestProvName.AllFirebird,
 				TestProvName.AllSQLite,
@@ -1327,9 +1477,7 @@ namespace Tests.xUpdate
 			[Column] public string? col5 { get; set; }
 			[Column] public string? col6 { get; set; }
 
-			public static UpdateFromJoin[] Data = new UpdateFromJoin[]
-			{
-			};
+			public static UpdateFromJoin[] Data = Array<UpdateFromJoin>.Empty;
 		}
 
 		[Table("access_mode")]
@@ -1341,15 +1489,13 @@ namespace Tests.xUpdate
 			[Column]
 			public string? code { get; set; }
 
-			public static AccessMode[] Data = new AccessMode[]
-			{
-			};
+			public static AccessMode[] Data = Array<AccessMode>.Empty;
 		}
 
 		// https://stackoverflow.com/questions/57115728/
 		[Test]
 		public void TestUpdateFromJoin([DataSources(
-			ProviderName.Access, // access doesn't have Replace mapping
+			TestProvName.AllAccess, // access doesn't have Replace mapping
 			ProviderName.SqlCe,
 			TestProvName.AllInformix)] string context)
 		{
@@ -1372,7 +1518,7 @@ namespace Tests.xUpdate
 						(x1, y1) => new
 						{
 							gt    = x1.l,
-							theAM = y1.id
+							theAM = y1!.id
 						})
 					.Update(
 						gt_s_one,
@@ -1406,7 +1552,7 @@ namespace Tests.xUpdate
 
 			public static UpdateSetTest[] Data = new UpdateSetTest[]
 			{
-				new UpdateSetTest() { Id = 1, Value1 = Guid.NewGuid(), Value2 = 10, Value3 = UpdateSetEnum.Value1 }
+				new UpdateSetTest() { Id = 1, Value1 = TestData.Guid3, Value2 = 10, Value3 = UpdateSetEnum.Value1 }
 			};
 		}
 
@@ -1424,7 +1570,7 @@ namespace Tests.xUpdate
 			using (var table = db.CreateLocalTable(UpdateSetTest.Data))
 			{
 				var id = 1;
-				var value = Guid.NewGuid();
+				var value = TestData.Guid1;
 
 				table.Where(_ => _.Id == id)
 					.Set(_ => _.Value1, value)
@@ -1432,7 +1578,7 @@ namespace Tests.xUpdate
 
 				Assert.AreEqual(value, table.Where(_ => _.Id == id).Select(_ => _.Value1).Single());
 
-				value = Guid.NewGuid();
+				value = TestData.Guid2;
 				table.Where(_ => _.Id == id)
 					.Set(_ => _.Value1, value)
 					.Update();
@@ -1517,7 +1663,7 @@ namespace Tests.xUpdate
 			using (var table = db.CreateLocalTable(UpdateSetTest.Data))
 			{
 				var id = 1;
-				var value = Guid.NewGuid();
+				var value = TestData.Guid1;
 
 				table.Where(_ => _.Id == id)
 					.Set(_ => _.Value4, value)
@@ -1525,7 +1671,7 @@ namespace Tests.xUpdate
 
 				Assert.AreEqual(value, table.Where(_ => _.Id == id).Select(_ => _.Value4).Single());
 
-				value = Guid.NewGuid();
+				value = TestData.Guid2;
 				table.Where(_ => _.Id == id)
 					.Set(_ => _.Value4, value)
 					.Update();
@@ -1596,7 +1742,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		
+
 		class TextData
 		{
 			[Column]
@@ -1624,7 +1770,7 @@ namespace Tests.xUpdate
 			using (var table = db.CreateLocalTable(data))
 			{
 				var id = 1;
-				
+
 				table.Where(_ => _.Id >= id)
 					.Set(x => $"{x.Items1} += {str}")
 					.Set(x => $"{x.Items2} += {str}")
@@ -1641,5 +1787,175 @@ namespace Tests.xUpdate
 
 			}
 		}
+
+		[Test]
+		public void TestSetValueExpr2(
+			[IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context, [Values("zz", "yy")] string str)
+		{
+			var data = new[]
+			{
+				new TextData { Id = 1, Items1 = "T1", Items2 = "Z1" },
+				new TextData { Id = 2, Items1 = "T2", Items2 = "Z2" },
+			};
+
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable(data))
+			{
+				var id = 1;
+
+				table.Where(_ => _.Id >= id)
+					.Set(x => x.Items1, x => $"{x.Items1}{str}")
+					.Set(x => x.Items2, x => $"{x.Items2}{str}")
+					.Update();
+
+				var result = table.ToArray();
+
+				Assert.That(result[0].Items1, Is.EqualTo("T1" + str));
+				Assert.That(result[0].Items2, Is.EqualTo("Z1" + str));
+
+				Assert.That(result[1].Items1, Is.EqualTo("T2" + str));
+				Assert.That(result[1].Items2, Is.EqualTo("Z2" + str));
+
+			}
+		}
+
+		[Table]
+		class MainTable
+		{
+			[Column] public int Id;
+			[Column] public string? Field;
+
+			[Association(ThisKey = nameof(Id), OtherKey = nameof(AssociatedTable.Id))]
+			public AssociatedTable AssociatedOptional = null!;
+
+			[Association(ThisKey = nameof(Id), OtherKey = nameof(AssociatedTable.Id), CanBeNull = false)]
+			public AssociatedTable AssociatedRequired = null!;
+
+			public static readonly MainTable[] Data = new []
+			{
+				new MainTable() { Id = 1, Field = "value 1" },
+				new MainTable() { Id = 2, Field = "value 2" },
+				new MainTable() { Id = 3, Field = "value 3" },
+			};
+		}
+
+		[Table]
+		class AssociatedTable
+		{
+			[Column] public int Id;
+
+			[Association(ThisKey = nameof(Id), OtherKey = nameof(MainTable.Id))]
+			public MainTable MainOptional = null!;
+
+			[Association(ThisKey = nameof(Id), OtherKey = nameof(MainTable.Id), CanBeNull = false)]
+			public MainTable MainRequired = null!;
+
+			public static readonly AssociatedTable[] Data = new []
+			{
+				new AssociatedTable() { Id = 1 },
+				new AssociatedTable() { Id = 3 },
+			};
+		}
+
+		[Test]
+		public void UpdateByAssociationOptional([DataSources(TestProvName.AllInformix)] string context)
+		{
+			using (var db   = GetDataContext(context))
+			using (var main = db.CreateLocalTable(MainTable.Data))
+			using (db.CreateLocalTable(AssociatedTable.Data))
+			{
+				var id = 3;
+					var cnt = main
+						.Where(_ => _.Id == id)
+						.Select(_ => _.AssociatedOptional!.MainOptional)
+						.Update(p => new MainTable()
+						{
+							Field = "test"
+						});
+
+				var data = main.OrderBy(_ => _.Id).ToArray();
+
+				Assert.AreEqual(1, cnt);
+				Assert.AreEqual("value 1", data[0].Field);
+				Assert.AreEqual("value 2", data[1].Field);
+				Assert.AreEqual("test", data[2].Field);
+			}
+		}
+
+		[Test]
+		public void UpdateByAssociationRequired([DataSources(TestProvName.AllInformix)] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var main = db.CreateLocalTable(MainTable.Data))
+			using (db.CreateLocalTable(AssociatedTable.Data))
+			{
+				var id = 3;
+				var cnt = main
+						.Where(_ => _.Id == id)
+						.Select(_ => _.AssociatedRequired!.MainRequired)
+						.Update(p => new MainTable()
+						{
+							Field = "test"
+						});
+
+				var data = main.OrderBy(_ => _.Id).ToArray();
+
+				Assert.AreEqual(1, cnt);
+				Assert.AreEqual("value 1", data[0].Field);
+				Assert.AreEqual("value 2", data[1].Field);
+				Assert.AreEqual("test", data[2].Field);
+			}
+		}
+
+		[Test]
+		public void UpdateByAssociation2Optional([DataSources(TestProvName.AllInformix)] string context)
+		{
+			using (var db         = GetDataContext(context))
+			using (var main       = db.CreateLocalTable(MainTable.Data))
+			using (var associated = db.CreateLocalTable(AssociatedTable.Data))
+			{
+				var id = 3;
+				var cnt = associated
+					.Where(pat => pat.Id == id)
+					.Select(p => p.MainOptional)
+					.Update(p => new MainTable()
+					{
+						Field = "test"
+					});
+
+				var data = main.OrderBy(_ => _.Id).ToArray();
+
+				Assert.AreEqual(1, cnt);
+				Assert.AreEqual("value 1", data[0].Field);
+				Assert.AreEqual("value 2", data[1].Field);
+				Assert.AreEqual("test", data[2].Field);
+			}
+		}
+
+		[Test]
+		public void UpdateByAssociation2Required([DataSources(TestProvName.AllInformix)] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var main = db.CreateLocalTable(MainTable.Data))
+			using (var associated = db.CreateLocalTable(AssociatedTable.Data))
+			{
+				var id = 3;
+				var cnt = associated
+					.Where(pat => pat.Id == id)
+					.Select(p => p.MainRequired)
+					.Update(p => new MainTable()
+					{
+						Field = "test"
+					});
+
+				var data = main.OrderBy(_ => _.Id).ToArray();
+
+				Assert.AreEqual(1, cnt);
+				Assert.AreEqual("value 1", data[0].Field);
+				Assert.AreEqual("value 2", data[1].Field);
+				Assert.AreEqual("test", data[2].Field);
+			}
+		}
+
 	}
 }

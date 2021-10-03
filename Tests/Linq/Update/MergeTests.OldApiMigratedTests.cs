@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 
 using LinqToDB;
 using LinqToDB.Common;
@@ -39,7 +38,7 @@ namespace Tests.xUpdate
 			{
 				db.GetTable<Person>()
 					.Merge()
-					.Using(new Person[] { })
+					.Using(Array<Person>.Empty)
 					.OnTargetKey()
 					.UpdateWhenMatched()
 					.InsertWhenNotMatched()
@@ -47,7 +46,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void MergeWithDelete([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -64,7 +63,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void MergeWithDeletePredicate1([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -81,7 +80,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void MergeWithDeletePredicate3([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -115,7 +114,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void MergeWithDeletePredicate4([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -151,7 +150,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void MergeWithDeletePredicate5([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -190,6 +189,8 @@ namespace Tests.xUpdate
 			ProviderName.DB2, ProviderName.Sybase, ProviderName.SybaseManaged, TestProvName.AllInformix)]
 			string context)
 		{
+			ResetAllTypesIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -249,6 +250,8 @@ namespace Tests.xUpdate
 			ProviderName.DB2, ProviderName.Sybase, TestProvName.AllInformix, TestProvName.AllSapHana)]
 			string context)
 		{
+			ResetAllTypesIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{

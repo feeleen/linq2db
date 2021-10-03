@@ -3,12 +3,14 @@ using System.Data;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+using LinqToDB.Common;
 using LinqToDB.Extensions;
 using LinqToDB.SqlQuery;
 
 namespace LinqToDB.Linq.Builder
 {
 	using LinqToDB.Expressions;
+	using LinqToDB.Reflection;
 
 	class MethodChainBuilder : MethodCallBuilder
 	{
@@ -31,12 +33,14 @@ namespace LinqToDB.Linq.Builder
 				root = root.SkipMethodChain(builder.MappingSchema);
 			}
 
+			root = builder.ConvertExpressionTree(root);
+
 			var sequence = builder.BuildSequence(new BuildInfo(buildInfo, root) { CreateSubQuery = true });
 
 			var finalFunction = functions.First();
 				
 			var sqlExpression = finalFunction.GetExpression(builder.DataContext, buildInfo.SelectQuery, methodCall,
-				e => builder.ConvertToExtensionSql(sequence, e));
+				(e, descriptor) => builder.ConvertToExtensionSql(sequence, e, descriptor));
 
 			var context = new ChainContext(buildInfo.Parent, sequence, methodCall);
 			context.Sql        = context.SelectQuery;
@@ -73,9 +77,9 @@ namespace LinqToDB.Linq.Builder
 			public int             FieldIndex;
 			public ISqlExpression? Sql;
 
-			static int CheckNullValue(IDataRecord reader, object context)
+			static int CheckNullValue(bool isNull, object context)
 			{
-				if (reader.IsDBNull(0))
+				if (isNull)
 					throw new InvalidOperationException(
 						$"Function {context} returns non-nullable value, but result is NULL. Use nullable version of the function instead.");
 				return 0;
@@ -83,33 +87,35 @@ namespace LinqToDB.Linq.Builder
 
 			public override void BuildQuery<T>(Query<T> query, ParameterExpression queryParameter)
 			{
-				var expr   = BuildExpression(FieldIndex);
+				var expr   = BuildExpression(FieldIndex, Sql);
 				var mapper = Builder.BuildMapper<object>(expr);
 
+				CompleteColumns();
 				QueryRunner.SetRunQuery(query, mapper);
 			}
 
 			public override Expression BuildExpression(Expression? expression, int level, bool enforceServerSide)
 			{
-				var index = ConvertToIndex(expression, level, ConvertFlags.Field)[0].Index;
+				var info  = ConvertToIndex(expression, level, ConvertFlags.Field)[0];
+				var index = info.Index;
 				if (Parent != null)
 					index = ConvertToParentIndex(index, Parent);
-				return BuildExpression(index);
+				return BuildExpression(index, info.Sql);
 			}
 
-			Expression BuildExpression(int fieldIndex)
+			Expression BuildExpression(int fieldIndex, ISqlExpression? sqlExpression)
 			{
 				Expression expr;
 
 				if (_returnType.IsClass || _returnType.IsNullable())
 				{
-					expr = Builder.BuildSql(_returnType, fieldIndex);
+					expr = Builder.BuildSql(_returnType, fieldIndex, sqlExpression);
 				}
 				else
 				{
 					expr = Expression.Block(
-						Expression.Call(null, MemberHelper.MethodOf(() => CheckNullValue(null!, null!)), ExpressionBuilder.DataReaderParam, Expression.Constant(_methodName)),
-						Builder.BuildSql(_returnType, fieldIndex));
+						Expression.Call(null, MemberHelper.MethodOf(() => CheckNullValue(false, null!)), Expression.Call(ExpressionBuilder.DataReaderParam, Methods.ADONet.IsDBNull, Expression.Constant(0)), Expression.Constant(_methodName)),
+						Builder.BuildSql(_returnType, fieldIndex, sqlExpression));
 				}
 
 				return expr;
@@ -129,27 +135,25 @@ namespace LinqToDB.Linq.Builder
 
 			public override SqlInfo[] ConvertToIndex(Expression? expression, int level, ConvertFlags flags)
 			{
-				switch (flags)
+				return flags switch
 				{
-					case ConvertFlags.Field :
-						return _index ?? (_index = new[]
+					ConvertFlags.Field =>
+						_index ??= new[]
 						{
-							new SqlInfo { Query = Parent!.SelectQuery, Index = Parent.SelectQuery.Select.Add(Sql!), Sql = Sql!, }
-						});
-				}
-
-				throw new InvalidOperationException();
+							new SqlInfo(Sql!, Parent!.SelectQuery, Parent.SelectQuery.Select.Add(Sql!))
+						},
+					_ => throw new InvalidOperationException(),
+				};
 			}
 
 			public override IsExpressionResult IsExpression(Expression? expression, int level, RequestFor requestFlag)
 			{
-				switch (requestFlag)
+				return requestFlag switch
 				{
-					case RequestFor.Root       : return new IsExpressionResult(Lambda != null && expression == Lambda.Parameters[0]);
-					case RequestFor.Expression : return IsExpressionResult.True;
-				}
-
-				return IsExpressionResult.False;
+					RequestFor.Root       => new IsExpressionResult(Lambda != null && expression == Lambda.Parameters[0]),
+					RequestFor.Expression => IsExpressionResult.True,
+					_                     => IsExpressionResult.False,
+				};
 			}
 
 			public override IBuildContext GetContext(Expression? expression, int level, BuildInfo buildInfo)

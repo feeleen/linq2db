@@ -11,8 +11,8 @@ namespace LinqToDB.DataProvider.SqlServer
 
 	class SqlServerSchemaProvider : SchemaProviderBase
 	{
-		bool _isAzure;
-		int _compatibilityLevel;
+		protected bool IsAzure;
+		protected int  CompatibilityLevel;
 
 		protected readonly SqlServerDataProvider Provider;
 
@@ -25,14 +25,14 @@ namespace LinqToDB.DataProvider.SqlServer
 		{
 			var version = dataConnection.Execute<string>("select @@version");
 
-			_isAzure            = version.IndexOf("Azure", StringComparison.Ordinal) >= 0;
-			_compatibilityLevel = dataConnection.Execute<int>("SELECT compatibility_level FROM sys.databases WHERE name = db_name()");
+			IsAzure            = version.IndexOf("Azure", StringComparison.Ordinal) >= 0;
+			CompatibilityLevel = dataConnection.Execute<int>("SELECT compatibility_level FROM sys.databases WHERE name = db_name()");
 		}
 
-		protected override List<TableInfo> GetTables(DataConnection dataConnection)
+		protected override List<TableInfo> GetTables(DataConnection dataConnection, GetSchemaOptions options)
 		{
 			return dataConnection.Query<TableInfo>(
-				_isAzure ? @"
+				IsAzure ? @"
 				SELECT
 					TABLE_CATALOG COLLATE DATABASE_DEFAULT + '.' + TABLE_SCHEMA + '.' + TABLE_NAME as TableID,
 					TABLE_CATALOG                                                                  as CatalogName,
@@ -51,12 +51,12 @@ namespace LinqToDB.DataProvider.SqlServer
 					t.object_id IS NULL OR t.is_ms_shipped <> 1"
 				: @"
 				SELECT
-					TABLE_CATALOG + '.' + TABLE_SCHEMA + '.' + TABLE_NAME                          as TableID,
+					TABLE_CATALOG COLLATE DATABASE_DEFAULT + '.' + TABLE_SCHEMA + '.' + TABLE_NAME as TableID,
 					TABLE_CATALOG                                                                  as CatalogName,
 					TABLE_SCHEMA                                                                   as SchemaName,
 					TABLE_NAME                                                                     as TableName,
 					CASE WHEN TABLE_TYPE = 'VIEW' THEN 1 ELSE 0 END                                as IsView,
-					ISNULL(CONVERT(varchar(8000), x.Value), '')                                    as Description,
+					ISNULL(CONVERT(varchar(8000), x.value), '')                                    as Description,
 					CASE WHEN TABLE_SCHEMA = 'dbo' THEN 1 ELSE 0 END                               as IsDefaultSchema
 				FROM
 					INFORMATION_SCHEMA.TABLES s
@@ -87,29 +87,13 @@ namespace LinqToDB.DataProvider.SqlServer
 				.ToList();
 		}
 
-		protected override List<PrimaryKeyInfo> GetPrimaryKeys(DataConnection dataConnection)
+		protected override IReadOnlyCollection<PrimaryKeyInfo> GetPrimaryKeys(DataConnection dataConnection,
+			IEnumerable<TableSchema> tables, GetSchemaOptions options)
 		{
 			return dataConnection.Query<PrimaryKeyInfo>(
-				_isAzure
-				? @"
+				@"
 				SELECT
 					k.TABLE_CATALOG COLLATE DATABASE_DEFAULT + '.' + k.TABLE_SCHEMA + '.' + k.TABLE_NAME as TableID,
-					k.CONSTRAINT_NAME                                                                    as PrimaryKeyName,
-					k.COLUMN_NAME                                                                        as ColumnName,
-					k.ORDINAL_POSITION                                                                   as Ordinal
-				FROM
-					INFORMATION_SCHEMA.KEY_COLUMN_USAGE k
-					JOIN
-						INFORMATION_SCHEMA.TABLE_CONSTRAINTS c
-					ON
-						k.CONSTRAINT_CATALOG = c.CONSTRAINT_CATALOG AND
-						k.CONSTRAINT_SCHEMA  = c.CONSTRAINT_SCHEMA AND
-						k.CONSTRAINT_NAME    = c.CONSTRAINT_NAME
-				WHERE
-					c.CONSTRAINT_TYPE='PRIMARY KEY'"
-				: @"
-				SELECT
-					k.TABLE_CATALOG + '.' + k.TABLE_SCHEMA + '.' + k.TABLE_NAME                          as TableID,
 					k.CONSTRAINT_NAME                                                                    as PrimaryKeyName,
 					k.COLUMN_NAME                                                                        as ColumnName,
 					k.ORDINAL_POSITION                                                                   as Ordinal
@@ -129,7 +113,7 @@ namespace LinqToDB.DataProvider.SqlServer
 		protected override List<ColumnInfo> GetColumns(DataConnection dataConnection, GetSchemaOptions options)
 		{
 			return dataConnection.Query<ColumnInfo>(
-				_isAzure ? @"
+				IsAzure ? @"
 				SELECT
 					TABLE_CATALOG COLLATE DATABASE_DEFAULT + '.' + TABLE_SCHEMA + '.' + TABLE_NAME                      as TableID,
 					COLUMN_NAME                                                                                         as Name,
@@ -141,17 +125,17 @@ namespace LinqToDB.DataProvider.SqlServer
 					NUMERIC_SCALE                                                                                       as Scale,
 					''                                                                                                  as [Description],
 					COLUMNPROPERTY(object_id('[' + TABLE_SCHEMA + '].[' + TABLE_NAME + ']'), COLUMN_NAME, 'IsIdentity') as IsIdentity,
-					CASE WHEN c.DATA_TYPE = 'timestamp' 
+					CASE WHEN c.DATA_TYPE = 'timestamp'
 						OR COLUMNPROPERTY(object_id('[' + TABLE_SCHEMA + '].[' + TABLE_NAME + ']'), COLUMN_NAME, 'IsComputed') = 1
 						THEN 1 ELSE 0 END as SkipOnInsert,
-					CASE WHEN c.DATA_TYPE = 'timestamp' 
+					CASE WHEN c.DATA_TYPE = 'timestamp'
 						OR COLUMNPROPERTY(object_id('[' + TABLE_SCHEMA + '].[' + TABLE_NAME + ']'), COLUMN_NAME, 'IsComputed') = 1
 						THEN 1 ELSE 0 END as SkipOnUpdate
 				FROM
 					INFORMATION_SCHEMA.COLUMNS c"
 				: @"
 				SELECT
-					TABLE_CATALOG + '.' + TABLE_SCHEMA + '.' + TABLE_NAME                                               as TableID,
+					TABLE_CATALOG COLLATE DATABASE_DEFAULT + '.' + TABLE_SCHEMA + '.' + TABLE_NAME                                               as TableID,
 					COLUMN_NAME                                                                                         as Name,
 					CASE WHEN IS_NULLABLE = 'YES' THEN 1 ELSE 0 END                                                     as IsNullable,
 					ORDINAL_POSITION                                                                                    as Ordinal,
@@ -159,12 +143,12 @@ namespace LinqToDB.DataProvider.SqlServer
 					CHARACTER_MAXIMUM_LENGTH                                                                            as Length,
 					ISNULL(NUMERIC_PRECISION, DATETIME_PRECISION)                                                       as [Precision],
 					NUMERIC_SCALE                                                                                       as Scale,
-					ISNULL(CONVERT(varchar(8000), x.Value), '')                                                         as [Description],
+					ISNULL(CONVERT(varchar(8000), x.value), '')                                                         as [Description],
 					COLUMNPROPERTY(object_id('[' + TABLE_SCHEMA + '].[' + TABLE_NAME + ']'), COLUMN_NAME, 'IsIdentity') as IsIdentity,
-					CASE WHEN c.DATA_TYPE = 'timestamp' 
+					CASE WHEN c.DATA_TYPE = 'timestamp'
 						OR COLUMNPROPERTY(object_id('[' + TABLE_SCHEMA + '].[' + TABLE_NAME + ']'), COLUMN_NAME, 'IsComputed') = 1
 						THEN 1 ELSE 0 END as SkipOnInsert,
-					CASE WHEN c.DATA_TYPE = 'timestamp' 
+					CASE WHEN c.DATA_TYPE = 'timestamp'
 						OR COLUMNPROPERTY(object_id('[' + TABLE_SCHEMA + '].[' + TABLE_NAME + ']'), COLUMN_NAME, 'IsComputed') = 1
 						THEN 1 ELSE 0 END as SkipOnUpdate
 				FROM
@@ -239,7 +223,8 @@ namespace LinqToDB.DataProvider.SqlServer
 				.ToList();
 		}
 
-		protected override IReadOnlyCollection<ForeignKeyInfo> GetForeignKeys(DataConnection dataConnection)
+		protected override IReadOnlyCollection<ForeignKeyInfo> GetForeignKeys(DataConnection dataConnection,
+			IEnumerable<TableSchema> tables, GetSchemaOptions options)
 		{
 			return dataConnection.Query<ForeignKeyInfo>(@"
 				SELECT
@@ -261,42 +246,32 @@ namespace LinqToDB.DataProvider.SqlServer
 				.ToList();
 		}
 
-		protected override List<ProcedureInfo> GetProcedures(DataConnection dataConnection)
+		protected override List<ProcedureInfo>? GetProcedures(DataConnection dataConnection, GetSchemaOptions options)
 		{
 			return dataConnection.Query<ProcedureInfo>(
-				_isAzure
-				? @"SELECT
+				@"SELECT
 					SPECIFIC_CATALOG COLLATE DATABASE_DEFAULT + '.' + SPECIFIC_SCHEMA + '.' + SPECIFIC_NAME as ProcedureID,
 					SPECIFIC_CATALOG                                                                        as CatalogName,
 					SPECIFIC_SCHEMA                                                                         as SchemaName,
 					SPECIFIC_NAME                                                                           as ProcedureName,
 					CASE WHEN ROUTINE_TYPE = 'FUNCTION'                         THEN 1 ELSE 0 END           as IsFunction,
 					CASE WHEN ROUTINE_TYPE = 'FUNCTION' AND DATA_TYPE = 'TABLE' THEN 1 ELSE 0 END           as IsTableFunction,
-					CASE WHEN EXISTS(SELECT * FROM sys.objects where name = SPECIFIC_NAME AND type='AF') 
+					CASE WHEN EXISTS(SELECT * FROM sys.objects where name = SPECIFIC_NAME AND type='AF')
 					                                                            THEN 1 ELSE 0 END           as IsAggregateFunction,
-					CASE WHEN SPECIFIC_SCHEMA = 'dbo'                           THEN 1 ELSE 0 END           as IsDefaultSchema
+					CASE WHEN SPECIFIC_SCHEMA = 'dbo'                           THEN 1 ELSE 0 END           as IsDefaultSchema,
+					ISNULL(CONVERT(varchar(8000), x.value), '')                                             as Description
 				FROM
-					INFORMATION_SCHEMA.ROUTINES"
-				: @"SELECT
-					SPECIFIC_CATALOG + '.' + SPECIFIC_SCHEMA + '.' + SPECIFIC_NAME                          as ProcedureID,
-					SPECIFIC_CATALOG                                                                        as CatalogName,
-					SPECIFIC_SCHEMA                                                                         as SchemaName,
-					SPECIFIC_NAME                                                                           as ProcedureName,
-					CASE WHEN ROUTINE_TYPE = 'FUNCTION'                         THEN 1 ELSE 0 END           as IsFunction,
-					CASE WHEN ROUTINE_TYPE = 'FUNCTION' AND DATA_TYPE = 'TABLE' THEN 1 ELSE 0 END           as IsTableFunction,
-					CASE WHEN EXISTS(SELECT * FROM sys.objects where name = SPECIFIC_NAME AND type='AF') 
-					                                                            THEN 1 ELSE 0 END           as IsAggregateFunction,
-					CASE WHEN SPECIFIC_SCHEMA = 'dbo'                           THEN 1 ELSE 0 END           as IsDefaultSchema
-				FROM
-					INFORMATION_SCHEMA.ROUTINES")
+					INFORMATION_SCHEMA.ROUTINES
+					LEFT JOIN sys.extended_properties x
+						ON OBJECT_ID('[' + SPECIFIC_SCHEMA + '].[' + SPECIFIC_NAME + ']') = x.major_id AND
+							x.name = 'MS_Description' AND x.class = 1")
 				.ToList();
 		}
 
-		protected override List<ProcedureParameterInfo> GetProcedureParameters(DataConnection dataConnection)
+		protected override List<ProcedureParameterInfo> GetProcedureParameters(DataConnection dataConnection, IEnumerable<ProcedureInfo> procedures, GetSchemaOptions options)
 		{
 			return dataConnection.Query<ProcedureParameterInfo>(
-				_isAzure
-				? @"SELECT
+				@"SELECT
 					SPECIFIC_CATALOG COLLATE DATABASE_DEFAULT + '.' + SPECIFIC_SCHEMA + '.' + SPECIFIC_NAME as ProcedureID,
 					ORDINAL_POSITION                                                                        as Ordinal,
 					PARAMETER_MODE                                                                          as Mode,
@@ -311,27 +286,14 @@ namespace LinqToDB.DataProvider.SqlServer
 					USER_DEFINED_TYPE_CATALOG                                                               as UDTCatalog,
 					USER_DEFINED_TYPE_SCHEMA                                                                as UDTSchema,
 					USER_DEFINED_TYPE_NAME                                                                  as UDTName,
-					1                                                                                       as IsNullable
+					1                                                                                       as IsNullable,
+					ISNULL(CONVERT(varchar(8000), x.value), '')                                             as Description
 				FROM
-					INFORMATION_SCHEMA.PARAMETERS"
-				: @"SELECT
-					SPECIFIC_CATALOG + '.' + SPECIFIC_SCHEMA + '.' + SPECIFIC_NAME                          as ProcedureID,
-					ORDINAL_POSITION                                                                        as Ordinal,
-					PARAMETER_MODE                                                                          as Mode,
-					PARAMETER_NAME                                                                          as ParameterName,
-					DATA_TYPE                                                                               as DataType,
-					CHARACTER_MAXIMUM_LENGTH                                                                as Length,
-					NUMERIC_PRECISION                                                                       as [Precision],
-					NUMERIC_SCALE                                                                           as Scale,
-					CASE WHEN PARAMETER_MODE = 'IN'  OR PARAMETER_MODE = 'INOUT' THEN 1 ELSE 0 END          as IsIn,
-					CASE WHEN PARAMETER_MODE = 'OUT' OR PARAMETER_MODE = 'INOUT' THEN 1 ELSE 0 END          as IsOut,
-					CASE WHEN IS_RESULT      = 'YES'                             THEN 1 ELSE 0 END          as IsResult,
-					USER_DEFINED_TYPE_CATALOG                                                               as UDTCatalog,
-					USER_DEFINED_TYPE_SCHEMA                                                                as UDTSchema,
-					USER_DEFINED_TYPE_NAME                                                                  as UDTName,
-					1                                                                                       as IsNullable
-				FROM
-					INFORMATION_SCHEMA.PARAMETERS")
+					INFORMATION_SCHEMA.PARAMETERS
+					LEFT JOIN sys.extended_properties x
+						ON OBJECT_ID('[' + SPECIFIC_SCHEMA + '].[' + SPECIFIC_NAME + ']') = x.major_id AND
+							ORDINAL_POSITION = x.minor_id AND
+							x.name = 'MS_Description' AND x.class = 2")
 				.ToList();
 		}
 
@@ -423,7 +385,7 @@ namespace LinqToDB.DataProvider.SqlServer
 			return base.GetProviderSpecificType(dataType);
 		}
 
-		protected override Type? GetSystemType(string? dataType, string? columnType, DataTypeInfo? dataTypeInfo, long? length, int? precision, int? scale)
+		protected override Type? GetSystemType(string? dataType, string? columnType, DataTypeInfo? dataTypeInfo, long? length, int? precision, int? scale, GetSchemaOptions options)
 		{
 			switch (dataType)
 			{
@@ -434,22 +396,22 @@ namespace LinqToDB.DataProvider.SqlServer
 				case "table type"  : return typeof(DataTable);
 			}
 
-			return base.GetSystemType(dataType, columnType, dataTypeInfo, length, precision, scale);
+			return base.GetSystemType(dataType, columnType, dataTypeInfo, length, precision, scale, options);
 		}
 
-		protected override string? GetDbType(GetSchemaOptions options, string? columnType, DataTypeInfo? dataType, long? length, int? prec, int? scale, string? udtCatalog, string? udtSchema, string? udtName)
+		protected override string? GetDbType(GetSchemaOptions options, string? columnType, DataTypeInfo? dataType, long? length, int? precision, int? scale, string? udtCatalog, string? udtSchema, string? udtName)
 		{
 			// database name for udt not supported by sql server
 			if (udtName != null)
-				return (udtSchema != null ? Provider.Adapter.QuoteIdentifier(udtSchema) + '.' : null) + Provider.Adapter.QuoteIdentifier(udtName);
+				return (udtSchema != null ? SqlServerTools.QuoteIdentifier(udtSchema) + '.' : null) + SqlServerTools.QuoteIdentifier(udtName);
 
-			return base.GetDbType(options, columnType, dataType, length, prec, scale, udtCatalog, udtSchema, udtName);
+			return base.GetDbType(options, columnType, dataType, length, precision, scale, udtCatalog, udtSchema, udtName);
 		}
 
 		protected override DataParameter BuildProcedureParameter(ParameterSchema p)
 		{
 			if (p.DataType == DataType.Structured)
-				return new DataParameter()
+				return new DataParameter
 				{
 					Name      = p.ParameterName,
 					DataType  = p.DataType,
@@ -471,10 +433,82 @@ namespace LinqToDB.DataProvider.SqlServer
 
 			// TODO: refactor method to use query as parameter instead of manual escaping...
 			// https://github.com/linq2db/linq2db/issues/1921
-			if (_compatibilityLevel >= 140)
+			if (CompatibilityLevel >= 140)
 				sql = $"EXEC('{sql.Replace("'", "''")}')";
 
 			return sql;
+		}
+
+		protected override DataTable? GetProcedureSchema(DataConnection dataConnection, string commandText, CommandType commandType, DataParameter[] parameters, GetSchemaOptions options)
+		{
+			switch (dataConnection.DataProvider.Name)
+			{
+				case ProviderName.SqlServer2000 :
+				case ProviderName.SqlServer2005 :
+				case ProviderName.SqlServer2008 :
+					return CallBase();
+			}
+
+			if (options.UseSchemaOnly || commandType == CommandType.Text)
+				return CallBase();
+
+			try
+			{
+				var tsql  = $"exec {commandText} {string.Join(", ", parameters.Select(p => p.Name))}";
+				var parms = string.Join(", ", parameters.Select(p => $"{p.Name} {p.DbType}"));
+
+				var dt = new DataTable();
+
+				dt.Columns.AddRange(new[]
+				{
+					new DataColumn { ColumnName = "DataTypeName",     DataType = typeof(string) },
+					new DataColumn { ColumnName = "ColumnName",       DataType = typeof(string) },
+					new DataColumn { ColumnName = "AllowDBNull",      DataType = typeof(bool)   },
+					new DataColumn { ColumnName = "ColumnSize",       DataType = typeof(int)    },
+					new DataColumn { ColumnName = "NumericPrecision", DataType = typeof(int)    },
+					new DataColumn { ColumnName = "NumericScale",     DataType = typeof(int)    },
+					new DataColumn { ColumnName = "IsIdentity",       DataType = typeof(bool)   },
+				});
+
+				foreach (var item in dataConnection.QueryProc(new
+					{
+						name               = "",
+						is_nullable        = false,
+						system_type_name   = "",
+						max_length         = 0,
+						precision          = 0,
+						scale              = 0,
+						is_identity_column = false
+					},
+					"sp_describe_first_result_set",
+					new DataParameter("tsql", tsql),
+					new DataParameter("params", parms)
+					))
+				{
+					var row = dt.NewRow();
+
+					row["DataTypeName"]     = item.system_type_name.Split('(')[0];
+					row["ColumnName"]       = item.name ?? "";
+					row["AllowDBNull"]      = item.is_nullable;
+					row["ColumnSize"]       = item.system_type_name.Contains("nchar") || item.system_type_name.Contains("nvarchar") ? item.max_length / 2 : item.max_length;
+					row["NumericPrecision"] = item.precision;
+					row["NumericScale"]     = item.scale;
+					row["IsIdentity"]       = item.is_identity_column;
+
+					dt.Rows.Add(row);
+				}
+
+				return dt.Rows.Count == 0 ? null : dt;
+			}
+			catch
+			{
+				return CallBase();
+			}
+
+			DataTable? CallBase()
+			{
+				return base.GetProcedureSchema(dataConnection, commandText, commandType, parameters, options);
+			}
 		}
 	}
 }

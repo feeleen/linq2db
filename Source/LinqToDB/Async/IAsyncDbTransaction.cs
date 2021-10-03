@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using System;
+using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -10,7 +11,7 @@ namespace LinqToDB.Async
 	/// Asynchronous version of the <see cref="IDbTransaction"/> interface, allowing asynchronous operations, missing from <see cref="IDbTransaction"/>.
 	/// </summary>
 	[PublicAPI]
-	public interface IAsyncDbTransaction : IDbTransaction
+	public interface IAsyncDbTransaction : IDbTransaction, IAsyncDisposable
 	{
 		/// <summary>
 		/// Commits transaction asynchronously.
@@ -30,11 +31,5 @@ namespace LinqToDB.Async
 		/// Gets underlying transaction instance.
 		/// </summary>
 		IDbTransaction Transaction { get; }
-
-		/// <summary>
-		/// Disposes transaciton asynchronously.
-		/// </summary>
-		/// <returns>Asynchronous operation completion task.</returns>
-		Task DisposeAsync();
 	}
 }

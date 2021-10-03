@@ -16,9 +16,8 @@ using NUnit.Framework;
 
 namespace Tests.DataProvider
 {
-	using System.Diagnostics.CodeAnalysis;
-	using System.Globalization;
-
+	using System.Runtime.InteropServices;
+	using System.Threading.Tasks;
 	using Model;
 
 	[TestFixture]
@@ -38,7 +37,8 @@ namespace Tests.DataProvider
 			}
 		}
 
-		static void TestType<T>(DataConnection connection, string dataTypeName, [DisallowNull] T value, string tableName = "AllTypes", bool convertToString = false)
+		static void TestType<T>(DataConnection connection, string dataTypeName, T value, string tableName = "AllTypes", bool convertToString = false)
+			where T : notnull
 		{
 			Assert.That(connection.Execute<T>(string.Format("SELECT {0} FROM {1} WHERE ID = 1", dataTypeName, tableName)),
 				Is.EqualTo(connection.MappingSchema.GetDefaultValue(typeof(T))));
@@ -48,8 +48,8 @@ namespace Tests.DataProvider
 
 			if (convertToString)
 			{
-				actualValue   = actualValue.  ToString();
-				expectedValue = expectedValue.ToString();
+				actualValue   = actualValue.  ToString()!;
+				expectedValue = expectedValue.ToString()!;
 			}
 
 			Assert.That(actualValue, Is.EqualTo(expectedValue));
@@ -366,9 +366,9 @@ namespace Tests.DataProvider
 				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", arr1)), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Create   ("p", arr1)), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", null)), Is.EqualTo(null));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Binary   ("p", new byte[0])), Is.EqualTo(new byte[0]));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", new byte[0])), Is.EqualTo(new byte[0]));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Image    ("p", new byte[0])), Is.EqualTo(new byte[0]));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Binary   ("p", Array<byte>.Empty)), Is.EqualTo(Array<byte>.Empty));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", Array<byte>.Empty)), Is.EqualTo(Array<byte>.Empty));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Image    ("p", Array<byte>.Empty)), Is.EqualTo(Array<byte>.Empty));
 				Assert.That(conn.Execute<byte[]>("SELECT @p", new DataParameter { Name = "p", Value = arr1 }), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Create   ("p", new Binary(arr1))), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>("SELECT @p", new DataParameter("p", new Binary(arr1))), Is.EqualTo(arr1));
@@ -388,7 +388,7 @@ namespace Tests.DataProvider
 					conn.Execute<Guid?>("SELECT '6F9619FF-8B86-D011-B42D-00C04FC964FF'"),
 					Is.EqualTo(new Guid("6F9619FF-8B86-D011-B42D-00C04FC964FF")));
 
-				var guid = Guid.NewGuid();
+				var guid = TestData.Guid1;
 
 				Assert.That(conn.Execute<Guid>("SELECT @p", DataParameter.Create("p", guid)),                Is.EqualTo(guid));
 				Assert.That(conn.Execute<Guid>("SELECT @p", new DataParameter { Name = "p", Value = guid }), Is.EqualTo(guid));
@@ -482,7 +482,7 @@ namespace Tests.DataProvider
 			public int Id;
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void CreateDatabase([IncludeDataSources(TestProvName.AllSQLite)] string context)
 		{
 			try
@@ -496,7 +496,7 @@ namespace Tests.DataProvider
 			SQLiteTools.CreateDatabase("TestDatabase");
 			Assert.IsTrue(File.Exists ("TestDatabase.sqlite"));
 
-			using (var db = new DataConnection(SQLiteTools.GetDataProvider(), "Data Source=TestDatabase.sqlite"))
+			using (var db = new DataConnection(SQLiteTools.GetDataProvider(context), "Data Source=TestDatabase.sqlite"))
 			{
 				db.CreateTable<CreateTableTest>();
 				db.DropTable  <CreateTableTest>();
@@ -513,21 +513,57 @@ namespace Tests.DataProvider
 			{
 				using (var db = new DataConnection(context))
 				{
-					db.BulkCopy(
-						new BulkCopyOptions { BulkCopyType = bulkCopyType },
-						Enumerable.Range(0, 10).Select(n =>
-							new LinqDataTypes
-							{
-								ID            = 4000 + n,
-								MoneyValue    = 1000m + n,
-								DateTimeValue = new DateTime(2001,  1,  11,  1, 11, 21, 100),
-								BoolValue     = true,
-								GuidValue     = Guid.NewGuid(),
-								SmallIntValue = (short)n
-							}
-						));
+					try
+					{
+						db.BulkCopy(
+							new BulkCopyOptions { BulkCopyType = bulkCopyType },
+							Enumerable.Range(0, 10).Select(n =>
+								new LinqDataTypes
+								{
+									ID            = 4000 + n,
+									MoneyValue    = 1000m + n,
+									DateTimeValue = new DateTime(2001, 1, 11, 1, 11, 21, 100),
+									BoolValue     = true,
+									GuidValue     = TestData.SequentialGuid(n),
+									SmallIntValue = (short)n
+								}
+							));
+					}
+					finally
+					{
+						db.GetTable<LinqDataTypes>().Delete(p => p.ID >= 4000);
+					}
+				}
+			}
+		}
 
-					db.GetTable<LinqDataTypes>().Delete(p => p.ID >= 4000);
+		[Test]
+		public async Task BulkCopyLinqTypesAsync([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			foreach (var bulkCopyType in new[] { BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific })
+			{
+				using (var db = new DataConnection(context))
+				{
+					try
+					{
+						await db.BulkCopyAsync(
+							new BulkCopyOptions { BulkCopyType = bulkCopyType },
+							Enumerable.Range(0, 10).Select(n =>
+								new LinqDataTypes
+								{
+									ID            = 4000 + n,
+									MoneyValue    = 1000m + n,
+									DateTimeValue = new DateTime(2001, 1, 11, 1, 11, 21, 100),
+									BoolValue     = true,
+									GuidValue     = TestData.SequentialGuid(n),
+									SmallIntValue = (short)n
+								}
+							));
+					}
+					finally
+					{
+						await db.GetTable<LinqDataTypes>().DeleteAsync(p => p.ID >= 4000);
+					}
 				}
 			}
 		}
@@ -538,9 +574,9 @@ namespace Tests.DataProvider
 			using (var db = new TestDataConnection(context))
 			{
 				var sp = db.DataProvider.GetSchemaProvider();
-				var s  = sp.GetSchema(db, TestUtils.GetDefaultSchemaOptions(context));
+				var s  = sp.GetSchema(db);
 
-				var table = s.Tables.FirstOrDefault(_ => _.TableName!.Equals("ForeignKeyTable", StringComparison.OrdinalIgnoreCase));
+				var table = s.Tables.FirstOrDefault(_ => _.TableName!.Equals("ForeignKeyTable", StringComparison.OrdinalIgnoreCase))!;
 				Assert.IsNotNull(table);
 
 				Assert.AreEqual(1,                   table.ForeignKeys                   .Count);
@@ -563,13 +599,13 @@ namespace Tests.DataProvider
 				case ProviderName.SQLiteClassic:
 				case TestProvName.SQLiteClassicMiniProfilerMapped:
 				case TestProvName.SQLiteClassicMiniProfilerUnmapped:
-					expectedVersion = "3.31.1";
+					expectedVersion = "3.36.0";
 					break;
 				case ProviderName.SQLiteMS:
-#if NET46
+#if NET472
 					expectedVersion = "3.13.0";
 #else
-					expectedVersion = "3.28.0";
+					expectedVersion = "3.33.0";
 #endif
 					break;
 				default:
@@ -580,7 +616,7 @@ namespace Tests.DataProvider
 			using (var cmd = db.CreateCommand())
 			{
 				cmd.CommandText = "select sqlite_version();";
-				var version     = (string)cmd.ExecuteScalar();
+				var version     = (string)cmd.ExecuteScalar()!;
 
 				Assert.AreEqual(expectedVersion, version);
 			}

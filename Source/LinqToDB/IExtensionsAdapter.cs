@@ -7,11 +7,16 @@ using System.Threading.Tasks;
 
 namespace LinqToDB
 {
+	using Async;
+
 	/// <summary>
 	/// Interface to override default implementation of LINQ To DB async operations.
 	/// </summary>
 	public interface IExtensionsAdapter
 	{
+		IAsyncEnumerable<TSource> AsAsyncEnumerable<TSource>(
+			IQueryable<TSource> source);
+
 		Task ForEachAsync<TSource>(
 			IQueryable<TSource> source,
 			Action<TSource>     action,
@@ -28,26 +33,30 @@ namespace LinqToDB
 		Task<Dictionary<TKey, TSource>> ToDictionaryAsync<TSource, TKey>(
 			IQueryable<TSource> source,
 			Func<TSource, TKey> keySelector,
-			CancellationToken   token);
+			CancellationToken   token)
+			where TKey : notnull;
 
 		Task<Dictionary<TKey,TSource>> ToDictionaryAsync<TSource,TKey>(
 			IQueryable<TSource>      source,
 			Func<TSource,TKey>       keySelector,
 			IEqualityComparer<TKey>  comparer,
-			CancellationToken        token);
+			CancellationToken        token)
+			where TKey : notnull;
 
 		Task<Dictionary<TKey,TElement>> ToDictionaryAsync<TSource,TKey,TElement>(
 			IQueryable<TSource>      source,
 			Func<TSource,TKey>       keySelector,
 			Func<TSource,TElement>   elementSelector,
-			CancellationToken        token);
+			CancellationToken        token)
+			where TKey : notnull;
 
 		Task<Dictionary<TKey,TElement>> ToDictionaryAsync<TSource,TKey,TElement>(
 			IQueryable<TSource>      source,
 			Func<TSource,TKey>       keySelector,
 			Func<TSource,TElement>   elementSelector,
 			IEqualityComparer<TKey>  comparer,
-			CancellationToken        token);
+			CancellationToken        token)
+			where TKey : notnull;
 
 		Task<TSource> FirstAsync<TSource>(
 			IQueryable<TSource> source,
@@ -58,11 +67,11 @@ namespace LinqToDB
 			Expression<Func<TSource,bool>> predicate,
 			CancellationToken              token);
 
-		Task<TSource> FirstOrDefaultAsync<TSource>(
+		Task<TSource?> FirstOrDefaultAsync<TSource>(
 			IQueryable<TSource> source,
 			CancellationToken   token);
 
-		Task<TSource> FirstOrDefaultAsync<TSource>(
+		Task<TSource?> FirstOrDefaultAsync<TSource>(
 			IQueryable<TSource>            source,
 			Expression<Func<TSource,bool>> predicate,
 			CancellationToken              token);
@@ -76,11 +85,11 @@ namespace LinqToDB
 			Expression<Func<TSource,bool>> predicate,
 			CancellationToken              token);
 
-		Task<TSource> SingleOrDefaultAsync<TSource>(
+		Task<TSource?> SingleOrDefaultAsync<TSource>(
 			IQueryable<TSource> source,
 			CancellationToken   token);
 
-		Task<TSource> SingleOrDefaultAsync<TSource>(
+		Task<TSource?> SingleOrDefaultAsync<TSource>(
 			IQueryable<TSource>            source,
 			Expression<Func<TSource,bool>> predicate,
 			CancellationToken              token);

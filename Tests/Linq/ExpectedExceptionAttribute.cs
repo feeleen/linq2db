@@ -1,5 +1,4 @@
 ﻿using System;
-using LinqToDB.Common;
 using NUnit.Framework;
 using NUnit.Framework.Interfaces;
 using NUnit.Framework.Internal;
@@ -49,7 +48,7 @@ namespace Tests
 				{
 					exception = ex;
 
-					if (exception is NUnitException)
+					if (exception is NUnitException && ex.InnerException != null)
 						exception = ex.InnerException;
 
 					caughtType = exception.GetType();

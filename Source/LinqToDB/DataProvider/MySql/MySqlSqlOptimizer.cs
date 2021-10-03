@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace LinqToDB.DataProvider.MySql
 {
 	using Extensions;
+	using LinqToDB.Mapping;
 	using SqlProvider;
 	using SqlQuery;
 
@@ -12,13 +14,15 @@ namespace LinqToDB.DataProvider.MySql
 		{
 		}
 
+		public override bool CanCompareSearchConditions => true;
+		
 		public override SqlStatement TransformStatement(SqlStatement statement)
 		{
-			switch (statement.QueryType)
+			return statement.QueryType switch
 			{
-				case QueryType.Update : return CorrectMySqlUpdate((SqlUpdateStatement)statement);
-				default               : return statement;
-			}
+				QueryType.Update => CorrectMySqlUpdate((SqlUpdateStatement)statement),
+				_                => statement,
+			};
 		}
 
 		private SqlUpdateStatement CorrectMySqlUpdate(SqlUpdateStatement statement)
@@ -34,23 +38,20 @@ namespace LinqToDB.DataProvider.MySql
 			return statement;
 		}
 
-		public override ISqlExpression ConvertExpression(ISqlExpression expr)
+		public override ISqlExpression ConvertExpressionImpl<TContext>(ISqlExpression expression, ConvertVisitor<TContext> visitor,
+			EvaluationContext context)
 		{
-			expr = base.ConvertExpression(expr);
+			expression = base.ConvertExpressionImpl(expression, visitor, context);
 
-			if (expr is SqlBinaryExpression)
+			if (expression is SqlBinaryExpression be)
 			{
-				var be = (SqlBinaryExpression)expr;
-
 				switch (be.Operation)
 				{
 					case "+":
 						if (be.SystemType == typeof(string))
 						{
-							if (be.Expr1 is SqlFunction)
+							if (be.Expr1 is SqlFunction func)
 							{
-								var func = (SqlFunction)be.Expr1;
-
 								if (func.Name == "Concat")
 								{
 									var list = new List<ISqlExpression>(func.Parameters) { be.Expr2 };
@@ -81,10 +82,8 @@ namespace LinqToDB.DataProvider.MySql
 						break;
 				}
 			}
-			else if (expr is SqlFunction)
+			else if (expression is SqlFunction func)
 			{
-				var func = (SqlFunction) expr;
-
 				switch (func.Name)
 				{
 					case "Convert" :
@@ -104,7 +103,70 @@ namespace LinqToDB.DataProvider.MySql
 				}
 			}
 
-			return expr;
+			return expression;
+		}
+
+		public override ISqlPredicate ConvertSearchStringPredicate<TContext>(MappingSchema mappingSchema, SqlPredicate.SearchString predicate,
+			ConvertVisitor<RunOptimizationContext<TContext>> visitor,
+			OptimizationContext optimizationContext)
+		{
+			var caseSensitive = predicate.CaseSensitive.EvaluateBoolExpression(optimizationContext.Context);
+
+			if (caseSensitive == null || caseSensitive == false)
+			{
+				var searchExpr = predicate.Expr2;
+				var dataExpr = predicate.Expr1;
+
+				if (caseSensitive == false)
+				{
+					searchExpr = new SqlFunction(typeof(string), "$ToLower$", searchExpr);
+					dataExpr   = new SqlFunction(typeof(string), "$ToLower$", dataExpr);
+				}
+
+				ISqlPredicate? newPredicate = null;
+				switch (predicate.Kind)
+				{
+					case SqlPredicate.SearchString.SearchKind.Contains:
+					{
+						newPredicate = new SqlPredicate.ExprExpr(
+							new SqlFunction(typeof(int), "LOCATE", searchExpr, dataExpr), SqlPredicate.Operator.Greater,
+							new SqlValue(0), null);
+						break;
+					}
+				}
+
+				if (newPredicate != null)
+				{
+					if (predicate.IsNot)
+					{
+						newPredicate = new SqlSearchCondition(new SqlCondition(true, newPredicate));
+					}
+
+					return newPredicate;
+				}
+
+				if (caseSensitive == false)
+				{
+					predicate = new SqlPredicate.SearchString(
+						dataExpr,
+						predicate.IsNot,
+						searchExpr,
+						predicate.Kind,
+						new SqlValue(false));
+				}
+			}
+
+			if (caseSensitive == true)
+			{
+				predicate = new SqlPredicate.SearchString(
+					new SqlExpression(typeof(string), $"{{0}} COLLATE utf8_bin", Precedence.Primary, predicate.Expr1),
+					predicate.IsNot,
+					predicate.Expr2,
+					predicate.Kind,
+					new SqlValue(false));
+			}
+
+			return ConvertSearchStringPredicateViaLike(mappingSchema, predicate, visitor, optimizationContext);
 		}
 	}
 }

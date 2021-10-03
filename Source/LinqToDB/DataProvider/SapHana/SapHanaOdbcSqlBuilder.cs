@@ -1,7 +1,9 @@
-﻿namespace LinqToDB.DataProvider.SapHana
+﻿using System.Text;
+
+namespace LinqToDB.DataProvider.SapHana
 {
-	using LinqToDB.Mapping;
-	using LinqToDB.SqlQuery;
+	using Mapping;
+	using SqlQuery;
 	using SqlProvider;
 
 	class SapHanaOdbcSqlBuilder : SapHanaSqlBuilder
@@ -16,15 +18,13 @@
 			return new SapHanaOdbcSqlBuilder(MappingSchema, SqlOptimizer, SqlProviderFlags);
 		}
 
-		public override string Convert(string value, ConvertType convertType)
+		public override StringBuilder Convert(StringBuilder sb, string value, ConvertType convertType)
 		{
-			switch (convertType)
+			return convertType switch
 			{
-				case ConvertType.NameToQueryParameter:
-					return "?";
-				default:
-					return base.Convert(value, convertType);
-			}
+				ConvertType.NameToQueryParameter => sb.Append('?'),
+				_                                => base.Convert(sb, value, convertType),
+			};
 		}
 
 		protected override void BuildDataTypeFromDataType(SqlDataType type, bool forCreateTable)
@@ -32,10 +32,10 @@
 			switch (type.Type.DataType)
 			{
 				case DataType.Money:
-					StringBuilder.Append("Decimal(19,4)");
+					StringBuilder.Append("Decimal(19, 4)");
 					break;
 				case DataType.SmallMoney:
-					StringBuilder.Append("Decimal(10,4)");
+					StringBuilder.Append("Decimal(10, 4)");
 					break;
 				default:
 					base.BuildDataTypeFromDataType(type, forCreateTable);

@@ -32,6 +32,7 @@ namespace Tests.Model
 			ITable<TTable> table,
 			Expression<Func<TTable, object?>> columns,
 			string search)
+			where TTable : notnull
 		{
 			return Sql.Ext.SqlServer().FreeTextTable<TTable, TKey>(table, columns, search);
 		}
@@ -40,7 +41,7 @@ namespace Tests.Model
 		public ITable<T> WithUpdateLock<T>()
 			where T : class
 		{
-			var methodInfo = typeof(NorthwindDB).GetMethod("WithUpdateLock")
+			var methodInfo = typeof(NorthwindDB).GetMethod("WithUpdateLock")!
 				.MakeGenericMethod(typeof(T));
 
 			return GetTable<T>(this, methodInfo);

@@ -2,13 +2,17 @@
 	<Import Project="..\..\Build\linq2db.Tests.Providers.props" />
 
 	<PropertyGroup>
+		<AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
 		<AssemblyName>linq2db.Tests.Playground</AssemblyName>
 		<ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<Compile Include="..\Linq\Create\CreateData.cs" Link="CreateData.cs" />
-		<Compile Include="..\Linq\Linq\OptimizerTests.cs" Link="OptimizerTests.cs" />
 	</ItemGroup>
 
+	<ItemGroup Condition=" '$(TargetFramework)' == 'netcoreapp3.1' ">
+		<!-- transient -->
+		<PackageReference Include="System.Security.Cryptography.Cng" />
+	</ItemGroup>
 </Project>

@@ -11,8 +11,8 @@ namespace LinqToDB.Linq.Builder
 
 		public bool CanBuild(ExpressionBuilder builder, BuildInfo buildInfo)
 		{
-			var call = buildInfo.Expression as MethodCallExpression;
-			return call != null && call.Method.Name == "GetContext";
+			return buildInfo.Expression is MethodCallExpression call 
+				&& call.Method.Name == "GetContext";
 		}
 
 		public IBuildContext BuildSequence(ExpressionBuilder builder, BuildInfo buildInfo)
@@ -38,7 +38,6 @@ namespace LinqToDB.Linq.Builder
 			}
 
 			public ISqlOptimizer? SqlOptimizer;
-			public Action?        SetParameters;
 
 			public override void BuildQuery<T>(Query<T> query, ParameterExpression queryParameter)
 			{
@@ -47,7 +46,6 @@ namespace LinqToDB.Linq.Builder
 				QueryRunner.SetNonQueryQuery(query);
 
 				SqlOptimizer  = query.SqlOptimizer;
-				SetParameters = () => QueryRunner.SetParameters(query, query.Expression!, null, 0);
 
 				query.GetElement = (db, expr, ps, preambles) => this;
 			}

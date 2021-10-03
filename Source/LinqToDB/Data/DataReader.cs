@@ -14,6 +14,7 @@ namespace LinqToDB.Data
 		internal int          ReadNumber  { get; set; }
 		private  DateTime     StartedOn   { get; }      = DateTime.UtcNow;
 		private  Stopwatch    Stopwatch   { get; }      = Stopwatch.StartNew();
+		internal Action?      OnDispose   { get; set; }
 
 		public void Dispose()
 		{
@@ -21,18 +22,20 @@ namespace LinqToDB.Data
 			{
 				Reader.Dispose();
 
-				if (DataConnection.TraceSwitch.TraceInfo && CommandInfo?.DataConnection?.OnTraceConnection != null)
+				if (CommandInfo?.DataConnection.TraceSwitchConnection.TraceInfo == true)
 				{
-					CommandInfo.DataConnection.OnTraceConnection(new TraceInfo(CommandInfo.DataConnection, TraceInfoStep.Completed)
+					CommandInfo.DataConnection.OnTraceConnection(new TraceInfo(CommandInfo.DataConnection, TraceInfoStep.Completed, TraceOperation.ExecuteReader, false)
 					{
 						TraceLevel      = TraceLevel.Info,
-						Command         = CommandInfo.DataConnection.Command,
+						Command         = CommandInfo.DataConnection.GetCurrentCommand(),
 						StartTime       = StartedOn,
 						ExecutionTime   = Stopwatch.Elapsed,
 						RecordsAffected = ReadNumber,
 					});
 				}
 			}
+
+			OnDispose?.Invoke();
 		}
 
 		#region Query with object reader

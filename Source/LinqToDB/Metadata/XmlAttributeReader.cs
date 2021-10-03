@@ -20,8 +20,8 @@ namespace LinqToDB.Metadata
 
 		public XmlAttributeReader(string xmlFile, Assembly assembly)
 		{
-			if (xmlFile  == null) throw new ArgumentNullException("xmlFile");
-			if (assembly == null) throw new ArgumentNullException("assembly");
+			if (xmlFile  == null) throw new ArgumentNullException(nameof(xmlFile));
+			if (assembly == null) throw new ArgumentNullException(nameof(assembly));
 
 			StreamReader? streamReader = null;
 
@@ -33,7 +33,7 @@ namespace LinqToDB.Metadata
 				}
 				else
 				{
-					var combinePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, xmlFile);
+					var combinePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory!, xmlFile);
 
 					if (File.Exists(combinePath))
 						streamReader = File.OpenText(combinePath);
@@ -92,7 +92,7 @@ namespace LinqToDB.Metadata
 
 					var val =
 						type != null ?
-							Converter.ChangeType(value.Value, Type.GetType(type.Value, true)) :
+							Converter.ChangeType(value.Value, Type.GetType(type.Value, true)!) :
 							value.Value;
 
 					return Tuple.Create(name, val);
@@ -137,7 +137,7 @@ namespace LinqToDB.Metadata
 		public T[] GetAttributes<T>(Type type, bool inherit = true)
 			where T : Attribute
 		{
-			if (_types.TryGetValue(type.FullName, out var t) || _types.TryGetValue(type.Name, out t))
+			if (_types.TryGetValue(type.FullName!, out var t) || _types.TryGetValue(type.Name, out t))
 				return t.GetAttribute(typeof(T)).Select(a => (T) a.MakeAttribute(typeof(T))).ToArray();
 
 			return Array<T>.Empty;
@@ -146,7 +146,7 @@ namespace LinqToDB.Metadata
 		public T[] GetAttributes<T>(Type type, MemberInfo memberInfo, bool inherit = true)
 			where T : Attribute
 		{
-			if (_types.TryGetValue(type.FullName, out var t) || _types.TryGetValue(type.Name, out t))
+			if (_types.TryGetValue(type.FullName!, out var t) || _types.TryGetValue(type.Name, out t))
 			{
 				if (t.Members.TryGetValue(memberInfo.Name, out var m))
 				{
@@ -159,6 +159,6 @@ namespace LinqToDB.Metadata
 
 		/// <inheritdoc cref="IMetadataReader.GetDynamicColumns"/>
 		public MemberInfo[] GetDynamicColumns(Type type)
-			=> new MemberInfo[0];
+			=> Array<MemberInfo>.Empty;
 	}
 }

@@ -60,7 +60,7 @@ namespace Tests.Linq
 				}
 				else
 				{
-					var sql = query.ToString();
+					var sql = query.ToString()!;
 					Assert.That(sql.Contains("[r].[FTS5_TABLE] MATCH 'something'"));
 				}
 			}
@@ -112,7 +112,7 @@ namespace Tests.Linq
 				}
 				else
 				{
-					var sql = query.ToString();
+					var sql = query.ToString()!;
 					Assert.That(sql.Contains("[r].[text1] MATCH 'found'"));
 				}
 			}
@@ -125,8 +125,9 @@ namespace Tests.Linq
 			{
 				var query = Sql.Ext.SQLite().MatchTable(db.GetTable<FtsTable>(), "found");
 
-				var sql = query.ToString();
-				Assert.That(sql.Contains("[FTS5_TABLE]('found')"));
+				var sql = query.ToString()!;
+				Assert.That(sql.Contains("p_1 = 'found'"));
+				Assert.That(sql.Contains("[FTS5_TABLE](@p_1)"));
 			}
 		}
 
@@ -146,7 +147,7 @@ namespace Tests.Linq
 				}
 				else
 				{
-					var sql = query.ToString();
+					var sql = query.ToString()!;
 					Assert.That(sql.Contains("[r].[rowid] = 3"));
 				}
 			}
@@ -159,7 +160,7 @@ namespace Tests.Linq
 			{
 				var query = db.GetTable<FtsTable>().OrderBy(r => Sql.Ext.SQLite().Rank(r));
 
-				var sql = query.ToString();
+				var sql = query.ToString()!;
 				Assert.That(sql.Contains("ORDER BY"));
 				Assert.That(sql.Contains("[t1].[rank]"));
 			}
@@ -313,7 +314,7 @@ namespace Tests.Linq
 			{
 				var query = db.GetTable<FtsTable>().Select(r => Sql.Ext.SQLite().FTS5bm25(r));
 
-				var sql = query.ToString();
+				var sql = query.ToString()!;
 				Assert.That(sql.Contains("bm25([r].[FTS5_TABLE])"));
 			}
 		}
@@ -325,7 +326,7 @@ namespace Tests.Linq
 			{
 				var query = db.GetTable<FtsTable>().Select(r => Sql.Ext.SQLite().FTS5bm25(r, 1.4, 5.6));
 
-				var sql = query.ToString();
+				var sql = query.ToString()!;
 				Assert.That(sql.Contains("bm25([r].[FTS5_TABLE], 1.3999999999999999, 5.5999999999999996)"));
 			}
 		}
@@ -337,7 +338,7 @@ namespace Tests.Linq
 			{
 				var query = db.GetTable<FtsTable>().Select(r => Sql.Ext.SQLite().FTS5Highlight(r, 2, "start", "end"));
 
-				var sql = query.ToString();
+				var sql = query.ToString()!;
 				Assert.That(sql.Contains("highlight([r].[FTS5_TABLE], 2, 'start', 'end')"));
 			}
 		}
@@ -349,7 +350,7 @@ namespace Tests.Linq
 			{
 				var query = db.GetTable<FtsTable>().Select(r => Sql.Ext.SQLite().FTS5Snippet(r, 1, "->", "<-", "zzz", 4));
 
-				var sql = query.ToString();
+				var sql = query.ToString()!;
 				Assert.That(sql.Contains("snippet([r].[FTS5_TABLE], 1, '->', '<-', 'zzz', 4)"));
 			}
 		}
@@ -497,10 +498,10 @@ namespace Tests.Linq
 				finally
 				{
 					Assert.AreEqual("INSERT INTO [FTS5_TABLE]([FTS5_TABLE], rowid, [text1], [text2]) VALUES('delete', 2, @p0, @p1)", db.LastQuery);
-					
+
 					Assert.AreEqual(2, db.Command.Parameters.Count);
-					Assert.AreEqual("one", ((DbParameter)db.Command.Parameters[0]).Value);
-					Assert.AreEqual("two", ((DbParameter)db.Command.Parameters[1]).Value);
+					Assert.AreEqual("one", ((DbParameter)db.Command.Parameters[0]!).Value);
+					Assert.AreEqual("two", ((DbParameter)db.Command.Parameters[1]!).Value);
 				}
 			}
 		}
@@ -635,7 +636,7 @@ namespace Tests.Linq
 					Assert.AreEqual("INSERT INTO [FTS5_TABLE]([FTS5_TABLE], rank) VALUES('rank', @rank)", db.LastQuery);
 
 					Assert.AreEqual(1, db.Command.Parameters.Count);
-					Assert.AreEqual("strange('function\")", ((DbParameter)db.Command.Parameters[0]).Value);
+					Assert.AreEqual("strange('function\")", ((DbParameter)db.Command.Parameters[0]!).Value);
 				}
 			}
 		}
@@ -681,6 +682,32 @@ namespace Tests.Linq
 				{
 					Assert.AreEqual("INSERT INTO [FTS5_TABLE]([FTS5_TABLE], rank) VALUES('usermerge', 7)", db.LastQuery);
 				}
+			}
+		}
+		#endregion
+
+		#region FTS shadow tables
+		[Table]
+		class FTS3_TABLE_segdir
+		{
+			[Column] public long    level;
+			[Column] public long    idx;
+			[Column] public long?   start_block;
+			[Column] public long?   leaves_end_block;
+			//[Column] public long?   end_block;
+			// from documentation:
+			// This field may contain either an integer or a text field consisting of two integers separated by a space character
+			[Column] public string?   end_block;
+			[Column] public byte[]? root;
+		}
+
+		[ActiveIssue(Configuration = TestProvName.AllSQLiteClassic, Details = "Make hybrid fields work for classic provider too")]
+		[Test]
+		public void Fts3SegDirTableQuery([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			using (var db = new TestDataConnection(context))
+			{
+				db.GetTable<FTS3_TABLE_segdir>().ToList();
 			}
 		}
 		#endregion

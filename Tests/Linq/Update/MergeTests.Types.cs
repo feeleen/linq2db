@@ -2,6 +2,7 @@
 using System.Linq;
 
 using LinqToDB;
+using LinqToDB.Common;
 using LinqToDB.Mapping;
 
 using NUnit.Framework;
@@ -191,7 +192,7 @@ namespace Tests.xUpdate
 				FieldDouble     = double.MinValue,
 				FieldDateTime   = new DateTime(2000, 11, 12, 21, 14, 15, 167),
 				FieldDateTime2  = new DateTimeOffset(2000, 11, 22, 13, 14, 15, 1, TimeSpan.FromMinutes(15)).AddTicks(1234567),
-				FieldBinary     = new byte[0],
+				FieldBinary     = Array<byte>.Empty,
 				FieldGuid       = Guid.Empty,
 				FieldDecimal    = 12345678.9012345678M,
 				FieldDate       = new DateTime(2000, 11, 23),
@@ -337,13 +338,14 @@ namespace Tests.xUpdate
 			}
 		};
 
-		// TODO: check how it is possible as we don't even save 4 to this column
-		//  Failed : Tests.Merge.MergeTests.TestMergeTypes("SQLiteMs")
-		// Expected: '*'
-		// But was:  '4'
-		// at Tests.Merge.MergeTests.AssertChar
-		// Sybase: need to configure sybase docker image to use utf8 character set
-		[ActiveIssue("ORA-22053: overflow error", Configurations = new [] { TestProvName.AllSybase })]
+		[ActiveIssue(Configurations = new[]
+		{
+			ProviderName.SapHanaNative
+#if AZURE
+			,TestProvName.AllSybase
+		//[ActiveIssue("need to configure sybase docker image to use utf8 character set", Configuration = TestProvName.AllSybase)]
+#endif
+		}, Details = "Native provider from SAP HANA 2 SPS04 045 cannot digest null/DBNull/byte[0] binary parameters")]
 		[Test]
 		public void TestMergeTypes([DataSources(true, ProviderName.SQLiteMS)] string context)
 		{
@@ -377,11 +379,11 @@ namespace Tests.xUpdate
 			Assert.AreEqual(expected.Id, actual.Id);
 			Assert.AreEqual(expected.FieldInt32, actual.FieldInt32);
 
-			if (provider != ProviderName.Access)
+			if (!provider.StartsWith("Access"))
 				Assert.AreEqual(expected.FieldInt64, actual.FieldInt64);
 
 			if (provider != ProviderName.Sybase && provider != ProviderName.SybaseManaged)
-				if (provider != ProviderName.Access)
+				if (!provider.StartsWith("Access"))
 					Assert.AreEqual(expected.FieldBoolean, actual.FieldBoolean);
 				else
 					Assert.AreEqual(expected.FieldBoolean ?? false, actual.FieldBoolean);
@@ -395,8 +397,7 @@ namespace Tests.xUpdate
 
 			Assert.AreEqual(expected.FieldFloat, actual.FieldFloat);
 
-			if (   provider != ProviderName.Firebird
-				&& provider != TestProvName.Firebird3)
+			if (!provider.Contains("Firebird"))
 				Assert.AreEqual(expected.FieldDouble, actual.FieldDouble);
 
 			AssertDateTime(expected.FieldDateTime, actual.FieldDateTime, provider);
@@ -448,8 +449,7 @@ namespace Tests.xUpdate
 		{
 			if (provider.Contains(ProviderName.Informix)
 				|| provider.Contains("Oracle")
-				|| provider == ProviderName.Firebird
-				|| provider == TestProvName.Firebird3)
+				|| provider.Contains("Firebird"))
 				return;
 
 			if (expected != null)
@@ -479,13 +479,12 @@ namespace Tests.xUpdate
 				&& provider != ProviderName.SqlServer2005
 				&& provider != ProviderName.SqlCe
 				&& !provider.Contains(ProviderName.Informix)
-				&& provider != ProviderName.Firebird
-				&& provider != TestProvName.Firebird3
+				&& !provider.Contains(ProviderName.Firebird)
 				&& provider != ProviderName.MySql
 				&& provider != ProviderName.MySqlConnector
 				&& provider != TestProvName.MySql55
 				&& provider != TestProvName.MariaDB
-				&& provider != ProviderName.Access
+				&& !provider.StartsWith("Access")
 				&& provider != ProviderName.SQLiteClassic
 				&& provider != TestProvName.SQLiteClassicMiniProfilerMapped
 				&& provider != TestProvName.SQLiteClassicMiniProfilerUnmapped
@@ -562,6 +561,7 @@ namespace Tests.xUpdate
 					|| provider == ProviderName.MySqlConnector
 					|| provider == TestProvName.MariaDB
 					|| provider == TestProvName.MySql55
+					|| provider == ProviderName.AccessOdbc
 					|| provider.Contains("Oracle"))
 					expected = expected.Value.AddMilliseconds(-expected.Value.Millisecond);
 			}
@@ -600,8 +600,7 @@ namespace Tests.xUpdate
 				|| provider == TestProvName.SQLiteClassicMiniProfilerUnmapped
 				|| provider == ProviderName.SQLiteMS
 				|| provider == TestProvName.MySql55
-				|| provider == ProviderName.Firebird
-				|| provider == TestProvName.Firebird3)
+				|| provider.Contains("Firebird"))
 				return;
 
 			if (expected != null)
@@ -634,6 +633,7 @@ namespace Tests.xUpdate
 						break;
 					case ProviderName.Firebird      :
 					case TestProvName.Firebird3     :
+					case TestProvName.Firebird4     :
 						expected = TimeSpan.FromTicks((expected.Value.Ticks / 1000) * 1000);
 						break;
 					case ProviderName.InformixDB2   :
@@ -646,10 +646,13 @@ namespace Tests.xUpdate
 					case ProviderName.PostgreSQL95  :
 					case TestProvName.PostgreSQL10  :
 					case TestProvName.PostgreSQL11  :
+					case TestProvName.PostgreSQL12  :
+					case TestProvName.PostgreSQL13  :
 						expected = TimeSpan.FromTicks((expected.Value.Ticks / 10) * 10);
 						break;
 					case ProviderName.DB2           :
 					case ProviderName.Access        :
+					case ProviderName.AccessOdbc    :
 					case ProviderName.SapHanaNative :
 					case ProviderName.SapHanaOdbc   :
 					case TestProvName.MariaDB       :

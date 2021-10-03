@@ -13,12 +13,13 @@ namespace Tests.Model
 		public DateTime  DateTimeValue;
 		[Column(DataType = DataType.Int16, Configuration = ProviderName.Oracle)]
 		public bool      BoolValue;
+		[Column(DataType = DataType.Char, Length = 36, Configuration = ProviderName.Informix)]
 		public Guid      GuidValue;
 		public Binary?   BinaryValue;
 		public short     SmallIntValue;
 		public string?   StringValue;
 
-		public override bool Equals(object obj)
+		public override bool Equals(object? obj)
 		{
 			return Equals(obj as LinqDataTypes);
 		}
@@ -49,8 +50,11 @@ namespace Tests.Model
 			return ID;
 		}
 
-		public int CompareTo(object obj)
+		public int CompareTo(object? obj)
 		{
+			if (obj == null)
+				return 1;
+
 			return ID - ((LinqDataTypes)obj).ID;
 		}
 
@@ -82,13 +86,14 @@ namespace Tests.Model
 		[Column]                                        public DateTime? DateTimeValue2;
 		[Column(DataType = DataType.Int16, Configuration = ProviderName.Oracle)]
 		[Column]                                        public bool?     BoolValue;
+		[Column(DataType = DataType.Char, Length = 36, Configuration = ProviderName.Informix)]
 		[Column]                                        public Guid?     GuidValue;
 		[Column]                                        public short?    SmallIntValue;
 		[Column]                                        public int?      IntValue;
 		[Column]                                        public long?     BigIntValue;
 		[Column]                                        public string?   StringValue;
 
-		public override bool Equals(object obj)
+		public override bool Equals(object? obj)
 		{
 			return Equals(obj as LinqDataTypes2);
 		}
@@ -118,8 +123,11 @@ namespace Tests.Model
 			return ID;
 		}
 
-		public int CompareTo(object obj)
+		public int CompareTo(object? obj)
 		{
+			if (obj == null)
+				return 1;
+
 			return ID - ((LinqDataTypes2)obj).ID;
 		}
 

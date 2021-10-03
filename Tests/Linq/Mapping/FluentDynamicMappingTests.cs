@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Reflection;
 using LinqToDB;
 using LinqToDB.Mapping;
 
@@ -45,7 +42,7 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.IsTrue(ed["ID"].IsPrimaryKey);
+			Assert.IsTrue(ed["ID"]!.IsPrimaryKey);
 		}
 
 		[Test]
@@ -58,7 +55,7 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.IsTrue(ed["ID2"].IsPrimaryKey);
+			Assert.IsTrue(ed["ID2"]!.IsPrimaryKey);
 		}
 
 		[Test]
@@ -72,7 +69,7 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.IsTrue(ed["ID"].IsPrimaryKey);
+			Assert.IsTrue(ed["ID"]!.IsPrimaryKey);
 		}
 
 		[Test]
@@ -86,7 +83,7 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.IsTrue(ed["ID2"].IsPrimaryKey);
+			Assert.IsTrue(ed["ID2"]!.IsPrimaryKey);
 		}
 
 		[Test]
@@ -132,7 +129,7 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.IsTrue(ed["ID"].IsPrimaryKey);
+			Assert.IsTrue(ed["ID"]!.IsPrimaryKey);
 		}
 
 		[Test]
@@ -146,7 +143,7 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.IsTrue(ed["ID2"].IsPrimaryKey);
+			Assert.IsTrue(ed["ID2"]!.IsPrimaryKey);
 		}
 
 		[Test]
@@ -160,7 +157,7 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.IsTrue(ed["ID"].IsIdentity);
+			Assert.IsTrue(ed["ID"]!.IsIdentity);
 		}
 
 		[Test]
@@ -174,7 +171,7 @@ namespace Tests.Mapping
 
 			var ed = ms.GetEntityDescriptor(typeof(MyClass));
 
-			Assert.IsTrue(ed["ID2"].IsIdentity);
+			Assert.IsTrue(ed["ID2"]!.IsIdentity);
 		}
 
 		[Test]

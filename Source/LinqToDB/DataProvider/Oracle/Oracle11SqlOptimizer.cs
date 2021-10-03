@@ -5,6 +5,7 @@ namespace LinqToDB.DataProvider.Oracle
 	using Extensions;
 	using SqlProvider;
 	using SqlQuery;
+	using Mapping;
 
 	public class Oracle11SqlOptimizer : BasicSqlOptimizer
 	{
@@ -29,22 +30,102 @@ namespace LinqToDB.DataProvider.Oracle
 				case QueryType.Update : statement = GetAlternativeUpdate((SqlUpdateStatement) statement); break;
 			}
 
-			statement = QueryHelper.OptimizeSubqueries(statement);
-
 			return statement;
 		}
 
-		public override ISqlExpression ConvertExpression(ISqlExpression expr)
+		protected static string[] OracleLikeCharactersToEscape = {"%", "_"};
+
+		public override string[] LikeCharactersToEscape => OracleLikeCharactersToEscape;
+
+		public override bool IsParameterDependedElement(IQueryElement element)
 		{
-			expr = base.ConvertExpression(expr);
+			if (base.IsParameterDependedElement(element))
+				return true;
 
-			if (expr is SqlBinaryExpression)
+			switch (element.ElementType)
 			{
-				var be = (SqlBinaryExpression)expr;
+				case QueryElementType.ExprExprPredicate:
+				{
+					var expr = (SqlPredicate.ExprExpr)element;
 
+					// Oracle saves empty string as null to database, so we need predicate modification before sending query
+					//
+					if ((expr.Operator == SqlPredicate.Operator.Equal          ||
+						 expr.Operator == SqlPredicate.Operator.NotEqual       ||
+						 expr.Operator == SqlPredicate.Operator.GreaterOrEqual ||
+						 expr.Operator == SqlPredicate.Operator.LessOrEqual) && expr.WithNull == true)
+					{
+						if (expr.Expr1.SystemType == typeof(string) && expr.Expr1.CanBeEvaluated(true))
+							return true;
+						if (expr.Expr2.SystemType == typeof(string) && expr.Expr2.CanBeEvaluated(true))
+							return true;
+					}
+					break;
+				}
+			}
+
+			return false;
+		}
+
+		public override ISqlPredicate ConvertPredicateImpl<TContext>(MappingSchema mappingSchema, ISqlPredicate predicate, ConvertVisitor<RunOptimizationContext<TContext>> visitor, OptimizationContext optimizationContext)
+		{
+			switch (predicate.ElementType)
+			{
+				case QueryElementType.ExprExprPredicate:
+				{
+					var expr = (SqlPredicate.ExprExpr)predicate;
+
+					// Oracle saves empty string as null to database, so we need predicate modification before sending query
+					//
+					if (expr.WithNull == true &&
+						(expr.Operator == SqlPredicate.Operator.Equal          ||
+						 expr.Operator == SqlPredicate.Operator.NotEqual       ||
+						 expr.Operator == SqlPredicate.Operator.GreaterOrEqual ||
+						 expr.Operator == SqlPredicate.Operator.LessOrEqual))
+					{
+						if (expr.Expr1.SystemType == typeof(string) &&
+						    expr.Expr1.TryEvaluateExpression(optimizationContext.Context, out var value1) && value1 is string string1)
+						{
+							if (string1 == "")
+							{
+								var sc = new SqlSearchCondition();
+								sc.Conditions.Add(new SqlCondition(false, new SqlPredicate.ExprExpr(expr.Expr1, expr.Operator, expr.Expr2, null), true));
+								sc.Conditions.Add(new SqlCondition(false, new SqlPredicate.IsNull(expr.Expr2, false), true));
+								return sc;
+							}
+						}
+
+						if (expr.Expr2.SystemType == typeof(string) &&
+						    expr.Expr2.TryEvaluateExpression(optimizationContext.Context, out var value2) && value2 is string string2)
+						{
+							if (string2 == "")
+							{
+								var sc = new SqlSearchCondition();
+								sc.Conditions.Add(new SqlCondition(false, new SqlPredicate.ExprExpr(expr.Expr1, expr.Operator, expr.Expr2, null), true));
+								sc.Conditions.Add(new SqlCondition(false, new SqlPredicate.IsNull(expr.Expr1, false), true));
+								return sc;
+							}
+						}
+					}
+					break;
+				}
+			}
+
+			predicate = base.ConvertPredicateImpl(mappingSchema, predicate, visitor, optimizationContext);
+
+			return predicate;
+		}
+
+		public override ISqlExpression ConvertExpressionImpl<TContext>(ISqlExpression expression, ConvertVisitor<TContext> visitor,
+			EvaluationContext context)
+		{
+			expression = base.ConvertExpressionImpl(expression, visitor, context);
+
+			if (expression is SqlBinaryExpression be)
+			{
 				switch (be.Operation)
 				{
-					case "%": return new SqlFunction(be.SystemType, "MOD",    be.Expr1, be.Expr2);
+					case "%": return new SqlFunction(be.SystemType, "MOD", be.Expr1, be.Expr2);
 					case "&": return new SqlFunction(be.SystemType, "BITAND", be.Expr1, be.Expr2);
 					case "|": // (a + b) - BITAND(a, b)
 						return Sub(
@@ -57,60 +138,61 @@ namespace LinqToDB.DataProvider.Oracle
 							Add(be.Expr1, be.Expr2, be.SystemType),
 							Mul(new SqlFunction(be.SystemType, "BITAND", be.Expr1, be.Expr2), 2),
 							be.SystemType);
-					case "+": return be.SystemType == typeof(string)? new SqlBinaryExpression(be.SystemType, be.Expr1, "||", be.Expr2, be.Precedence): expr;
+					case "+": return be.SystemType == typeof(string) ? new SqlBinaryExpression(be.SystemType, be.Expr1, "||", be.Expr2, be.Precedence) : expression;
 				}
 			}
-			else if (expr is SqlFunction)
+			else if (expression is SqlFunction func)
 			{
-				var func = (SqlFunction) expr;
-
 				switch (func.Name)
 				{
-					case "Coalesce"       : return new SqlFunction(func.SystemType, "Nvl", func.Parameters);
+					case "Coalesce":
+					{
+						return ConvertCoalesceToBinaryFunc(func, "Nvl");
+					}
 					case "Convert"        :
+					{
+						var ftype = func.SystemType.ToUnderlying();
+
+						if (ftype == typeof(bool))
 						{
-							var ftype = func.SystemType.ToUnderlying();
-
-							if (ftype == typeof(bool))
-							{
-								var ex = AlternativeConvertToBoolean(func, 1);
-								if (ex != null)
-									return ex;
-							}
-
-							if (ftype == typeof(DateTime) || ftype == typeof(DateTimeOffset))
-							{
-								if (IsTimeDataType(func.Parameters[0]))
-								{
-									if (func.Parameters[1].SystemType == typeof(string))
-										return func.Parameters[1];
-
-									return new SqlFunction(func.SystemType, "To_Char", func.Parameters[1], new SqlValue("HH24:MI:SS"));
-								}
-
-								if (IsDateDataType(func.Parameters[0], "Date"))
-								{
-									if (func.Parameters[1].SystemType!.ToUnderlying() == typeof(DateTime)
-										|| func.Parameters[1].SystemType!.ToUnderlying() == typeof(DateTimeOffset))
-									{
-										return new SqlFunction(func.SystemType, "Trunc", func.Parameters[1], new SqlValue("DD"));
-									}
-
-									return new SqlFunction(func.SystemType, "TO_DATE", func.Parameters[1], new SqlValue("YYYY-MM-DD"));
-								}
-								else if (IsDateDataOffsetType(func.Parameters[0]))
-								{
-									if (ftype == typeof(DateTimeOffset))
-										return func.Parameters[1];
-
-									return new SqlFunction(func.SystemType, "TO_TIMESTAMP_TZ", func.Parameters[1], new SqlValue("YYYY-MM-DD HH24:MI:SS"));
-								}
-
-								return new SqlFunction(func.SystemType, "TO_TIMESTAMP", func.Parameters[1], new SqlValue("YYYY-MM-DD HH24:MI:SS"));
-							}
-
-							return new SqlExpression(func.SystemType, "Cast({0} as {1})", Precedence.Primary, FloorBeforeConvert(func), func.Parameters[0]);
+							var ex = AlternativeConvertToBoolean(func, 1);
+							if (ex != null)
+								return ex;
 						}
+
+						if (ftype == typeof(DateTime) || ftype == typeof(DateTimeOffset))
+						{
+							if (IsTimeDataType(func.Parameters[0]))
+							{
+								if (func.Parameters[1].SystemType == typeof(string))
+									return func.Parameters[1];
+
+								return new SqlFunction(func.SystemType, "To_Char", func.Parameters[1], new SqlValue("HH24:MI:SS"));
+							}
+
+							if (IsDateDataType(func.Parameters[0], "Date"))
+							{
+								if (func.Parameters[1].SystemType!.ToUnderlying() == typeof(DateTime)
+									|| func.Parameters[1].SystemType!.ToUnderlying() == typeof(DateTimeOffset))
+								{
+									return new SqlFunction(func.SystemType, "Trunc", func.Parameters[1], new SqlValue("DD"));
+								}
+
+								return new SqlFunction(func.SystemType, "TO_DATE", func.Parameters[1], new SqlValue("YYYY-MM-DD"));
+							}
+							else if (IsDateDataOffsetType(func.Parameters[0]))
+							{
+								if (ftype == typeof(DateTimeOffset))
+									return func.Parameters[1];
+
+								return new SqlFunction(func.SystemType, "TO_TIMESTAMP_TZ", func.Parameters[1], new SqlValue("YYYY-MM-DD HH24:MI:SS"));
+							}
+
+							return new SqlFunction(func.SystemType, "TO_TIMESTAMP", func.Parameters[1], new SqlValue("YYYY-MM-DD HH24:MI:SS"));
+						}
+
+						return new SqlExpression(func.SystemType, "Cast({0} as {1})", Precedence.Primary, FloorBeforeConvert(func), func.Parameters[0]);
+					}
 
 					case "CharIndex"      :
 						return func.Parameters.Length == 2?
@@ -124,18 +206,16 @@ namespace LinqToDB.DataProvider.Oracle
 							new SqlValue(27));
 				}
 			}
-			else if (expr is SqlExpression)
+			else if (expression is SqlExpression e)
 			{
-				var e = (SqlExpression)expr;
-
 				if (e.Expr.StartsWith("To_Number(To_Char(") && e.Expr.EndsWith(", 'FF'))"))
 					return Div(new SqlExpression(e.SystemType, e.Expr.Replace("To_Number(To_Char(", "to_Number(To_Char("), e.Parameters), 1000);
 			}
 
-			return expr;
+			return expression;
 		}
 
-		static readonly ISqlExpression RowNumExpr = new SqlExpression(typeof(long), "ROWNUM", Precedence.Primary, true);
+		static readonly ISqlExpression RowNumExpr = new SqlExpression(typeof(long), "ROWNUM", Precedence.Primary, SqlFlags.IsAggregate | SqlFlags.IsWindowFunction);
 
 		/// <summary>
 		/// Replaces Take/Skip by ROWNUM usage.
@@ -147,7 +227,7 @@ namespace LinqToDB.DataProvider.Oracle
 		protected SqlStatement ReplaceTakeSkipWithRowNum(SqlStatement statement, bool onlySubqueries)
 		{
 			return QueryHelper.WrapQuery(statement,
-				query =>
+				(query, _) =>
 				{
 					if (query.Select.TakeValue == null && query.Select.SkipValue == null)
 						return 0;
@@ -167,8 +247,8 @@ namespace LinqToDB.DataProvider.Oracle
 				}
 				, queries =>
 				{
-					var query = queries[queries.Length - 1];
-					var processingQuery = queries[queries.Length - 2];
+					var query = queries[queries.Count - 1];
+					var processingQuery = queries[queries.Count - 2];
 
 					if (query.Select.SkipValue != null)
 					{
@@ -182,7 +262,7 @@ namespace LinqToDB.DataProvider.Oracle
 									query.Select.SkipValue, "+", query.Select.TakeValue));
 						}
 
-						queries[queries.Length - 3].Where.Expr(rnColumn).Greater.Expr(query.Select.SkipValue);
+						queries[queries.Count - 3].Where.Expr(rnColumn).Greater.Expr(query.Select.SkipValue);
 					}
 					else
 					{
@@ -193,7 +273,15 @@ namespace LinqToDB.DataProvider.Oracle
 					query.Select.SkipValue = null;
 					query.Select.Take(null, null);
 
-				});
+				},
+				allowMutation: true
+				);
+		}
+
+		protected override ISqlExpression ConvertFunction(SqlFunction func)
+		{
+			func = ConvertFunctionParameters(func, false);
+			return base.ConvertFunction(func);
 		}
 	}
 }

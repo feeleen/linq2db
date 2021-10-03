@@ -29,7 +29,7 @@ namespace Tests.UserTests
 				return string.Format("{0} {1} {2}", Name, BoolValue, GuidValue);
 			}
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 			{
 				var e = obj as TypeConvertTable;
 
@@ -82,14 +82,14 @@ namespace Tests.UserTests
 				{
 					Name      = "NotVerified",
 					BoolValue = false,
-					GuidValue = Guid.NewGuid()
+					GuidValue = TestData.Guid1
 				};
 
 				var verified = new TypeConvertTable
 				{
 					Name      = "Verified",
 					BoolValue = true,
-					GuidValue = Guid.NewGuid()
+					GuidValue = TestData.Guid2
 				};
 
 				db.Insert(notVerified, tbl.TableName);

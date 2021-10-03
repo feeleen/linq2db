@@ -162,7 +162,7 @@ namespace Tests.Linq
 					select p);
 		}
 
-		[ActiveIssue(Configuration = TestProvName.AllInformix)]
+		[ActiveIssue("Incorrect length returned for Jürgen: 7 instead of 6", Configuration = TestProvName.AllInformix)]
 		[Test]
 		public void PreferServerFunc1([DataSources] string context)
 		{
@@ -172,7 +172,7 @@ namespace Tests.Linq
 					from p in db.Person select p.FirstName.Length);
 		}
 
-		[ActiveIssue(Configuration = TestProvName.AllInformix)]
+		[ActiveIssue("Incorrect length returned for Jürgen: 7 instead of 6", Configuration = TestProvName.AllInformix)]
 		[Test]
 		public void PreferServerFunc2([DataSources] string context)
 		{
@@ -186,7 +186,7 @@ namespace Tests.Linq
 		{
 			class Entity
 			{
-				public Test? TestField = null;
+				public Test? TestField;
 			}
 
 			public Test? TestClosure(ITestDataContext db)
@@ -195,7 +195,6 @@ namespace Tests.Linq
 			}
 		}
 
-		[ActiveIssue(SkipForNonLinqService = true, Details = "SELECT * generated for query, which doesn't use any column data")]
 		[Test]
 		public void ClosureTest([DataSources] string context)
 		{
@@ -216,7 +215,7 @@ namespace Tests.Linq
 
 				var exp = Expression.Call(((MethodCallExpression)m.Body).Method, emp.Expression);
 
-				var _ = (int)((IQueryable)emp).Provider.Execute(exp);
+				var _ = (int)((IQueryable)emp).Provider.Execute(exp)!;
 			}
 		}
 
@@ -224,9 +223,9 @@ namespace Tests.Linq
 		{
 			public int ID;
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 			{
-				return ((MyClass)obj).ID == ID;
+				return obj is MyClass mc && mc.ID == ID;
 			}
 
 			public override int GetHashCode()

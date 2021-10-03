@@ -55,11 +55,11 @@ namespace Tests.UserTests
 				try
 				{
 					var schemaName = TestUtils.GetSchemaName(db);
-					var schema     = sp.GetSchema(db, TestUtils.GetDefaultSchemaOptions(context, new GetSchemaOptions()
+					var schema     = sp.GetSchema(db, new GetSchemaOptions()
 					{
 						GetTables       = false,
 						IncludedSchemas = schemaName != TestUtils.NO_SCHEMA_NAME ? new[] { schemaName } : null
-					}));
+					});
 
 					var recordsAfter = db.GetTable<AllTypes>().Count();
 
@@ -86,7 +86,7 @@ namespace Tests.UserTests
 			TestProvName.AllInformix,
 			// those providers cannot load schema when in transaction
 			ProviderName.DB2,
-			TestProvName.AllSybase,
+			ProviderName.Access,
 			TestProvName.AllMySql,
 			TestProvName.AllSqlServer)]
 			string context)
@@ -99,11 +99,11 @@ namespace Tests.UserTests
 				var sp = db.DataProvider.GetSchemaProvider();
 
 				var schemaName = TestUtils.GetSchemaName(db);
-				var schema     = sp.GetSchema(db, TestUtils.GetDefaultSchemaOptions(context, new GetSchemaOptions()
+				var schema     = sp.GetSchema(db, new GetSchemaOptions()
 				{
 					GetTables       = false,
 					IncludedSchemas = schemaName != TestUtils.NO_SCHEMA_NAME ? new[] { schemaName } : null
-				}));
+				});
 
 				var recordsAfter = db.GetTable<AllTypes>().Count();
 
@@ -128,10 +128,10 @@ namespace Tests.UserTests
 
 				var sp = db.DataProvider.GetSchemaProvider();
 
-				var ex = Assert.Catch(() => sp.GetSchema(db, TestUtils.GetDefaultSchemaOptions(context, new GetSchemaOptions()
+				var ex = Assert.Catch(() => sp.GetSchema(db, new GetSchemaOptions()
 				{
 					GetTables = false
-				})));
+				}))!;
 
 				Assert.IsInstanceOf<InvalidOperationException>(ex);
 				Assert.IsTrue(ex.Message.Contains("requires the command to have a transaction"));
@@ -139,7 +139,7 @@ namespace Tests.UserTests
 		}
 
 		[Test]
-		public void TestWithTransactionThrowsFromLinqToDB([IncludeDataSources(TestProvName.AllSybase, TestProvName.AllMySql)] string context)
+		public void TestWithTransactionThrowsFromLinqToDB([IncludeDataSources(TestProvName.AllMySql)] string context)
 		{
 			using (var db = new DataConnection(context))
 			using (db.BeginTransaction())
@@ -148,10 +148,10 @@ namespace Tests.UserTests
 
 				var sp = db.DataProvider.GetSchemaProvider();
 
-				var ex = Assert.Catch(() => sp.GetSchema(db, TestUtils.GetDefaultSchemaOptions(context, new GetSchemaOptions()
+				var ex = Assert.Catch(() => sp.GetSchema(db, new GetSchemaOptions()
 				{
 					GetTables = false
-				})));
+				}))!;
 
 				Assert.IsInstanceOf<LinqToDBException>(ex);
 				Assert.AreEqual("Cannot read schema with GetSchemaOptions.GetProcedures = true from transaction. Remove transaction or set GetSchemaOptions.GetProcedures to false", ex.Message);

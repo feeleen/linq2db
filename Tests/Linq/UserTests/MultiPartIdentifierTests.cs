@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 
 using LinqToDB;
@@ -11,15 +10,19 @@ using NUnit.Framework;
 
 namespace Tests.UserTests
 {
-	using Tests;
-
 	[TestFixture]
 	public class MultiPartIdentifierTests : TestBase
 	{
+		[Table]
 		class Table1
 		{
+			[Column]
 			public long Field1;
+
+			[Column]
 			public long Field2;
+
+			[Column]
 			public int? Field3;
 
 			[Association(ThisKey = "Field2", OtherKey = "Field2", CanBeNull = false)]
@@ -29,9 +32,13 @@ namespace Tests.UserTests
 			public Table4? Table4Ref { get; set; }
 		}
 
+		[Table]
 		class Table2
 		{
+			[Column]
 			public long Field2 { get; set; }
+
+			[Column]
 			public int  Field4 { get; set; }
 
 			[Association(ThisKey = "Field2", OtherKey = "Field2", CanBeNull = false)]
@@ -41,17 +48,23 @@ namespace Tests.UserTests
 			public Table3 Table3Ref { get; set; } = null!;
 		}
 
+		[Table]
 		class Table3
 		{
+			[Column]
 			public int Field4;
 
 			[Association(ThisKey="Field4", OtherKey="Field4", CanBeNull=true)]
 			public List<Table2> Table2s { get; set; } = null!;
 		}
 
+		[Table]
 		class Table4
 		{
+			[Column]
 			public int Field3 { get; set; }
+
+			[Column]
 			public int Field4 { get; set; }
 
 			[Association(ThisKey = "Field3", OtherKey = "Field3", CanBeNull = true)]
@@ -61,9 +74,13 @@ namespace Tests.UserTests
 			public Table5 Table5Ref { get; set; } = null!;
 		}
 
+		[Table]
 		class Table5
 		{
+			[Column]
 			public int? Field5;
+
+			[Column]
 			public int  ProblematicalField;
 
 			[Association(ThisKey = "Field5", OtherKey = "ProblematicalField", CanBeNull = true)]
@@ -78,6 +95,11 @@ namespace Tests.UserTests
 			string context)
 		{
 			using (var db = GetDataContext(context))
+			using (db.CreateLocalTable<Table1>())
+			using (db.CreateLocalTable<Table2>())
+			using (db.CreateLocalTable<Table3>())
+			using (db.CreateLocalTable<Table4>())
+			using (db.CreateLocalTable<Table5>())
 			{
 				var q =
 					from t1 in db.GetTable<Table5>()
@@ -98,10 +120,8 @@ namespace Tests.UserTests
 					where t2 == t7
 					select t7;
 
-				var sql = q.ToString();
-				var idx = sql.IndexOf(",");
+				var result = q.ToArray();
 
-				Assert.That(idx, Is.EqualTo(-1));
 			}
 		}
 	}

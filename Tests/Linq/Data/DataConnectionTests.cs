@@ -4,29 +4,30 @@ using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-
-using NUnit.Framework;
-
 using LinqToDB;
+using LinqToDB.Configuration;
 using LinqToDB.Data;
 using LinqToDB.DataProvider;
 using LinqToDB.DataProvider.DB2;
 using LinqToDB.DataProvider.SqlServer;
+using NUnit.Framework;
 
 namespace Tests.Data
 {
 	using System.Collections.Generic;
-	using System.Runtime.InteropServices;
+	using System.Data.Common;
 	using System.Transactions;
+	using LinqToDB.AspNet;
 	using LinqToDB.Data.RetryPolicy;
 	using LinqToDB.Mapping;
+	using Microsoft.Extensions.DependencyInjection;
 	using Model;
 
 	[TestFixture]
 	public class DataConnectionTests : TestBase
 	{
 		[Test]
-		public void Test1([NorthwindDataContext] string context)
+		public void Test1([IncludeDataSources(TestProvName.AllSQLite)] string context)
 		{
 			var connectionString = DataConnection.GetConnectionString(context);
 			var dataProvider = DataConnection.GetDataProvider(context);
@@ -55,7 +56,7 @@ namespace Tests.Data
 			ProviderName.SqlServer2008 + ".1",
 			ProviderName.SqlServer2005,
 			ProviderName.SqlServer2005 + ".1",
-			ProviderName.Access)]
+			TestProvName.AllAccess)]
 			string context)
 		{
 			using (var conn = new DataConnection(context))
@@ -267,34 +268,92 @@ namespace Tests.Data
 			}
 		}
 
+		[Test]
+		public void TestServiceCollection1([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var collection = new ServiceCollection();
+			collection.AddLinqToDb((serviceProvider, options) => options.UseConfigurationString(context));
+			var provider = collection.BuildServiceProvider();
+			var con = provider.GetService<IDataContext>();
+			Assert.True(con is DataConnection);
+			Assert.That(((DataConnection)con).ConfigurationString, Is.EqualTo(context));
+		}
+
+		[Test]
+		public void TestServiceCollection2([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var collection = new ServiceCollection();
+			collection.AddLinqToDbContext<DataConnection>((serviceProvider, options) => options.UseConfigurationString(context));
+			var provider = collection.BuildServiceProvider();
+			var con = provider.GetService<DataConnection>();
+			Assert.That(con.ConfigurationString, Is.EqualTo(context));
+		}
+
+		public class DbConnection1 : DataConnection
+		{
+			public DbConnection1(LinqToDbConnectionOptions options) : base(options)
+			{
+			}
+		}
+
+		public class DbConnection2 : DataConnection
+		{
+			public DbConnection2(LinqToDbConnectionOptions<DbConnection2> options) : base(options)
+			{
+			}
+		}
+
+		[Test]
+		public void TestSettingsPerDb([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var collection = new ServiceCollection();
+			collection.AddLinqToDbContext<DbConnection1>((provider, options) => options.UseConfigurationString(context));
+			collection.AddLinqToDbContext<DbConnection2>((provider, options) => {});
+
+			var serviceProvider = collection.BuildServiceProvider();
+			var c1 = serviceProvider.GetService<DbConnection1>();
+			var c2 = serviceProvider.GetService<DbConnection2>();
+			Assert.That(c1.ConfigurationString, Is.EqualTo(context));
+			Assert.That(c2.ConfigurationString, Is.EqualTo(DataConnection.DefaultConfiguration));
+		}
+
+		[Test]
+		public void TestConstructorThrowsWhenGivenInvalidSettings()
+		{
+			Assert.Throws<LinqToDBException>(() => new DbConnection1(new LinqToDbConnectionOptionsBuilder().Build<DbConnection2>()));
+		}
+
 		// informix connection limits interfere with test
 		[Test]
 		[ActiveIssue("Fails due to connection limit for development version when run with nonmanaged provider", Configuration = ProviderName.SybaseManaged)]
 		public void MultipleConnectionsTest([DataSources(TestProvName.AllInformix)] string context)
 		{
-			var exceptions = new ConcurrentBag<Exception>();
+			using (new DisableBaseline("Multi-threading"))
+			{
+				var exceptions = new ConcurrentBag<Exception>();
 
-			var threads = Enumerable
-				.Range(1, 10)
-				.Select(n => new Thread(() =>
-				{
-					try
+				var threads = Enumerable
+					.Range(1, 10)
+					.Select(n => new Thread(() =>
 					{
-						using (var db = GetDataContext(context))
-							db.Parent.ToList();
-					}
-					catch (Exception e)
-					{
-						exceptions.Add(e);
-					}
-				}))
-				.ToArray();
+						try
+						{
+							using (var db = GetDataContext(context))
+								db.Parent.ToList();
+						}
+						catch (Exception e)
+						{
+							exceptions.Add(e);
+						}
+					}))
+					.ToArray();
 
-			foreach (var thread in threads) thread.Start();
-			foreach (var thread in threads) thread.Join();
+				foreach (var thread in threads) thread.Start();
+				foreach (var thread in threads) thread.Join();
 
-			if (exceptions.Count > 0)
-				throw new AggregateException(exceptions);
+				if (!exceptions.IsEmpty)
+					throw new AggregateException(exceptions);
+			}
 		}
 
 		[Test]
@@ -308,13 +367,13 @@ namespace Tests.Data
 			}
 			finally
 			{
-				var tid = Thread.CurrentThread.ManagedThreadId;
+				var tid = Environment.CurrentManagedThreadId;
 
 				await db.CloseAsync();
 
 				db.Dispose();
 
-				if (tid == Thread.CurrentThread.ManagedThreadId)
+				if (tid == Environment.CurrentManagedThreadId)
 					Assert.Inconclusive("Executed synchronously due to lack of async support or there were no underlying async operations");
 			}
 		}
@@ -330,11 +389,11 @@ namespace Tests.Data
 			}
 			finally
 			{
-				var tid = Thread.CurrentThread.ManagedThreadId;
+				var tid = Environment.CurrentManagedThreadId;
 
 				await db.DisposeAsync();
 
-				if (tid == Thread.CurrentThread.ManagedThreadId)
+				if (tid == Environment.CurrentManagedThreadId)
 					Assert.Inconclusive("Executed synchronously due to lack of async support or there were no underlying async operations");
 			}
 		}
@@ -351,11 +410,11 @@ namespace Tests.Data
 					if (cn.State == ConnectionState.Closed)
 						open = true;
 				};
-				conn.OnBeforeConnectionOpenAsync += async (dc, cn, token) => await Task.Run(() =>
+				conn.OnBeforeConnectionOpenAsync += (dc, cn, token) => Task.Run(() =>
 				{
 					if (cn.State == ConnectionState.Closed)
 						openAsync = true;
-				});
+				}, default);
 				Assert.False(open);
 				Assert.False(openAsync);
 				Assert.That(conn.Connection.State, Is.EqualTo(ConnectionState.Open));
@@ -380,7 +439,7 @@ namespace Tests.Data
 						{
 							if (cn.State == ConnectionState.Closed)
 								openAsync = true;
-						});
+						}, default);
 				Assert.False(open);
 				Assert.False(openAsync);
 				await conn.SelectAsync(() => 1);
@@ -675,15 +734,6 @@ namespace Tests.Data
 					Assert.AreEqual(onTrace, cdb.OnTraceConnection);
 				}
 
-				db.OnTraceConnection = null;
-
-				Assert.IsNull(db.OnTraceConnection);
-
-				using (var cdb = (DataConnection)((IDataContext)db).Clone(true))
-				{
-					Assert.IsNull(cdb.OnTraceConnection);
-				}
-
 				db.OnTraceConnection = DataConnection.OnTrace;
 
 				Assert.AreEqual(DataConnection.OnTrace, db.OnTraceConnection);
@@ -777,8 +827,8 @@ namespace Tests.Data
 				}
 			}
 
-			void OnClosing(object sender, EventArgs e) => closing++;
-			void OnClosed(object sender, EventArgs e) => closed++;
+			void OnClosing(object? sender, EventArgs e) => closing++;
+			void OnClosed(object? sender, EventArgs e) => closed++;
 		}
 
 		[Test]
@@ -948,10 +998,10 @@ namespace Tests.Data
 
 		// strange provider errors, review in v3 with more recent providers
 		// also some providers remove credentials from connection string in non-design mode
-		[ActiveIssue(Configurations = new[] 
-		{ 
+		[ActiveIssue(Configurations = new[]
+		{
 			ProviderName.MySqlConnector,
-			ProviderName.SapHana,
+			ProviderName.SapHanaNative, // HanaException: error while parsing protocol
 			// Providers remove credentials in non-design mode:
 			TestProvName.AllPostgreSQL,
 			TestProvName.AllSqlServer,
@@ -1057,6 +1107,7 @@ namespace Tests.Data
 				context == ProviderName.DB2            ||
 				context == ProviderName.InformixDB2    ||
 				context == ProviderName.MySqlConnector ||
+				context == TestProvName.MariaDB        ||
 				context == ProviderName.SapHanaNative  ||
 				context == ProviderName.SqlCe          ||
 				context == ProviderName.Sybase         ||
@@ -1085,8 +1136,7 @@ namespace Tests.Data
 			TransactionScope? scope = withScope ? new TransactionScope() : null;
 			try
 			{
-				using (new AllowMultipleQuery())
-				using (var db = new DataConnection(context))
+				using (var db = GetDataContext(context))
 				using (db.CreateLocalTable(Category.Data))
 				using (db.CreateLocalTable(Product.Data))
 				{
@@ -1107,16 +1157,17 @@ namespace Tests.Data
 			[DataSources(false)] string context, [Values] bool withScope)
 		{
 			if (withScope && (
-				context == ProviderName.Access              ||
 				context == ProviderName.DB2                 ||
 				context == ProviderName.InformixDB2         ||
 				context == ProviderName.SapHanaOdbc         ||
 				context == ProviderName.SqlCe               ||
 				context == ProviderName.Sybase              ||
-#if NETCOREAPP2_1
-				(!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && context == ProviderName.OracleManaged) ||
+#if !NET472
+				(context.Contains("Oracle") && context.Contains("Managed")) ||
+				context == ProviderName.SapHanaNative       ||
 #endif
 				TestProvName.AllMySqlData.Contains(context) ||
+				context.StartsWith("Access")                ||
 				context.Contains("SqlServer")               ||
 				context.Contains("SqlAzure")                ||
 				context.Contains("PostgreSQL")              ||
@@ -1124,6 +1175,7 @@ namespace Tests.Data
 				))
 			{
 				// Access: The ITransactionLocal interface is not supported by the 'Microsoft.Jet.OLEDB.4.0' provider.  Local transactions are unavailable with the current provider.
+				// Access>ODBC: ERROR [HY092] [Microsoft][ODBC Microsoft Access Driver]Invalid attribute/option identifier
 				// DB2: ERROR [58005] [IBM][DB2/NT64] SQL0998N  Error occurred during transaction or heuristic processing.  Reason Code = "16". Subcode = "2-8004D026".
 				// Informix DB2: ERROR [2E000] [IBM] SQL1001N  "<DBNAME>" is not a valid database name.  SQLSTATE=2E000
 				// MySql.Data: Multiple simultaneous connections or connections with different connection strings inside the same transaction are not currently supported.
@@ -1133,6 +1185,7 @@ namespace Tests.Data
 				// SQLCE: The connection object can not be enlisted in transaction scope.
 				// Sybase native: Only One Local connection allowed in the TransactionScope
 				// Oracle managed: Operation is not supported on this platform.
+				// SAP.Native: Operation is not supported on this platform.
 				// SqlServer: The operation is not valid for the state of the transaction.
 				Assert.Inconclusive("Provider not configured or has issues with TransactionScope");
 			}
@@ -1140,7 +1193,6 @@ namespace Tests.Data
 			TransactionScope? scope = withScope ? new TransactionScope() : null;
 			try
 			{
-				using (new AllowMultipleQuery())
 				using (var db = new DataConnection(context))
 				{
 					// test cloned data connection without LoadWith, as it doesn't use cloning in v3
@@ -1158,7 +1210,127 @@ namespace Tests.Data
 				scope?.Dispose();
 			}
 		}
-#endregion
+		#endregion
 
+		[Table]
+		class TransactionScopeTable
+		{
+			[Column] public int Id { get; set; }
+		}
+
+		[Test]
+		public void Issue2676TransactionScopeTest1([IncludeDataSources(false, TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = new TestDataConnection(context))
+			{
+				db.DropTable<TransactionScopeTable>(throwExceptionIfNotExists: false);
+				db.CreateTable<TransactionScopeTable>();
+			}
+
+			try
+			{
+				using (var db = new TestDataConnection(context))
+				{
+					db.GetTable<TransactionScopeTable>().Insert(() => new TransactionScopeTable() { Id = 1 });
+					using (var transaction = new TransactionScope(TransactionScopeOption.Required, TransactionScopeAsyncFlowOption.Enabled))
+					{
+						// this query will be executed outside of TransactionScope transaction as it wasn't enlisted into connection
+						db.GetTable<TransactionScopeTable>().Insert(() => new TransactionScopeTable() { Id = 2 });
+
+						Transaction.Current!.Rollback();
+					}
+
+					db.GetTable<TransactionScopeTable>().Insert(() => new TransactionScopeTable() { Id = 3 });
+
+					var ids = db.GetTable<TransactionScopeTable>().Select(_ => _.Id).OrderBy(_ => _).ToArray();
+
+					Assert.AreEqual(3, ids.Length);
+				}
+			}
+			finally
+			{
+				using (var db = new TestDataConnection(context))
+				{
+					db.DropTable<TransactionScopeTable>(throwExceptionIfNotExists: false);
+				}
+			}
+		}
+
+		[Test]
+		public void Issue2676TransactionScopeTest2([IncludeDataSources(false, TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = new TestDataConnection(context))
+			{
+				db.DropTable<TransactionScopeTable>(throwExceptionIfNotExists: false);
+				db.CreateTable<TransactionScopeTable>();
+			}
+
+			try
+			{
+				using (var db = new TestDataConnection(context))
+				{
+					using (var transaction = new TransactionScope(TransactionScopeOption.Required, TransactionScopeAsyncFlowOption.Enabled))
+					{
+						db.GetTable<TransactionScopeTable>().Insert(() => new TransactionScopeTable() { Id = 2 });
+
+						Transaction.Current!.Rollback();
+					}
+
+					db.GetTable<TransactionScopeTable>().Insert(() => new TransactionScopeTable() { Id = 3 });
+
+					var ids = db.GetTable<TransactionScopeTable>().Select(_ => _.Id).OrderBy(_ => _).ToArray();
+
+					Assert.AreEqual(1, ids.Length);
+					Assert.AreEqual(3, ids[0]);
+				}
+			}
+			finally
+			{
+				using (var db = new TestDataConnection(context))
+				{
+					db.DropTable<TransactionScopeTable>(throwExceptionIfNotExists: false);
+				}
+			}
+		}
+
+		[Test]
+		public void Issue2676TransactionScopeTest3([IncludeDataSources(false, TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = new TestDataConnection(context))
+			{
+				db.DropTable<TransactionScopeTable>(throwExceptionIfNotExists: false);
+				db.CreateTable<TransactionScopeTable>();
+			}
+
+			try
+			{
+				using (var db = new TestDataConnection(context))
+				{
+					db.GetTable<TransactionScopeTable>().Insert(() => new TransactionScopeTable() { Id = 1 });
+					using (var transaction = new TransactionScope(TransactionScopeOption.Required, TransactionScopeAsyncFlowOption.Enabled))
+					{
+						((DbConnection)db.Connection).EnlistTransaction(Transaction.Current);
+						db.GetTable<TransactionScopeTable>().Insert(() => new TransactionScopeTable() { Id = 2 });
+
+						Transaction.Current!.Rollback();
+					}
+
+					db.GetTable<TransactionScopeTable>().Insert(() => new TransactionScopeTable() { Id = 3 });
+
+					var ids = db.GetTable<TransactionScopeTable>().Select(_ => _.Id).OrderBy(_ => _).ToArray();
+
+					Assert.AreEqual(2, ids.Length);
+					Assert.AreEqual(1, ids[0]);
+					Assert.AreEqual(3, ids[1]);
+				}
+			}
+			finally
+			{
+				using (var db = new TestDataConnection(context))
+				{
+					db.DropTable<TransactionScopeTable>(throwExceptionIfNotExists: false);
+				}
+			}
+		}
 	}
 }

@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using LinqToDB.Mapping;
 
 namespace LinqToDB.SqlQuery
 {
+	using Mapping;
+
 	public class SqlCteTable : SqlTable
 	{
 		public          CteClause? Cte  { get; private set; }
@@ -21,6 +22,10 @@ namespace LinqToDB.SqlQuery
 			set => base.PhysicalName = value;
 		}
 
+		// required by Clone :-/
+		internal string? BaseName         => base.Name;
+		internal string? BasePhysicalName => base.PhysicalName;
+
 		public SqlCteTable(
 			MappingSchema mappingSchema,
 			CteClause     cte)
@@ -29,18 +34,18 @@ namespace LinqToDB.SqlQuery
 			Cte = cte ?? throw new ArgumentNullException(nameof(cte));
 
 			// CTE has it's own names even there is mapping
-			foreach (var field in Fields.Values)
+			foreach (var field in Fields)
 				field.PhysicalName = field.Name;
 		}
 
 		internal SqlCteTable(int id, string alias, SqlField[] fields, CteClause cte)
-			: base(id, cte.Name, alias, string.Empty, string.Empty, string.Empty, cte.Name, cte.ObjectType, null, fields, SqlTableType.Cte, null)
+			: base(id, cte.Name, alias, string.Empty, string.Empty, string.Empty, cte.Name, cte.ObjectType, null, fields, SqlTableType.Cte, null, TableOptions.NotSet)
 		{
 			Cte = cte ?? throw new ArgumentNullException(nameof(cte));
 		}
 
 		internal SqlCteTable(int id, string alias, SqlField[] fields)
-			: base(id, null, alias, string.Empty, string.Empty, string.Empty, null, null, null, fields, SqlTableType.Cte, null)
+			: base(id, null, alias, string.Empty, string.Empty, string.Empty, null, null, null, fields, SqlTableType.Cte, null, TableOptions.NotSet)
 		{
 		}
 
@@ -71,9 +76,10 @@ namespace LinqToDB.SqlQuery
 		public override QueryElementType ElementType  => QueryElementType.SqlCteTable;
 		public override SqlTableType     SqlTableType => SqlTableType.Cte;
 
-		public StringBuilder ToString(StringBuilder sb, Dictionary<IQueryElement, IQueryElement> dic)
+		public override StringBuilder ToString(StringBuilder sb, Dictionary<IQueryElement, IQueryElement> dic)
 		{
-			return sb.Append(Name);
+			Cte?.ToString(sb, dic);
+			return sb;
 		}
 
 		#region IQueryElement Members

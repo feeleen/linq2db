@@ -1,6 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.Data;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace LinqToDB.DataProvider.PostgreSQL
 {
@@ -31,9 +33,10 @@ namespace LinqToDB.DataProvider.PostgreSQL
 			SqlProviderFlags.IsDistinctOrderBySupported        = false;
 			SqlProviderFlags.IsSubQueryOrderBySupported        = true;
 			SqlProviderFlags.IsAllSetOperationsSupported       = true;
+			SqlProviderFlags.IsGroupByExpressionSupported      = false;
 
-			SetCharFieldToType<char>("bpchar"   , (r, i) => DataTools.GetChar(r, i));
-			SetCharFieldToType<char>("character", (r, i) => DataTools.GetChar(r, i));
+			SetCharFieldToType<char>("bpchar"   , DataTools.GetCharExpression);
+			SetCharFieldToType<char>("character", DataTools.GetCharExpression);
 
 			SetCharField("bpchar"   , (r,i) => r.GetString(i).TrimEnd(' '));
 			SetCharField("character", (r,i) => r.GetString(i).TrimEnd(' '));
@@ -104,6 +107,7 @@ namespace LinqToDB.DataProvider.PostgreSQL
 			mapType("oid"                     , NpgsqlProviderAdapter.NpgsqlDbType.Oid);
 			mapType("regtype"                 , NpgsqlProviderAdapter.NpgsqlDbType.Regtype);
 			mapType("xid"                     , NpgsqlProviderAdapter.NpgsqlDbType.Xid);
+			mapType("xid8"                    , NpgsqlProviderAdapter.NpgsqlDbType.Xid8);
 			mapType("cid"                     , NpgsqlProviderAdapter.NpgsqlDbType.Cid);
 			mapType("tid"                     , NpgsqlProviderAdapter.NpgsqlDbType.Tid);
 			// other types
@@ -153,16 +157,21 @@ namespace LinqToDB.DataProvider.PostgreSQL
 
 		private static string GetProviderName(PostgreSQLVersion version)
 		{
-			switch (version)
+			return version switch
 			{
-				case PostgreSQLVersion.v92:
-					return ProviderName.PostgreSQL92;
-				case PostgreSQLVersion.v93:
-					return ProviderName.PostgreSQL93;
-				default:
-					return ProviderName.PostgreSQL95;
-			}
+				PostgreSQLVersion.v92 => ProviderName.PostgreSQL92,
+				PostgreSQLVersion.v93 => ProviderName.PostgreSQL93,
+				_                     => ProviderName.PostgreSQL95,
+			};
 		}
+
+		public override TableOptions SupportedTableOptions =>
+			TableOptions.IsTemporary                |
+			TableOptions.IsLocalTemporaryStructure  |
+			TableOptions.IsLocalTemporaryData       |
+			TableOptions.IsTransactionTemporaryData |
+			TableOptions.CreateIfNotExists          |
+			TableOptions.DropIfExists;
 
 		public override ISqlBuilder CreateSqlBuilder(MappingSchema mappingSchema)
 		{
@@ -178,7 +187,7 @@ namespace LinqToDB.DataProvider.PostgreSQL
 			return new PostgreSQLSchemaProvider(this);
 		}
 
-#if NETSTANDARD2_0 || NETCOREAPP2_1
+#if !NETFRAMEWORK
 		public override bool? IsDBNullAllowed(IDataReader reader, int idx)
 		{
 			return true;
@@ -214,6 +223,8 @@ namespace LinqToDB.DataProvider.PostgreSQL
 				case DataType.Dictionary: type = NpgsqlProviderAdapter.NpgsqlDbType.Hstore ; break;
 				case DataType.Json      : type = NpgsqlProviderAdapter.NpgsqlDbType.Json   ; break;
 				case DataType.BinaryJson: type = NpgsqlProviderAdapter.NpgsqlDbType.Jsonb  ; break;
+				case DataType.Interval  : type = NpgsqlProviderAdapter.NpgsqlDbType.Interval ; break;
+				case DataType.Int64     : type = NpgsqlProviderAdapter.NpgsqlDbType.Bigint ; break;
 			}
 
 			if (!string.IsNullOrEmpty(dataType.DbType))
@@ -269,6 +280,30 @@ namespace LinqToDB.DataProvider.PostgreSQL
 				source);
 		}
 
+		public override Task<BulkCopyRowsCopied> BulkCopyAsync<T>(
+			ITable<T> table, BulkCopyOptions options, IEnumerable<T> source, CancellationToken cancellationToken)
+		{
+			return new PostgreSQLBulkCopy(this).BulkCopyAsync(
+				options.BulkCopyType == BulkCopyType.Default ? PostgreSQLTools.DefaultBulkCopyType : options.BulkCopyType,
+				table,
+				options,
+				source,
+				cancellationToken);
+		}
+
+#if NATIVE_ASYNC
+		public override Task<BulkCopyRowsCopied> BulkCopyAsync<T>(
+			ITable<T> table, BulkCopyOptions options, IAsyncEnumerable<T> source, CancellationToken cancellationToken)
+		{
+			return new PostgreSQLBulkCopy(this).BulkCopyAsync(
+				options.BulkCopyType == BulkCopyType.Default ? PostgreSQLTools.DefaultBulkCopyType : options.BulkCopyType,
+				table,
+				options,
+				source,
+				cancellationToken);
+		}
+#endif
+
 		#endregion
 
 		/// <summary>
@@ -305,7 +340,7 @@ namespace LinqToDB.DataProvider.PostgreSQL
 
 			dbType = dbType.Trim();
 
-			// normalize synonyms and parametrized type names
+			// normalize synonyms and parameterized type names
 			switch (dbType)
 			{
 				case "int4range":
@@ -414,13 +449,12 @@ namespace LinqToDB.DataProvider.PostgreSQL
 
 		private static MappingSchema GetMappingSchema(PostgreSQLVersion version, MappingSchema providerSchema)
 		{
-			switch (version)
+			return version switch
 			{
-				case PostgreSQLVersion.v92: return new PostgreSQL92MappingSchema(providerSchema);
-				case PostgreSQLVersion.v93: return new PostgreSQL93MappingSchema(providerSchema);
-				default:
-				case PostgreSQLVersion.v95: return new PostgreSQL95MappingSchema(providerSchema);
-			}
+				PostgreSQLVersion.v92 => new PostgreSQL92MappingSchema(providerSchema),
+				PostgreSQLVersion.v93 => new PostgreSQL93MappingSchema(providerSchema),
+				_                     => new PostgreSQL95MappingSchema(providerSchema),
+			};
 		}
 	}
 }

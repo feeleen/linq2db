@@ -38,6 +38,7 @@ namespace LinqToDB.Linq.Builder
 					throw new InvalidOperationException();
 			}
 
+			bodyExpr = builder.ConvertExpression(bodyExpr);
 			builder.RegisterCte(query, bodyExpr, () => new CteClause(null, bodyExpr.Type.GetGenericArguments()[0], isRecursive, name));
 
 			var cte = builder.BuildCte(bodyExpr,
@@ -93,15 +94,15 @@ namespace LinqToDB.Linq.Builder
 
 			IBuildContext? GetQueryContext()
 			{
-				return _cteQueryContext ?? (_cteQueryContext = Builder.GetCteContext(_cteExpression));
+				return _cteQueryContext ??= Builder.GetCteContext(_cteExpression);
 			}
 
-			public override IsExpressionResult IsExpression(Expression? expression, int level, RequestFor requestFor)
+			public override IsExpressionResult IsExpression(Expression? expression, int level, RequestFor requestFlag)
 			{
 				var queryContext = GetQueryContext();
 				if (queryContext == null)
-					return base.IsExpression(expression, level, requestFor);
-				return queryContext.IsExpression(expression, level, requestFor);
+					return base.IsExpression(expression, level, requestFlag);
+				return queryContext.IsExpression(expression, level, requestFlag);
 			}
 
 			static string? GenerateAlias(Expression? expression)
@@ -132,6 +133,8 @@ namespace LinqToDB.Linq.Builder
 					ConvertToSql(null, 0, ConvertFlags.All);
 				}
 
+				expression = SequenceHelper.CorrectExpression(expression, this, queryContext);
+
 				var infos  = queryContext.ConvertToIndex(expression, level, flags);
 
 				var result = infos
@@ -145,10 +148,7 @@ namespace LinqToDB.Linq.Builder
 						                  info.MemberChain.LastOrDefault()?.Name;
 						}	
 						var field    = RegisterCteField(baseInfo?.Sql, info.Sql, info.Index, alias);
-						return new SqlInfo(info.MemberChain)
-						{
-							Sql = field,
-						};
+						return new SqlInfo(info.MemberChain, field);
 					})
 					.ToArray();
 				return result;
@@ -214,7 +214,7 @@ namespace LinqToDB.Linq.Builder
 					UpdateMissingFields();
 				}
 
-				return base.ConvertToParentIndex(index, context);
+				return Parent?.ConvertToParentIndex(index, this) ?? index;
 			}
 
 			SqlField RegisterCteField(ISqlExpression? baseExpression, ISqlExpression expression, int index, string? alias)
@@ -236,7 +236,8 @@ namespace LinqToDB.Linq.Builder
 					return newField;
 				});
 
-				if (!SqlTable.Fields.TryGetValue(cteField.Name!, out var field))
+				var field = SqlTable[cteField.Name!];
+				if (field == null)
 				{
 					field = new SqlField(cteField);
 					SqlTable.Add(field);

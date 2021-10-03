@@ -6,13 +6,16 @@ using NUnit.Framework;
 
 namespace Tests.Linq
 {
+	using System.Threading.Tasks;
+	using LinqToDB;
+	using LinqToDB.Tools;
 	using Model;
 
 	[TestFixture]
 	public class SetTests : TestBase
 	{
 		[Test]
-		public void Except1([DataSources] string context)
+		public void Except1([DataSources(ProviderName.SqlServer2000)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -21,7 +24,7 @@ namespace Tests.Linq
 		}
 
 		//[Test]
-		public void Except2([DataSources] string context)
+		public void Except2([DataSources(ProviderName.SqlServer2000)] string context)
 		{
 			var ids = new[] { 1, 2 };
 
@@ -32,7 +35,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Intersect([DataSources] string context)
+		public void Intersect([DataSources(ProviderName.SqlServer2000)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -140,6 +143,26 @@ namespace Tests.Linq
 					join ch in db.Child on p.ParentID equals ch.ParentID
 					join gc in db.GrandChild on ch.ChildID equals gc.ChildID
 					where arr.Contains(gc)
+					select p);
+		}
+
+		[Test]
+		public void NotContains8([DataSources] string context)
+		{
+			var arr = new[] { GrandChild.ElementAt(0), GrandChild.ElementAt(1) };
+
+			using (var db = GetDataContext(context))
+				AreEqual(
+					from p in Parent
+					join ch in Child on p.ParentID equals ch.ParentID
+					join gc in GrandChild on ch.ChildID equals gc.ChildID
+					where !arr.Contains(gc)
+					select p
+					,
+					from p in db.Parent
+					join ch in db.Child on p.ParentID equals ch.ParentID
+					join gc in db.GrandChild on ch.ChildID equals gc.ChildID
+					where !arr.Contains(gc)
 					select p);
 		}
 
@@ -363,6 +386,37 @@ namespace Tests.Linq
 			{
 				GetData(db, new List<int?> { 2 });
 				GetData(db, new List<int?> { 3 });
+			}
+		}
+
+		[Test]
+		public void Issue3017([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using var scope = new DisableBaseline("Multithreading");
+
+			var tasks = new List<Task>();
+
+			for (var i = 0; i < 30; i++)
+			{
+				var local = i;
+				tasks.Add(Task.Run(() => Issue3017Action(context)));
+			}
+
+			Task.WaitAll(tasks.ToArray());
+
+			foreach (var task in tasks)
+				Assert.False(task.IsFaulted);
+		}
+
+		private async Task Issue3017Action(string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				var targets = db.Person.ToArray();
+
+				var keys = targets.Select(r => new { r.ID, r.FirstName, r.LastName });
+
+				await db.Person.Where(r => new { r.ID, r.FirstName, r.LastName }.In(keys)).ToListAsync();
 			}
 		}
 	}

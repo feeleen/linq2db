@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace LinqToDB.DataProvider.Oracle
 {
@@ -18,9 +20,9 @@ namespace LinqToDB.DataProvider.Oracle
 
 		public OracleDataProvider(string name, OracleVersion version)
 			: base(
-				  name,
-				  GetMappingSchema(name, OracleProviderAdapter.GetInstance(name).MappingSchema),
-				  OracleProviderAdapter.GetInstance(name))
+				name,
+				GetMappingSchema(name, OracleProviderAdapter.GetInstance(name).MappingSchema),
+				OracleProviderAdapter.GetInstance(name))
 		{
 			Version = version;
 
@@ -41,8 +43,8 @@ namespace LinqToDB.DataProvider.Oracle
 
 			SetCharField            ("Char",  (r, i) => r.GetString(i).TrimEnd(' '));
 			SetCharField            ("NChar", (r, i) => r.GetString(i).TrimEnd(' '));
-			SetCharFieldToType<char>("Char",  (r, i) => DataTools.GetChar(r, i));
-			SetCharFieldToType<char>("NChar", (r, i) => DataTools.GetChar(r, i));
+			SetCharFieldToType<char>("Char",  DataTools.GetCharExpression);
+			SetCharFieldToType<char>("NChar", DataTools.GetCharExpression);
 
 			if (version == OracleVersion.v11)
 				_sqlOptimizer = new Oracle11SqlOptimizer(SqlProviderFlags);
@@ -80,24 +82,30 @@ namespace LinqToDB.DataProvider.Oracle
 
 		public OracleVersion Version { get; }
 
+		public override TableOptions SupportedTableOptions =>
+			TableOptions.IsTemporary                |
+			TableOptions.IsGlobalTemporaryStructure |
+			TableOptions.IsLocalTemporaryData       |
+			TableOptions.IsTransactionTemporaryData |
+			TableOptions.CreateIfNotExists          |
+			TableOptions.DropIfExists;
+
 		public override ISqlBuilder CreateSqlBuilder(MappingSchema mappingSchema)
 		{
-			switch (Version)
+			return Version switch
 			{
-				case OracleVersion.v11: return new Oracle11SqlBuilder(this, mappingSchema, GetSqlOptimizer(), SqlProviderFlags);
-				default               :
-				case OracleVersion.v12: return new Oracle12SqlBuilder(this, mappingSchema, GetSqlOptimizer(), SqlProviderFlags);
-			}
+				OracleVersion.v11 => new Oracle11SqlBuilder(this, mappingSchema, GetSqlOptimizer(), SqlProviderFlags),
+				_                 => new Oracle12SqlBuilder(this, mappingSchema, GetSqlOptimizer(), SqlProviderFlags),
+			};
 		}
 
 		private static MappingSchema GetMappingSchema(string name, MappingSchema providerSchema)
 		{
-			switch (name)
+			return name switch
 			{
-				default                        :
-				case ProviderName.OracleManaged: return new OracleMappingSchema.ManagedMappingSchema(providerSchema);
-				case ProviderName.OracleNative : return new OracleMappingSchema.NativeMappingSchema (providerSchema);
-			}
+				ProviderName.OracleNative => new OracleMappingSchema.NativeMappingSchema(providerSchema),
+				_                         => new OracleMappingSchema.ManagedMappingSchema(providerSchema),
+			};
 		}
 
 		readonly ISqlOptimizer _sqlOptimizer;
@@ -133,16 +141,12 @@ namespace LinqToDB.DataProvider.Oracle
 				if (parameters != null)
 					foreach (var parameter in parameters)
 					{
-						if (parameter.IsArray && parameter.Value is object[])
+						if (parameter.IsArray
+							&& parameter.Value is object[] value
+							&& value.Length != 0)
 						{
-							var value = (object[])parameter.Value;
-
-							if (value.Length != 0)
-							{
-								Adapter.SetArrayBindCount(command, value.Length);
-
-								break;
-							}
+							Adapter.SetArrayBindCount(command, value.Length);
+							break;
 						}
 					}
 			}
@@ -150,7 +154,7 @@ namespace LinqToDB.DataProvider.Oracle
 
 		public override void DisposeCommand(DataConnection dataConnection)
 		{
-			foreach (DbParameter param in dataConnection.Command.Parameters)
+			foreach (DbParameter? param in dataConnection.Command.Parameters)
 			{
 				if (param is IDisposable disposable)
 					disposable.Dispose();
@@ -176,7 +180,12 @@ namespace LinqToDB.DataProvider.Oracle
 					if (value is bool boolValue)
 						value = boolValue ? (byte)1 : (byte)0;
 					break;
-				case DataType.Guid:
+				case DataType.Guid     :
+				case DataType.Binary   :
+				case DataType.VarBinary:
+				case DataType.Blob     :
+				case DataType.Image    :
+					// https://github.com/linq2db/linq2db/issues/3207
 					if (value is Guid guid) value = guid.ToByteArray();
 					break;
 				case DataType.Time:
@@ -205,7 +214,7 @@ namespace LinqToDB.DataProvider.Oracle
 					}
 			}
 
-			if (dataType.DataType == DataType.Undefined && value is string && ((string)value).Length >= 4000)
+			if (dataType.DataType == DataType.Undefined && value is string @string && @string.Length >= 4000)
 			{
 				dataType = dataType.WithDataType(DataType.NText);
 			}
@@ -246,11 +255,13 @@ namespace LinqToDB.DataProvider.Oracle
 				case DataType.NText    : type = OracleProviderAdapter.OracleDbType.NClob       ; break;
 				case DataType.Image    :
 				case DataType.Binary   :
+				case DataType.Blob     :
 				case DataType.VarBinary: type = OracleProviderAdapter.OracleDbType.Blob        ; break;
 				case DataType.Cursor   : type = OracleProviderAdapter.OracleDbType.RefCursor   ; break;
 				case DataType.NVarChar : type = OracleProviderAdapter.OracleDbType.NVarchar2   ; break;
 				case DataType.Long     : type = OracleProviderAdapter.OracleDbType.Long        ; break;
 				case DataType.LongRaw  : type = OracleProviderAdapter.OracleDbType.LongRaw     ; break;
+				case DataType.Json     : type = OracleProviderAdapter.OracleDbType.Json        ; break;
 			}
 
 			if (type != null)
@@ -307,6 +318,36 @@ namespace LinqToDB.DataProvider.Oracle
 				options,
 				source);
 		}
+
+		public override Task<BulkCopyRowsCopied> BulkCopyAsync<T>(
+			ITable<T> table, BulkCopyOptions options, IEnumerable<T> source, CancellationToken cancellationToken)
+		{
+			if (_bulkCopy == null)
+				_bulkCopy = new OracleBulkCopy(this);
+
+			return _bulkCopy.BulkCopyAsync(
+				options.BulkCopyType == BulkCopyType.Default ? OracleTools.DefaultBulkCopyType : options.BulkCopyType,
+				table,
+				options,
+				source,
+				cancellationToken);
+		}
+
+#if NATIVE_ASYNC
+		public override Task<BulkCopyRowsCopied> BulkCopyAsync<T>(
+			ITable<T> table, BulkCopyOptions options, IAsyncEnumerable<T> source, CancellationToken cancellationToken)
+		{
+			if (_bulkCopy == null)
+				_bulkCopy = new OracleBulkCopy(this);
+
+			return _bulkCopy.BulkCopyAsync(
+				options.BulkCopyType == BulkCopyType.Default ? OracleTools.DefaultBulkCopyType : options.BulkCopyType,
+				table,
+				options,
+				source,
+				cancellationToken);
+		}
+#endif
 
 		#endregion
 	}

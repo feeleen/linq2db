@@ -9,6 +9,8 @@ namespace LinqToDB.DataProvider
 {
 	using Expressions;
 	using Extensions;
+	using LinqToDB.Common;
+	using LinqToDB.Data.RetryPolicy;
 	using Mapping;
 
 	public abstract class DynamicDataProviderBase<TProviderMappings> : DataProviderBase
@@ -25,8 +27,8 @@ namespace LinqToDB.DataProvider
 
 		public TProviderMappings Adapter { get; }
 
-		public override string ConnectionNamespace => Adapter.ConnectionType.Namespace;
-		public override Type   DataReaderType      => Adapter.DataReaderType;
+		public override string? ConnectionNamespace => Adapter.ConnectionType.Namespace;
+		public override Type    DataReaderType      => Adapter.DataReaderType;
 
 		Func<string, IDbConnection>? _createConnection;
 
@@ -35,7 +37,7 @@ namespace LinqToDB.DataProvider
 			if (_createConnection == null)
 			{
 				var l = CreateConnectionExpression(Adapter.ConnectionType);
-				_createConnection = l.Compile();
+				_createConnection = l.CompileExpression();
 			}
 
 			return _createConnection(connectionString);
@@ -45,9 +47,8 @@ namespace LinqToDB.DataProvider
 		{
 			var p = Expression.Parameter(typeof(string));
 			var l = Expression.Lambda<Func<string, IDbConnection>>(
-				Expression.New(connectionType.GetConstructor(new[] { typeof(string) }), p),
+				Expression.Convert(Expression.New(connectionType.GetConstructor(new[] { typeof(string) }), p), typeof(IDbConnection)),
 				p);
-
 			return l;
 		}
 
@@ -56,7 +57,7 @@ namespace LinqToDB.DataProvider
 		protected bool SetField(Type fieldType, string dataTypeName, string methodName, bool throwException = true, Type? dataReaderType = null)
 		{
 			var dataReaderParameter = Expression.Parameter(DataReaderType, "r");
-			var indexParameter = Expression.Parameter(typeof(int), "i");
+			var indexParameter      = Expression.Parameter(typeof(int), "i");
 
 			MethodCallExpression call;
 
@@ -103,7 +104,7 @@ namespace LinqToDB.DataProvider
 		protected void SetToTypeField(Type toType, string methodName, Type? dataReaderType = null)
 		{
 			var dataReaderParameter = Expression.Parameter(DataReaderType, "r");
-			var indexParameter = Expression.Parameter(typeof(int), "i");
+			var indexParameter      = Expression.Parameter(typeof(int), "i");
 
 			ReaderExpressions[new ReaderInfo { ToType = toType, DataReaderType = dataReaderType }] =
 				Expression.Lambda(
@@ -162,22 +163,30 @@ namespace LinqToDB.DataProvider
 		private readonly IDictionary<Type, Func<IDbConnection   , IDbConnection   >?> _connectionConverters  = new ConcurrentDictionary<Type, Func<IDbConnection   , IDbConnection   >?>();
 		private readonly IDictionary<Type, Func<IDbTransaction  , IDbTransaction  >?> _transactionConverters = new ConcurrentDictionary<Type, Func<IDbTransaction  , IDbTransaction  >?>();
 
-		internal virtual IDbDataParameter? TryGetProviderParameter(IDbDataParameter parameter, MappingSchema ms)
+		public virtual IDbDataParameter? TryGetProviderParameter(IDbDataParameter parameter, MappingSchema ms)
 		{
 			return TryConvertProviderType(_parameterConverters, Adapter.ParameterType, parameter, ms);
 		}
 
-		internal virtual IDbCommand? TryGetProviderCommand(IDbCommand command, MappingSchema ms)
+		public virtual IDbCommand? TryGetProviderCommand(IDbCommand command, MappingSchema ms)
 		{
+			// remove retry policy wrapper
+			if (command is RetryingDbCommand rcmd)
+				command = rcmd.UnderlyingObject;
+
 			return TryConvertProviderType(_commandConverters, Adapter.CommandType, command, ms);
 		}
 
-		internal virtual IDbConnection? TryGetProviderConnection(IDbConnection connection, MappingSchema ms)
+		public virtual IDbConnection? TryGetProviderConnection(IDbConnection connection, MappingSchema ms)
 		{
+			// remove retry policy wrapper
+			if (connection is RetryingDbConnection rcn)
+				connection = rcn.UnderlyingObject;
+
 			return TryConvertProviderType(_connectionConverters, Adapter.ConnectionType, connection, ms);
 		}
 
-		internal virtual IDbTransaction? TryGetProviderTransaction(IDbTransaction transaction, MappingSchema ms)
+		public virtual IDbTransaction? TryGetProviderTransaction(IDbTransaction transaction, MappingSchema ms)
 		{
 			return TryConvertProviderType(_transactionConverters, Adapter.TransactionType, transaction, ms);
 		}
@@ -206,7 +215,7 @@ namespace LinqToDB.DataProvider
 						.Lambda(
 							converterExpr.GetBody(Expression.Convert(param, valueType)),
 							param)
-						.Compile();
+						.CompileExpression();
 
 					converters[valueType] = converter;
 				}

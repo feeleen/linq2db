@@ -10,7 +10,6 @@ using LinqToDB.Linq;
 using LinqToDB.Mapping;
 
 using NUnit.Framework;
-using Tests.Tools;
 
 #region ReSharper disable
 // ReSharper disable ConvertToConstant.Local
@@ -18,14 +17,16 @@ using Tests.Tools;
 
 namespace Tests.xUpdate
 {
-	using Model;
 	using System.Collections.Generic;
+	using Model;
 
 	[TestFixture]
 	[Order(10000)]
 	public class InsertTests : TestBase
 	{
+#if AZURE
 		[ActiveIssue("Error from Azure runs (db encoding issue?): FbException : Malformed string", Configuration = TestProvName.AllFirebird)]
+#endif
 		[Test]
 		public void DistinctInsert1(
 			[DataSources(
@@ -33,7 +34,7 @@ namespace Tests.xUpdate
 				TestProvName.AllInformix,
 				TestProvName.AllPostgreSQL,
 				TestProvName.AllSQLite,
-				ProviderName.Access)]
+				TestProvName.AllAccess)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -64,7 +65,9 @@ namespace Tests.xUpdate
 			}
 		}
 
+#if AZURE
 		[ActiveIssue("Error from Azure runs (db encoding issue?): FbException : Malformed string", Configuration = TestProvName.AllFirebird)]
+#endif
 		[Test]
 		public void DistinctInsert2(
 			[DataSources(
@@ -72,7 +75,7 @@ namespace Tests.xUpdate
 				TestProvName.AllInformix,
 				TestProvName.AllPostgreSQL,
 				TestProvName.AllSQLite,
-				ProviderName.Access)]
+				TestProvName.AllAccess)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -292,6 +295,26 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
+		public void Insert4String([DataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				var id = 1;
+
+				var insertable = db.Child
+					.Where(c => c.ChildID == 11)
+					.Into(db.Child)
+					.Value(c => c.ParentID, c => c.ParentID)
+					.Value(c => c.ChildID, () => id);
+
+				var sql = insertable.ToString();
+				TestContext.WriteLine(sql);
+
+				Assert.That(sql, Does.Contain("INSERT"));
+			}
+		}
+
+		[Test]
 		public async Task Insert4Async([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
@@ -386,8 +409,8 @@ namespace Tests.xUpdate
 			using (var db = GetDataContext(context))
 			using (var table = db.CreateLocalTable(new []
 			{
-				new InsertTable{Id = 1, CreatedOn = DateTime.Now, ModifiedOn = DateTime.Now}, 
-				new InsertTable{Id = 2, CreatedOn = DateTime.Now, ModifiedOn = DateTime.Now}, 
+				new InsertTable{Id = 1, CreatedOn = TestData.DateTime, ModifiedOn = TestData.DateTime},
+				new InsertTable{Id = 2, CreatedOn = TestData.DateTime, ModifiedOn = TestData.DateTime},
 			}))
 			{
 				var affected = table
@@ -1017,8 +1040,10 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
-		public void InsertOrUpdate1([DataSources] string context)
+		public void InsertOrUpdate1([InsertOrUpdateDataSources] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				var id = 0;
@@ -1057,9 +1082,10 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
-		[ActiveIssue("InsertOrUpdate() == -1", Configuration = TestProvName.AllOracleNative)]
-		public void InsertOrUpdate2([DataSources] string context)
+		public void InsertOrUpdate2([InsertOrUpdateDataSources] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				int id;
@@ -1090,7 +1116,11 @@ namespace Tests.xUpdate
 						using (new DisableLogging())
 							patients = db.Patient.Where(p => p.PersonID == id).ToList();
 
-						Assert.AreEqual(1, records);
+						if (context.Contains("Oracle") && context.Contains("Native"))
+							Assert.AreEqual(-1, records);
+						else
+							Assert.AreEqual(1, records);
+
 						Assert.AreEqual(1, patients.Count);
 						Assert.AreEqual(id, patients[0].PersonID);
 						Assert.AreEqual("negative", patients[0].Diagnosis);
@@ -1128,8 +1158,10 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
-		public void InsertOrReplace1([DataSources] string context)
+		public void InsertOrReplace1([InsertOrUpdateDataSources] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				var id = 0;
@@ -1165,6 +1197,8 @@ namespace Tests.xUpdate
 		[Test]
 		public async Task InsertOrReplace1Async([DataSources] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				var id = 0;
@@ -1206,7 +1240,7 @@ namespace Tests.xUpdate
 				{
 					var p = new Person()
 					{
-						FirstName = Guid.NewGuid().ToString(),
+						FirstName = TestData.Guid1.ToString(),
 						ID = 1000,
 					};
 
@@ -1216,8 +1250,10 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
-		public void InsertOrUpdate3([DataSources] string context)
+		public void InsertOrUpdate3([InsertOrUpdateDataSources] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				var id = 0;
@@ -1265,8 +1301,10 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
-		public async Task InsertOrUpdate3Async([DataSources] string context)
+		public async Task InsertOrUpdate3Async([InsertOrUpdateDataSources] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				var id = 0;
@@ -1314,8 +1352,10 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
-		public void InsertOrUpdate4([DataSources] string context)
+		public void InsertOrUpdate4([InsertOrUpdateDataSources] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				var id = 0;
@@ -1388,8 +1428,8 @@ namespace Tests.xUpdate
 				{
 					((DataConnection)db).BulkCopy(100, new[]
 					{
-						new LinqDataTypes2 { ID = 1003, MoneyValue = 0m, DateTimeValue = null,         BoolValue = true,  GuidValue = new Guid("ef129165-6ffe-4df9-bb6b-bb16e413c883"), SmallIntValue =  null, IntValue = null    },
-						new LinqDataTypes2 { ID = 1004, MoneyValue = 0m, DateTimeValue = DateTime.Now, BoolValue = false, GuidValue = null,                                             SmallIntValue =  2,    IntValue = 1532334 }
+						new LinqDataTypes2 { ID = 1003, MoneyValue = 0m, DateTimeValue = null,              BoolValue = true,  GuidValue = new Guid("ef129165-6ffe-4df9-bb6b-bb16e413c883"), SmallIntValue =  null, IntValue = null    },
+						new LinqDataTypes2 { ID = 1004, MoneyValue = 0m, DateTimeValue = TestData.DateTime, BoolValue = false, GuidValue = null,                                             SmallIntValue =  2,    IntValue = 1532334 }
 					});
 				}
 				finally
@@ -1479,7 +1519,7 @@ namespace Tests.xUpdate
 
 		[Test]
 		public void Insert14([DataSources(
-			ProviderName.SqlCe, ProviderName.Access, ProviderName.SqlServer2000,
+			ProviderName.SqlCe, TestProvName.AllAccess, ProviderName.SqlServer2000,
 			ProviderName.SqlServer2005, TestProvName.AllSybase)]
 			string context)
 		{
@@ -1562,6 +1602,33 @@ namespace Tests.xUpdate
 				{
 					db.Person.Where(_ => _.FirstName.StartsWith("Insert16")).Delete();
 				}
+			}
+		}
+
+		// Access, SQLite, Firebird before v4, Informix and SAP Hana do not support DEFAULT in inserted values, 
+		// see https://github.com/linq2db/linq2db/pull/2954#issuecomment-821798021
+		[Test]
+		public void InsertDefault([DataSources(
+			TestProvName.AllAccess,
+			TestProvName.AllFirebirdLess4,
+			TestProvName.AllInformix,
+			TestProvName.AllSapHana,
+			TestProvName.AllSQLite)] string context)
+		{
+			using var db = GetDataContext(context);
+			try
+			{
+				db.Person.Insert(() => new Person
+				{
+					FirstName  = "InsertDefault",
+					MiddleName = Sql.Default<string>(),
+					LastName   = "InsertDefault",
+					Gender     = Gender.Male,
+				});
+			}
+			finally
+			{
+				db.Person.Delete(p => p.FirstName == "InsertDefault");
 			}
 		}
 
@@ -1675,7 +1742,11 @@ namespace Tests.xUpdate
 
 			if (context.StartsWith("Firebird"))
 			{
-				tableName += context.StartsWith(TestProvName.Firebird3) ? "_f3" : "_f";
+				tableName += context.StartsWith(TestProvName.Firebird4)
+					? "_f4"
+					: (context.StartsWith(TestProvName.Firebird3)
+						? "_f3"
+						: "_f");
 
 				if (context.EndsWith("LinqService"))
 					tableName += "l";
@@ -1784,10 +1855,10 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
-		public void InsertOrReplaceByTableName([DataSources] string context)
+		public void InsertOrReplaceByTableName([InsertOrUpdateDataSources] string context)
 		{
 			const string? schemaName = null;
-			var tableName  = "xxPatient" + TestUtils.GetNext().ToString();
+			var tableName  = "xxPatient" + (context.Contains("Firebird") ? TestUtils.GetNext().ToString() : string.Empty);
 
 			using (var db = GetDataContext(context))
 			{
@@ -1833,7 +1904,7 @@ namespace Tests.xUpdate
 		public async Task InsertOrReplaceByTableNameAsync([DataSources] string context)
 		{
 			const string? schemaName = null;
-			var tableName  = "xxPatient" + TestUtils.GetNext().ToString();
+			var tableName  = "xxPatient" + (context.Contains("Firebird") ? TestUtils.GetNext().ToString() : string.Empty);
 
 			using (var db = GetDataContext(context))
 			{
@@ -1874,5 +1945,405 @@ namespace Tests.xUpdate
 			}
 		}
 
+		[Test]
+		public void TestInsertWithColumnFilter([DataSources] string context, [Values] bool withMiddleName)
+		{
+			using (var db = GetDataContext(context))
+			{
+				var newName = "InsertColumnFilter";
+				try
+				{
+					var p = new Person()
+					{
+						FirstName  = newName,
+						LastName   = "whatever",
+						MiddleName = "som middle name",
+						Gender     = Gender.Male
+					};
+
+					db.Insert(p, (a, b) => b.ColumnName != nameof(Model.Person.MiddleName) || withMiddleName);
+
+					p = db.GetTable<Person>().Where(x => x.FirstName == p.FirstName).First();
+
+					Assert.AreEqual(!withMiddleName, string.IsNullOrWhiteSpace(p.MiddleName));
+				}
+				finally
+				{
+					db.Person.Where(x => x.FirstName == newName).Delete();
+				}
+			}
+		}
+
+		[Test]
+		public void TestUpdateWithColumnFilter([DataSources] string context, [Values] bool withMiddleName)
+		{
+			ResetPersonIdentity(context);
+
+			using (var db = GetDataContext(context))
+			{
+				var newName = "InsertColumnFilter";
+				try
+				{
+					var p = new Person()
+					{
+						FirstName = newName,
+						LastName = "whatever",
+						MiddleName = "som middle name",
+						Gender = Gender.Male
+					};
+
+					db.Insert(p);
+
+					p = db.GetTable<Person>().Where(x => x.FirstName == p.FirstName).First();
+
+					p.MiddleName = "updated name";
+
+					db.Update(p, (a, b) => b.ColumnName != nameof(Model.Person.MiddleName) || withMiddleName);
+
+					p = db.GetTable<Person>().Where(x => x.FirstName == p.FirstName).First();
+
+					if (withMiddleName)
+						Assert.AreEqual("updated name", p.MiddleName);
+					else
+						Assert.AreNotEqual("updated name", p.MiddleName);
+				}
+				finally
+				{
+					db.Person.Where(x => x.FirstName == newName).Delete();
+				}
+			}
+		}
+
+		[Table]
+		class TestInsertOrReplaceTable
+		{
+			[PrimaryKey] public int     ID         { get; set; }
+			[Column]     public string? FirstName  { get; set; }
+			[Column]     public string? LastName   { get; set; }
+			[Column]     public string? MiddleName { get; set; }
+		}
+
+		[Test]
+		public void TestInsertOrReplaceWithColumnFilter([InsertOrUpdateDataSources] string context, [Values] bool withMiddleName, [Values] bool skipOnInsert)
+		{
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable<TestInsertOrReplaceTable>())
+			{
+				var newName = "InsertOrReplaceColumnFilter";
+				var p = new TestInsertOrReplaceTable()
+				{
+					FirstName = newName,
+					LastName = "whatever",
+					MiddleName = "som middle name",
+				};
+
+				db.InsertOrReplace(p, (a, b, isInsert) => b.ColumnName != nameof(TestInsertOrReplaceTable.MiddleName) || withMiddleName || !skipOnInsert);
+
+				p = db.GetTable<TestInsertOrReplaceTable>().Where(x => x.FirstName == p.FirstName).First();
+
+				Assert.AreEqual(!withMiddleName && skipOnInsert, string.IsNullOrWhiteSpace(p.MiddleName));
+
+				p.MiddleName = "updated name";
+				db.InsertOrReplace(p, (a, b, isInsert) => b.ColumnName != nameof(TestInsertOrReplaceTable.MiddleName) || withMiddleName || skipOnInsert);
+
+				p = db.GetTable<TestInsertOrReplaceTable>().Where(x => x.FirstName == p.FirstName).First();
+
+				if (skipOnInsert || withMiddleName)
+					Assert.AreEqual("updated name", p.MiddleName);
+				else
+					Assert.AreNotEqual("updated name", p.MiddleName);
+			}
+		}
+
+		#region InsertIfNotExists (https://github.com/linq2db/linq2db/issues/3005)
+		private int GetEmptyRowCount(string context)
+		{
+			var provider = GetProviderName(context, out _);
+
+			// those providers generate IF (), which doesn't return rowcount if not entered
+			// for some reason it doesn't affect managed sybase provider (provider bug?)
+			// and oracle native provider always was "special"
+			return provider == ProviderName.Sybase
+				|| provider == ProviderName.OracleNative
+				|| provider == TestProvName.Oracle11Native
+				|| provider == ProviderName.SqlServer2000
+				|| provider == ProviderName.SqlServer2005
+				? -1
+				: 0;
+		}
+
+		private int GetNonEmptyRowCount(string context)
+		{
+			var provider = GetProviderName(context, out _);
+
+			// oracle native provider and rowcount are not familiar with each other
+			return provider == ProviderName.OracleNative
+				|| provider == TestProvName.Oracle11Native
+				? -1
+				: 1;
+		}
+
+		[Test]
+		public void InsertIfNotExists_EmptyInit1([InsertOrUpdateDataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable<TestInsertOrReplaceInfo>())
+			{
+				var cnt1 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => new TestInsertOrReplaceInfo() { });
+				var cnt2 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => new TestInsertOrReplaceInfo() { });
+
+				Assert.AreEqual(GetNonEmptyRowCount(context), cnt1);
+				Assert.AreEqual(GetEmptyRowCount(context), cnt2);
+			}
+		}
+
+		[Test]
+		public void InsertIfNotExists_EmptyInit2([InsertOrUpdateDataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable<TestInsertOrReplaceInfo>())
+			{
+				var cnt1 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => new TestInsertOrReplaceInfo() { },
+					() => new TestInsertOrReplaceInfo() { Id = 1 });
+				var cnt2 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => new TestInsertOrReplaceInfo() { },
+					() => new TestInsertOrReplaceInfo() { Id = 1 });
+
+				Assert.AreEqual(GetNonEmptyRowCount(context), cnt1);
+				Assert.AreEqual(GetEmptyRowCount(context), cnt2);
+			}
+		}
+
+		[Test]
+		public void InsertIfNotExists_EmptyNew1([InsertOrUpdateDataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable<TestInsertOrReplaceInfo>())
+			{
+				var cnt1 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => new TestInsertOrReplaceInfo());
+				var cnt2 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => new TestInsertOrReplaceInfo());
+
+				Assert.AreEqual(GetNonEmptyRowCount(context), cnt1);
+				Assert.AreEqual(GetEmptyRowCount(context), cnt2);
+			}
+		}
+
+		[Test]
+		public void InsertIfNotExists_EmptyNew2([InsertOrUpdateDataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable<TestInsertOrReplaceInfo>())
+			{
+				var cnt1 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => new TestInsertOrReplaceInfo(),
+					() => new TestInsertOrReplaceInfo() { Id = 1 });
+				var cnt2 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => new TestInsertOrReplaceInfo(),
+					() => new TestInsertOrReplaceInfo() { Id = 1 });
+
+				Assert.AreEqual(GetNonEmptyRowCount(context), cnt1);
+				Assert.AreEqual(GetEmptyRowCount(context), cnt2);
+			}
+		}
+
+		[Test]
+		public void InsertIfNotExists_NullExpr1([InsertOrUpdateDataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable<TestInsertOrReplaceInfo>())
+			{
+				var cnt1 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => null);
+				var cnt2 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => null);
+
+				Assert.AreEqual(GetNonEmptyRowCount(context), cnt1);
+				Assert.AreEqual(GetEmptyRowCount(context), cnt2);
+			}
+		}
+
+		[Test]
+		public void InsertIfNotExists_NullExpr2([InsertOrUpdateDataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable<TestInsertOrReplaceInfo>())
+			{
+				var cnt1 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => null,
+					() => new TestInsertOrReplaceInfo() { Id = 1 });
+				var cnt2 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					p => null,
+					() => new TestInsertOrReplaceInfo() { Id = 1 });
+
+				Assert.AreEqual(GetNonEmptyRowCount(context), cnt1);
+				Assert.AreEqual(GetEmptyRowCount(context), cnt2);
+			}
+		}
+
+		[Test]
+		public void InsertIfNotExists_Null1([InsertOrUpdateDataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable<TestInsertOrReplaceInfo>())
+			{
+				var cnt1 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					null);
+				var cnt2 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					null);
+
+				Assert.AreEqual(GetNonEmptyRowCount(context), cnt1);
+				Assert.AreEqual(GetEmptyRowCount(context), cnt2);
+			}
+		}
+
+		[Test]
+		public void InsertIfNotExists_Null2([InsertOrUpdateDataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable<TestInsertOrReplaceInfo>())
+			{
+				var cnt1 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					null,
+					() => new TestInsertOrReplaceInfo() { Id = 1 });
+				var cnt2 = table.InsertOrUpdate(
+					() => new TestInsertOrReplaceInfo()
+					{
+						Id   = 1,
+						Name = "test"
+					},
+					null,
+					() => new TestInsertOrReplaceInfo() { Id = 1 });
+
+				Assert.AreEqual(GetNonEmptyRowCount(context), cnt1);
+				Assert.AreEqual(GetEmptyRowCount(context), cnt2);
+			}
+		}
+		#endregion
+
+		#region issue 2243
+		[Table("test_insert_or_replace")]
+		public partial class TestInsertOrReplaceInfo
+		{
+			[Column("id"), PrimaryKey, NotNull]                   public int       Id        { get; set; } // bigint
+			[Column("name"), Nullable]                            public string?   Name      { get; set; } // character varying(100)
+			[Column("created_by", SkipOnUpdate = true), Nullable] public string?   CreatedBy { get; set; } // character varying(100)
+			[Column("updated_by", SkipOnInsert = true), Nullable] public string?   UpdatedBy { get; set; } // character varying(100)
+		}
+
+		[Test]
+		public void Issue2243([InsertOrUpdateDataSources] string context, [Values(1, 2, 3)] int seed)
+		{
+			using (var db    = GetDataContext(context))
+			using (var table = db.CreateLocalTable<TestInsertOrReplaceInfo>())
+			{
+				var user = $"TEST_USER{seed}";
+				var item = new TestInsertOrReplaceInfo()
+				{
+					Id        = 1,
+					Name      = "Test1",
+					CreatedBy = user
+				};
+
+				db.InsertOrReplace(item);
+
+				var res = table.Single();
+				Assert.AreEqual(1, res.Id);
+				Assert.AreEqual("Test1", res.Name);
+				Assert.AreEqual(user, res.CreatedBy);
+				Assert.IsNull(res.UpdatedBy);
+
+				item.Name      = "Test2";
+				item.UpdatedBy = user;
+
+				db.InsertOrReplace(item);
+
+				res = table.Single();
+				Assert.AreEqual(1, res.Id);
+				Assert.AreEqual("Test2", res.Name);
+				Assert.AreEqual(user, res.CreatedBy);
+				Assert.AreEqual(user, res.UpdatedBy);
+			}
+		}
+#endregion
 	}
 }

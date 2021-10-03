@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading;
 
@@ -67,7 +66,7 @@ namespace LinqToDB.SqlQuery
 		/// Contains list of columns that build unique key for <see cref="Source"/>.
 		/// Used in JoinOptimizer for safely removing sub-query from resulting SQL.
 		/// </summary>
-		public  List<ISqlExpression[]>  UniqueKeys    => _uniqueKeys ?? (_uniqueKeys = new List<ISqlExpression[]>());
+		public  List<ISqlExpression[]>  UniqueKeys    => _uniqueKeys ??= new List<ISqlExpression[]>();
 
 		public  bool                    HasUniqueKeys => _uniqueKeys != null && _uniqueKeys.Count > 0;
 
@@ -133,7 +132,7 @@ namespace LinqToDB.SqlQuery
 
 		#region IEquatable<ISqlExpression> Members
 
-		bool IEquatable<ISqlExpression>.Equals(ISqlExpression other)
+		bool IEquatable<ISqlExpression>.Equals(ISqlExpression? other)
 		{
 			return this == other;
 		}
@@ -162,30 +161,6 @@ namespace LinqToDB.SqlQuery
 		IList<ISqlExpression> ISqlTableSource.GetKeys(bool allIfEmpty)
 		{
 			return Source.GetKeys(allIfEmpty);
-		}
-
-		#endregion
-
-		#region ICloneableElement Members
-
-		public ICloneableElement Clone(Dictionary<ICloneableElement, ICloneableElement> objectTree, Predicate<ICloneableElement> doClone)
-		{
-			if (!doClone(this))
-				return this;
-
-			if (!objectTree.TryGetValue(this, out var clone))
-			{
-				var ts = new SqlTableSource((ISqlTableSource)Source.Clone(objectTree, doClone), _alias);
-
-				objectTree.Add(this, clone = ts);
-
-				ts.Joins.AddRange(Joins.Select(jt => (SqlJoinedTable)jt.Clone(objectTree, doClone)));
-
-				if (HasUniqueKeys)
-					ts.UniqueKeys.AddRange(UniqueKeys.Select(uk => uk.Select(e => (ISqlExpression)e.Clone(objectTree, doClone)).ToArray()));
-			}
-
-			return clone;
 		}
 
 		#endregion

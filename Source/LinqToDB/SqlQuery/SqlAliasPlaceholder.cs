@@ -13,19 +13,14 @@ namespace LinqToDB.SqlQuery
 			return sb.Append("%ts%");
 		}
 
-		public bool Equals(ISqlExpression other)
+		public bool Equals(ISqlExpression? other)
 		{
-			return other.GetType() == GetType();
+			return other != null && other.GetType() == GetType();
 		}
 
 		public ISqlExpression Walk(WalkOptions options, Func<ISqlExpression, ISqlExpression> func)
 		{
 			return this;
-		}
-
-		public ICloneableElement Clone(Dictionary<ICloneableElement, ICloneableElement> objectTree, Predicate<ICloneableElement> doClone)
-		{
-			return new SqlAliasPlaceholder();
 		}
 
 		public bool Equals(ISqlExpression other, Func<ISqlExpression, ISqlExpression, bool> comparer)

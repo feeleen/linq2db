@@ -1,4 +1,4 @@
-﻿#if !NETSTANDARD2_0
+﻿#if NETFRAMEWORK || NETCOREAPP
 using System;
 using System.Data;
 
@@ -6,6 +6,8 @@ namespace LinqToDB.DataProvider.SapHana
 {
 	using System.Data.Common;
 	using System.Linq.Expressions;
+	using System.Threading;
+	using System.Threading.Tasks;
 	using LinqToDB.Expressions;
 
 	public class SapHanaProviderAdapter : IDynamicProviderAdapter
@@ -13,10 +15,9 @@ namespace LinqToDB.DataProvider.SapHana
 		private static readonly object _syncRoot = new object();
 		private static SapHanaProviderAdapter? _instance;
 
-#if NET45 || NET46
+#if NETFRAMEWORK
 		public const string AssemblyName        = "Sap.Data.Hana.v4.5";
-#endif
-#if NETCOREAPP2_1
+#else
 		public const string AssemblyName        = "Sap.Data.Hana.Core.v2.1";
 #endif
 
@@ -68,19 +69,19 @@ namespace LinqToDB.DataProvider.SapHana
 						if (assembly == null)
 							throw new InvalidOperationException($"Cannot load assembly {AssemblyName}");
 
-						var connectionType  = assembly.GetType($"{ClientNamespace}.HanaConnection" , true);
-						var dataReaderType  = assembly.GetType($"{ClientNamespace}.HanaDataReader" , true);
-						var parameterType   = assembly.GetType($"{ClientNamespace}.HanaParameter"  , true);
-						var commandType     = assembly.GetType($"{ClientNamespace}.HanaCommand"    , true);
-						var transactionType = assembly.GetType($"{ClientNamespace}.HanaTransaction", true);
-						var dbType          = assembly.GetType($"{ClientNamespace}.HanaDbType"     , true);
+						var connectionType  = assembly.GetType($"{ClientNamespace}.HanaConnection" , true)!;
+						var dataReaderType  = assembly.GetType($"{ClientNamespace}.HanaDataReader" , true)!;
+						var parameterType   = assembly.GetType($"{ClientNamespace}.HanaParameter"  , true)!;
+						var commandType     = assembly.GetType($"{ClientNamespace}.HanaCommand"    , true)!;
+						var transactionType = assembly.GetType($"{ClientNamespace}.HanaTransaction", true)!;
+						var dbType          = assembly.GetType($"{ClientNamespace}.HanaDbType"     , true)!;
 
-						var bulkCopyType                    = assembly.GetType($"{ClientNamespace}.HanaBulkCopy"                       , true);
-						var bulkCopyOptionsType             = assembly.GetType($"{ClientNamespace}.HanaBulkCopyOptions"                , true);
-						var bulkCopyColumnMappingType       = assembly.GetType($"{ClientNamespace}.HanaBulkCopyColumnMapping"          , true);
-						var rowsCopiedEventHandlerType      = assembly.GetType($"{ClientNamespace}.HanaRowsCopiedEventHandler"         , true);
-						var rowsCopiedEventArgs             = assembly.GetType($"{ClientNamespace}.HanaRowsCopiedEventArgs"            , true);
-						var bulkCopyColumnMappingCollection = assembly.GetType($"{ClientNamespace}.HanaBulkCopyColumnMappingCollection", true);
+						var bulkCopyType                    = assembly.GetType($"{ClientNamespace}.HanaBulkCopy"                       , true)!;
+						var bulkCopyOptionsType             = assembly.GetType($"{ClientNamespace}.HanaBulkCopyOptions"                , true)!;
+						var bulkCopyColumnMappingType       = assembly.GetType($"{ClientNamespace}.HanaBulkCopyColumnMapping"          , true)!;
+						var rowsCopiedEventHandlerType      = assembly.GetType($"{ClientNamespace}.HanaRowsCopiedEventHandler"         , true)!;
+						var rowsCopiedEventArgs             = assembly.GetType($"{ClientNamespace}.HanaRowsCopiedEventArgs"            , true)!;
+						var bulkCopyColumnMappingCollection = assembly.GetType($"{ClientNamespace}.HanaBulkCopyColumnMappingCollection", true)!;
 
 						var typeMapper = new TypeMapper();
 
@@ -108,7 +109,7 @@ namespace LinqToDB.DataProvider.SapHana
 							commandType,
 							transactionType,
 							typeSetter,
-							typeMapper.BuildWrappedFactory((IDbConnection connection, HanaBulkCopyOptions options, IDbTransaction? transaction) => new HanaBulkCopy((HanaConnection)connection, (HanaBulkCopyOptions)options, (HanaTransaction?)transaction)),
+							typeMapper.BuildWrappedFactory((IDbConnection connection, HanaBulkCopyOptions options, IDbTransaction? transaction) => new HanaBulkCopy((HanaConnection)connection, options, (HanaTransaction?)transaction)),
 							typeMapper.BuildWrappedFactory((int source, string destination) => new HanaBulkCopyColumnMapping(source, destination)));
 					}
 
@@ -163,8 +164,8 @@ namespace LinqToDB.DataProvider.SapHana
 		[Wrapper]
 		public class HanaBulkCopy : TypeWrapper, IDisposable
 		{
-			private static LambdaExpression[] Wrappers { get; }
-				= new LambdaExpression[]
+			private static object[] Wrappers { get; }
+				= new object[]
 			{
 				// [0]: Dispose
 				(Expression<Action<HanaBulkCopy>>                                   )((HanaBulkCopy this_                    ) => ((IDisposable)this_).Dispose()),
@@ -188,6 +189,9 @@ namespace LinqToDB.DataProvider.SapHana
 				PropertySetter((HanaBulkCopy this_) => this_.BulkCopyTimeout),
 				// [10]: set DestinationTableName
 				PropertySetter((HanaBulkCopy this_) => this_.DestinationTableName),
+				// [11]: WriteToServerAsync
+				new Tuple<LambdaExpression, bool>
+				((Expression<Func<HanaBulkCopy, IDataReader, CancellationToken, Task>>)((HanaBulkCopy this_, IDataReader reader, CancellationToken cancellationToken) => this_.WriteToServerAsync(reader, cancellationToken)), true),
 			};
 
 			private static string[] Events { get; }
@@ -204,6 +208,10 @@ namespace LinqToDB.DataProvider.SapHana
 
 			public void Dispose      ()                       => ((Action<HanaBulkCopy>)CompiledWrappers[0])(this);
 			public void WriteToServer(IDataReader dataReader) => ((Action<HanaBulkCopy, IDataReader>)CompiledWrappers[1])(this, dataReader);
+
+			public bool CanWriteToServerAsync => CompiledWrappers[11] != null;
+			public Task WriteToServerAsync(IDataReader dataReader, CancellationToken cancellationToken)
+				=> ((Func<HanaBulkCopy, IDataReader, CancellationToken, Task>)CompiledWrappers[11])(this, dataReader, cancellationToken);
 
 			public int NotifyAfter
 			{
@@ -232,10 +240,10 @@ namespace LinqToDB.DataProvider.SapHana
 			public HanaBulkCopyColumnMappingCollection ColumnMappings => ((Func<HanaBulkCopy, HanaBulkCopyColumnMappingCollection>)CompiledWrappers[6])(this);
 
 			private      HanaRowsCopiedEventHandler? _HanaRowsCopied;
-			public event HanaRowsCopiedEventHandler   HanaRowsCopied
+			public event HanaRowsCopiedEventHandler?  HanaRowsCopied
 			{
-				add    => _HanaRowsCopied = (HanaRowsCopiedEventHandler)Delegate.Combine(_HanaRowsCopied, value);
-				remove => _HanaRowsCopied = (HanaRowsCopiedEventHandler)Delegate.Remove (_HanaRowsCopied, value);
+				add    => _HanaRowsCopied = (HanaRowsCopiedEventHandler?)Delegate.Combine(_HanaRowsCopied, value);
+				remove => _HanaRowsCopied = (HanaRowsCopiedEventHandler?)Delegate.Remove (_HanaRowsCopied, value);
 			}
 		}
 

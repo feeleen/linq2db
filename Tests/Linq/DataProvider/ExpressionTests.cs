@@ -1,14 +1,9 @@
 ﻿using System;
-using System.Configuration;
 using System.Data;
 using System.Linq.Expressions;
-
-using NUnit.Framework;
-
+using LinqToDB.Common;
 using LinqToDB.Data;
-using LinqToDB.DataProvider;
-using LinqToDB.DataProvider.SqlServer;
-using LinqToDB.DataProvider.SQLite;
+using NUnit.Framework;
 
 namespace Tests.DataProvider
 {
@@ -34,7 +29,7 @@ namespace Tests.DataProvider
 					var p    = Expression.Parameter(typeof(IDataReader));
 					var dr   = Expression.Convert(p, dp.DataReaderType);
 					var ex   = (Expression<Func<IDataReader,int,int>>)dp.GetReaderExpression(rd, 0, dr, typeof(int));
-					var func = ex.Compile();
+					var func = ex.CompileExpression();
 
 					do
 					{

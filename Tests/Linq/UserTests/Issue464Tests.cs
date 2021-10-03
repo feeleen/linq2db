@@ -1,5 +1,4 @@
-﻿using System;
-
+﻿
 using LinqToDB;
 using LinqToDB.Data;
 using LinqToDB.Mapping;
@@ -66,10 +65,11 @@ namespace Tests.UserTests
 			public int    Id    { get; set; }
 			public MyInt? Value { get; set; }
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 			{
-				var e = (Entity) obj;
-				return Id == e.Id && Value!.Value == Id;
+				return obj is Entity e
+					&& Id == e.Id
+					&& Value!.Value == Id;
 			}
 
 			public override int GetHashCode()

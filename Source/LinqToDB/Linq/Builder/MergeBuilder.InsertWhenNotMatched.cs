@@ -1,17 +1,19 @@
-﻿using LinqToDB.Expressions;
-using LinqToDB.SqlQuery;
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 
 namespace LinqToDB.Linq.Builder
 {
+	using LinqToDB.Expressions;
+	using SqlQuery;
+
+	using static LinqToDB.Reflection.Methods.LinqToDB.Merge;
+
 	internal partial class MergeBuilder
 	{
 		internal class InsertWhenNotMatched : MethodCallBuilder
 		{
 			protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 			{
-				return methodCall.Method.IsGenericMethod
-					&& LinqExtensions.InsertWhenNotMatchedAndMethodInfo == methodCall.Method.GetGenericMethodDefinition();
+				return methodCall.IsSameGenericMethod(InsertWhenNotMatchedAndMethodInfo);
 			}
 
 			protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
@@ -41,18 +43,18 @@ namespace LinqToDB.Linq.Builder
 				else
 				{
 					// build setters like QueryRunner.Insert
-					var targetType = methodCall.Method.GetGenericArguments()[0];
 					var sqlTable   = (SqlTable)statement.Target.Source;
-					var param      = Expression.Parameter(targetType, "s");
+					var param      = Expression.Parameter(sqlTable.ObjectType, "s");
 
-					foreach (var field in sqlTable.Fields.Values)
+					foreach (var field in sqlTable.Fields)
 					{
 						if (field.IsInsertable)
 						{
 							var expression = LinqToDB.Expressions.Extensions.GetMemberGetter(field.ColumnDescriptor.MemberInfo, param);
-							var expr       = mergeContext.SourceContext.ConvertToSql(builder.ConvertExpression(expression), 1, ConvertFlags.Field)[0].Sql;
+							var tgtExpr    = mergeContext.TargetContext.ConvertToSql(builder.ConvertExpression(expression), 1, ConvertFlags.Field)[0].Sql;
+							var srcExpr    = mergeContext.SourceContext.ConvertToSql(builder.ConvertExpression(expression), 1, ConvertFlags.Field)[0].Sql;
 
-							operation.Items.Add(new SqlSetExpression(field, expr));
+							operation.Items.Add(new SqlSetExpression(tgtExpr, srcExpr));
 						}
 						else if (field.IsIdentity)
 						{
@@ -74,8 +76,7 @@ namespace LinqToDB.Linq.Builder
 					builder.BuildSearchCondition(
 						new ExpressionContext(null, new[] { mergeContext.SourceContext }, condition),
 						conditionExpr,
-						operation.Where.Conditions,
-						false);
+						operation.Where.Conditions);
 				}
 
 				return mergeContext;

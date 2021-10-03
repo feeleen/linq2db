@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 
 using LinqToDB;
 
@@ -7,11 +6,9 @@ using NUnit.Framework;
 
 namespace Tests.xUpdate
 {
-	using Model;
-
 	public partial class MergeTests
 	{
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void SameSourceUpdateBySource([IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = GetDataContext(context))
@@ -60,7 +57,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void SameSourceUpdateBySourceWithPredicate([IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = GetDataContext(context))
@@ -105,7 +102,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void OnConditionPartialSourceProjection_KnownFieldInCondition(
 			[IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context)
 		{
@@ -155,7 +152,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void OtherSourceUpdateBySourceWithPredicate([IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = GetDataContext(context))
@@ -207,7 +204,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void AnonymousSourceUpdateBySourceWithPredicate(
 			[IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context)
 		{
@@ -268,7 +265,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void AnonymousListSourceUpdateBySourceWithPredicate(
 			[IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context)
 		{
@@ -329,7 +326,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void UpdateBySourceReservedAndCaseNames([IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = GetDataContext(context))
@@ -389,7 +386,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void UpdateBySourceReservedAndCaseNamesFromList(
 			[IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context)
 		{

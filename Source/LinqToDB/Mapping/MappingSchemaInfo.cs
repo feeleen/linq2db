@@ -86,11 +86,18 @@ namespace LinqToDB.Mapping
 
 						if (args.Length == types.Length)
 						{
-							if (type.Value.Aggregate(false, (cur,ts) => cur || ts.SequenceEqual(types)))
+							var stop = false;
+							foreach (var value in type.Value)
+								if (value.SequenceEqual(types))
+								{
+									stop = true;
+									break;
+								}
+							if (stop)
 								continue;
 
 							var gtype    = type.Key.MakeGenericType(types);
-							var provider = (IGenericInfoProvider)Activator.CreateInstance(gtype);
+							var provider = (IGenericInfoProvider)Activator.CreateInstance(gtype)!;
 
 							provider.SetInfo(new MappingSchema(this));
 
@@ -144,7 +151,7 @@ namespace LinqToDB.Mapping
 		private ConcurrentDictionary<object,Func<object,object>>? _converters;
 		public  ConcurrentDictionary<object,Func<object,object>>   Converters
 		{
-			get { return _converters ?? (_converters = new ConcurrentDictionary<object,Func<object,object>>()); }
+			get { return _converters ??= new ConcurrentDictionary<object,Func<object,object>>(); }
 		}
 
 		#endregion

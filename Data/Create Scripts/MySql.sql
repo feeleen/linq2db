@@ -1,12 +1,16 @@
-﻿SET @@global.sql_mode=(SELECT REPLACE(@@global.sql_mode, 'ONLY_FULL_GROUP_BY', ''))
+﻿DROP SCHEMA IF EXISTS `{DBNAME}`
 GO
-DROP TABLE IF EXISTS Doctor
+CREATE SCHEMA `{DBNAME}`
 GO
-DROP TABLE IF EXISTS Patient
+ALTER DATABASE `{DBNAME}` CHARACTER SET utf8 COLLATE utf8_general_ci
+GO
+USE `{DBNAME}`
+GO
+SET GLOBAL local_infile=ON;
+GO
+SET @@global.sql_mode=(SELECT REPLACE(@@global.sql_mode, 'ONLY_FULL_GROUP_BY', ''))
 GO
 
-DROP TABLE IF EXISTS InheritanceParent
-GO
 CREATE TABLE InheritanceParent
 (
 	InheritanceParentId int          NOT NULL,
@@ -17,8 +21,6 @@ CREATE TABLE InheritanceParent
 )
 GO
 
-DROP TABLE IF EXISTS InheritanceChild
-GO
 CREATE TABLE InheritanceChild
 (
 	InheritanceChildId  int          NOT NULL,
@@ -31,9 +33,6 @@ CREATE TABLE InheritanceChild
 GO
 
 -- Person Table
-
-DROP TABLE IF EXISTS Person
-GO
 
 CREATE TABLE Person
 (
@@ -91,9 +90,6 @@ GO
 
 -- Data Types test
 
-DROP TABLE IF EXISTS DataTypeTest
-GO
-
 CREATE TABLE DataTypeTest
 (
 	DataTypeID      int              AUTO_INCREMENT NOT NULL,
@@ -122,22 +118,11 @@ CREATE TABLE DataTypeTest
 )
 GO
 
-DROP TABLE IF EXISTS Parent
-GO
-DROP TABLE IF EXISTS Child
-GO
-DROP TABLE IF EXISTS GrandChild
-GO
-
 CREATE TABLE Parent     (ParentID int, Value1 int)
 GO
 CREATE TABLE Child      (ParentID int, ChildID int)
 GO
 CREATE TABLE GrandChild (ParentID int, ChildID int, GrandChildID int)
-GO
-
-
-DROP TABLE IF EXISTS LinqDataTypes
 GO
 
 CREATE TABLE LinqDataTypes
@@ -160,20 +145,13 @@ CREATE TABLE LinqDataTypes
 )
 GO
 
-DROP TABLE IF EXISTS TestIdentity
-GO
-
 CREATE TABLE TestIdentity (
 	ID int AUTO_INCREMENT NOT NULL,
 	CONSTRAINT PK_TestIdentity PRIMARY KEY CLUSTERED (ID)
 )
 GO
 
-
-DROP TABLE IF EXISTS AllTypes
-GO
-
-CREATE TABLE AllTypes
+CREATE TABLE `AllTypes`
 (
 	ID                  int AUTO_INCREMENT       NOT NULL,
 
@@ -223,7 +201,7 @@ CREATE TABLE AllTypes
 )
 GO
 
-INSERT INTO AllTypes
+INSERT INTO `AllTypes`
 (
 	bigintDataType,
 	smallintDataType,
@@ -322,11 +300,42 @@ SELECT
 
 GO
 
+CREATE TABLE `AllTypesNoYear`
+(
+	ID                  int AUTO_INCREMENT       NOT NULL,
 
-DROP TABLE IF EXISTS TestSameName
-GO
+	bigintDataType      bigint                       NULL,
+	smallintDataType    smallint                     NULL,
+	tinyintDataType     tinyint                      NULL,
+	mediumintDataType   mediumint                    NULL,
+	intDataType         int                          NULL,
+	numericDataType     numeric                      NULL,
+	decimalDataType     decimal                      NULL,
+	doubleDataType      double                       NULL,
+	floatDataType       float                        NULL,
 
-DROP TABLE IF EXISTS test_schema.TestSameName
+	dateDataType        date                         NULL,
+	datetimeDataType    datetime                     NULL,
+	timestampDataType   timestamp                    NULL,
+	timeDataType        time                         NULL,
+
+	charDataType        char(1)                      NULL,
+	char20DataType      char(20)                     NULL,
+	varcharDataType     varchar(20)                  NULL,
+	textDataType        text                         NULL,
+
+	binaryDataType      binary(3)                    NULL,
+	varbinaryDataType   varbinary(5)                 NULL,
+	blobDataType        blob                         NULL,
+
+	bitDataType         bit(3)                       NULL,
+	enumDataType        enum('Green', 'Red', 'Blue') NULL,
+	setDataType         set('one', 'two')            NULL,
+	intUnsignedDataType int unsigned                 NULL,
+	boolDataType        bool                         NULL,
+
+	CONSTRAINT PK_AllTypes PRIMARY KEY CLUSTERED (ID)
+)
 GO
 
 DROP SCHEMA IF EXISTS test_schema
@@ -356,10 +365,6 @@ AS
 GO
 
 -- merge test tables
-DROP TABLE IF EXISTS TestMerge1
-GO
-DROP TABLE IF EXISTS TestMerge2
-GO
 CREATE TABLE TestMerge1
 (
 	Id       int          NOT NULL,
@@ -418,10 +423,7 @@ CREATE TABLE TestMerge2
 	CONSTRAINT PK_TestMerge2 PRIMARY KEY CLUSTERED (Id)
 )
 GO
-DROP PROCEDURE IF EXISTS TestProcedure
-GO
-DROP FUNCTION IF EXISTS TestFunction
-GO
+
 CREATE PROCEDURE TestProcedure(IN param3 INT, INOUT param2 INT, OUT param1 INT)
 BEGIN
 	SELECT param2 + param2 INTO param2;
@@ -437,14 +439,10 @@ BEGIN
 	RETURN 'done';
 END
 GO
-DROP PROCEDURE IF EXISTS AddIssue792Record
-GO
 CREATE PROCEDURE AddIssue792Record()
 BEGIN
-	INSERT INTO AllTypes(char20DataType) VALUES('issue792');
+	INSERT INTO `AllTypes`(char20DataType) VALUES('issue792');
 END
-GO
-DROP PROCEDURE IF EXISTS `TestOutputParametersWithoutTableProcedure`
 GO
 CREATE PROCEDURE `TestOutputParametersWithoutTableProcedure`(
 	IN `aInParam` VARCHAR(256),
@@ -453,9 +451,6 @@ CREATE PROCEDURE `TestOutputParametersWithoutTableProcedure`(
 BEGIN
 	SELECT 123 INTO aOutParam;
 END
-GO
-
-DROP TABLE IF EXISTS FullTextIndexTest
 GO
 
 CREATE TABLE FullTextIndexTest (
@@ -479,10 +474,249 @@ INSERT INTO FullTextIndexTest(TestField1, TestField2) VALUES('this is text1', 't
 INSERT INTO FullTextIndexTest(TestField1, TestField2) VALUES('looking for something?', 'found it!');
 INSERT INTO FullTextIndexTest(TestField1, TestField2) VALUES('record not found', 'empty');
 GO
-DROP TABLE IF EXISTS Issue1993
-GO
 CREATE TABLE Issue1993 (
 	id			INTEGER UNSIGNED	NOT NULL   AUTO_INCREMENT,
 	description	VARCHAR(100)		NULL,
 PRIMARY KEY(id));
+GO
+CREATE PROCEDURE `Issue2313Parameters`(
+	IN `VarChar255` VARCHAR(255),
+	IN `VarChar1` VARCHAR(1),
+	IN `Char255` CHAR(255),
+	IN `Char1` CHAR(1),
+	IN `VarBinary255` VARBINARY(255),
+	IN `Binary255` BINARY(255),
+	IN `TinyBlob` TINYBLOB,
+	IN `Blob` BLOB,
+	IN `MediumBlob` MEDIUMBLOB,
+	IN `LongBlob` LONGBLOB,
+	IN `TinyText` TINYTEXT,
+	IN `Text` TEXT,
+	IN `MediumText` MEDIUMTEXT,
+	IN `LongText` LONGTEXT,
+	IN `Date` DATE,
+	IN `DateTime` DATETIME,
+	IN `TimeStamp` TIMESTAMP,
+	IN `Time` TIME,
+-- SKIP MySql55 BEGIN
+	IN `Json` JSON,
+-- SKIP MySql55 END
+	IN `TinyInt` TINYINT,
+	IN `TinyIntUnsigned` TINYINT UNSIGNED,
+	IN `SmallInt` SMALLINT,
+	IN `SmallIntUnsigned` SMALLINT UNSIGNED,
+	IN `MediumInt` MEDIUMINT,
+	IN `MediumIntUnsigned` MEDIUMINT UNSIGNED,
+	IN `Int` INT,
+	IN `IntUnsigned` INT UNSIGNED,
+	IN `BigInt` BIGINT,
+	IN `BigIntUnsigned` BIGINT UNSIGNED,
+	IN `Decimal` DECIMAL,
+	IN `Float` FLOAT,
+	IN `Double` DOUBLE,
+	IN `Boolean` BOOLEAN,
+	IN `Bit1` BIT,
+	IN `Bit8` BIT(8),
+	IN `Bit10` BIT(10),
+	IN `Bit16` BIT(16),
+	IN `Bit32` BIT(32),
+	IN `Bit64` BIT(64),
+	IN `Enum` ENUM('one', 'two'),
+	IN `Set` ENUM('one', 'two'),
+	IN `Year` YEAR,
+	IN `Geometry` GEOMETRY,
+	IN `Point` POINT,
+	IN `LineString` LINESTRING,
+	IN `Polygon` POLYGON,
+	IN `MultiPoint` MULTIPOINT,
+	IN `MultiLineString` MULTILINESTRING,
+	IN `MultiPolygon` MULTIPOLYGON,
+	IN `GeometryCollection` GEOMETRYCOLLECTION
+)
+BEGIN
+	SELECT
+	`VarChar255`,
+	`VarChar1`,
+	`Char255`,
+	`Char1`,
+	`VarBinary255`,
+	`Binary255`,
+	`TinyBlob`,
+	`Blob`,
+	`MediumBlob`,
+	`LongBlob`,
+	`TinyText`,
+	`Text`,
+	`MediumText`,
+	`LongText`,
+	`Date`,
+	`DateTime`,
+	`TimeStamp`,
+	`Time`,
+-- SKIP MySql55 BEGIN
+	`Json`,
+-- SKIP MySql55 END
+	`TinyInt`,
+	`TinyIntUnsigned`,
+	`SmallInt`,
+	`SmallIntUnsigned`,
+	`MediumInt`,
+	`MediumIntUnsigned`,
+	`Int`,
+	`IntUnsigned`,
+	`BigInt`,
+	`BigIntUnsigned`,
+	`Decimal`,
+	`Float`,
+	`Double`,
+	`Boolean`,
+	`Bit1`,
+	`Bit8`,
+	`Bit10`,
+	`Bit16`,
+	`Bit32`,
+	`Bit64`,
+	`Enum`,
+	`Set`,
+	`Year`,
+	`Geometry`,
+	`Point`,
+	`LineString`,
+	`Polygon`,
+	`MultiPoint`,
+	`MultiLineString`,
+	`MultiPolygon`,
+	`GeometryCollection`
+	FROM Person;
+END
+GO
+CREATE PROCEDURE `Issue2313Results`(
+	IN `VarChar255` VARCHAR(255),
+	IN `VarChar1` VARCHAR(1),
+	IN `Char255` CHAR(255),
+	IN `Char1` CHAR(1),
+	IN `VarBinary255` VARBINARY(255),
+	IN `Binary255` BINARY(255),
+	IN `TinyBlob` TINYBLOB,
+	IN `Blob` BLOB,
+	IN `MediumBlob` MEDIUMBLOB,
+	IN `LongBlob` LONGBLOB,
+	IN `TinyText` TINYTEXT,
+	IN `Text` TEXT,
+	IN `MediumText` MEDIUMTEXT,
+	IN `LongText` LONGTEXT,
+	IN `Date` DATE,
+	IN `DateTime` DATETIME,
+	IN `TimeStamp` TIMESTAMP,
+	IN `Time` TIME,
+	IN `TinyInt` TINYINT,
+	IN `TinyIntUnsigned` TINYINT UNSIGNED,
+	IN `SmallInt` SMALLINT,
+	IN `SmallIntUnsigned` SMALLINT UNSIGNED,
+	IN `MediumInt` MEDIUMINT,
+	IN `MediumIntUnsigned` MEDIUMINT UNSIGNED,
+	IN `Int` INT,
+	IN `IntUnsigned` INT UNSIGNED,
+	IN `BigInt` BIGINT,
+	IN `BigIntUnsigned` BIGINT UNSIGNED,
+	IN `Decimal` DECIMAL,
+	IN `Float` FLOAT,
+	IN `Double` DOUBLE,
+	IN `Boolean` BOOLEAN,
+	IN `Bit1` BIT,
+	IN `Bit8` BIT(8),
+	IN `Bit10` BIT(10),
+	IN `Bit16` BIT(16),
+	IN `Bit32` BIT(32),
+	IN `Bit64` BIT(64),
+	IN `Enum` ENUM('one', 'two'),
+	IN `Set` ENUM('one', 'two'),
+
+-- SKIP MySql55 BEGIN
+-- SKIP MySql BEGIN
+	IN `Json` JSON,
+	IN `Geometry` GEOMETRY,
+	IN `Point` POINT,
+	IN `LineString` LINESTRING,
+	IN `Polygon` POLYGON,
+	IN `MultiPoint` MULTIPOINT,
+	IN `MultiLineString` MULTILINESTRING,
+	IN `MultiPolygon` MULTIPOLYGON,
+	IN `GeometryCollection` GEOMETRYCOLLECTION,
+-- SKIP MySql END
+-- SKIP MySql55 END
+
+	IN `Year` YEAR
+)
+BEGIN
+	SELECT
+	`VarChar255`,
+	`VarChar1`,
+	`Char255`,
+	`Char1`,
+	`VarBinary255`,
+	`Binary255`,
+	`TinyBlob`,
+	`Blob`,
+	`MediumBlob`,
+	`LongBlob`,
+	`TinyText`,
+	`Text`,
+	`MediumText`,
+	`LongText`,
+	`Date`,
+	`DateTime`,
+	`TimeStamp`,
+	`Time`,
+	`TinyInt`,
+	`TinyIntUnsigned`,
+	`SmallInt`,
+	`SmallIntUnsigned`,
+	`MediumInt`,
+	`MediumIntUnsigned`,
+	`Int`,
+	`IntUnsigned`,
+	`BigInt`,
+	`BigIntUnsigned`,
+	`Decimal`,
+	`Float`,
+	`Double`,
+	`Boolean`,
+	`Bit1`,
+	`Bit8`,
+	`Bit10`,
+	`Bit16`,
+	`Bit32`,
+	`Bit64`,
+	`Enum`,
+	`Set`,
+	`Year`
+
+-- SKIP MySql55 BEGIN
+-- SKIP MySql BEGIN
+	,`Json`,
+	`Geometry`,
+	`Point`,
+	`LineString`,
+	`Polygon`,
+	`MultiPoint`,
+	`MultiLineString`,
+	`MultiPolygon`,
+	`GeometryCollection`
+-- SKIP MySql END
+-- SKIP MySql55 END
+
+
+	FROM Person;
+END
+GO
+
+DROP TABLE `CollatedTable`
+GO
+CREATE TABLE `CollatedTable`
+(
+	`Id`				INT NOT NULL,
+	`CaseSensitive`		VARCHAR(20) CHARACTER SET utf8 COLLATE utf8_bin NOT NULL,
+	`CaseInsensitive`	VARCHAR(20) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL
+)
 GO

@@ -1,9 +1,13 @@
 ﻿using System;
 using System.Diagnostics;
-using LinqToDB.Mapping;
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 
 namespace LinqToDB.Common
 {
+	using Mapping;
+	using Expressions;
+
 	/// <summary>
 	/// Stores database type attributes.
 	/// </summary>
@@ -59,12 +63,16 @@ namespace LinqToDB.Common
 		public int?     Precision  { get; }
 		public int?     Scale      { get; }
 
+
+		internal static MethodInfo WithSetValuesMethodInfo =
+			MemberHelper.MethodOf<DbDataType>(dt => dt.WithSetValues(dt));
+
 		public DbDataType WithSetValues(DbDataType from)
 		{
 			return new DbDataType(
-				SystemType,
-				from.DataType != DataType.Undefined ? from.DataType : DataType,
-				!from.DbType.IsNullOrEmpty()        ? from.DbType   : DbType,
+				from.SystemType != typeof(object)   ? from.SystemType : SystemType,
+				from.DataType != DataType.Undefined ? from.DataType   : DataType,
+				!from.DbType.IsNullOrEmpty()        ? from.DbType     : DbType,
 				from.Length    ?? Length,
 				from.Precision ?? Precision,
 				from.Scale     ?? Scale);
@@ -88,7 +96,7 @@ namespace LinqToDB.Common
 			var lengthStr    = Length == null                 ? string.Empty : $", \"{Length}\"";
 			var precisionStr = Precision == null              ? string.Empty : $", \"{Precision}\"";
 			var scaleStr     = Scale == null                  ? string.Empty : $", \"{Scale}\"";
-			return $"{SystemType}{dataTypeStr}{dbTypeStr}{lengthStr}{precisionStr}{scaleStr}";
+			return $"({SystemType}{dataTypeStr}{dbTypeStr}{lengthStr}{precisionStr}{scaleStr})";
 		}
 
 		#region Equality members
@@ -109,8 +117,14 @@ namespace LinqToDB.Common
 			return obj is DbDataType type && Equals(type);
 		}
 
+		int? _hashCode;
+
+		[SuppressMessage("ReSharper", "NonReadonlyMemberInGetHashCode")]
 		public override int GetHashCode()
 		{
+			if (_hashCode != null)
+				return _hashCode.Value;
+
 			unchecked
 			{
 				var hashCode = (SystemType != null ? SystemType.GetHashCode() : 0);
@@ -119,8 +133,10 @@ namespace LinqToDB.Common
 				hashCode     = (hashCode * 397) ^ (Length    != null ? Length.Value.GetHashCode()    : 0);
 				hashCode     = (hashCode * 397) ^ (Precision != null ? Precision.Value.GetHashCode() : 0);
 				hashCode     = (hashCode * 397) ^ (Scale     != null ? Scale.Value.GetHashCode()     : 0);
-				return hashCode;
+				_hashCode    = hashCode;
 			}
+
+			return _hashCode.Value;
 		}
 
 		#endregion

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -9,6 +9,9 @@ using JetBrains.Annotations;
 namespace LinqToDB
 {
 	using Linq;
+#if !NATIVE_ASYNC
+	using Async;
+#endif
 
 	/// <summary>
 	/// Provides helper methods for asynchronous operations.
@@ -65,9 +68,61 @@ namespace LinqToDB
 
 		#endregion
 
+		[AttributeUsage(AttributeTargets.Method)]
 		internal class ElementAsyncAttribute : Attribute
 		{
 		}
+
+		#region AsAsyncEnumerable
+		/// <summary>
+		/// Returns an <see cref="IAsyncEnumerable{T}"/> that can be enumerated asynchronously.
+		/// </summary>
+		/// <typeparam name="TSource">Source sequence element type.</typeparam>
+		/// <param name="source">Source sequence.</param>
+		/// <returns>A query that can be enumerated asynchronously.</returns>
+		public static IAsyncEnumerable<TSource> AsAsyncEnumerable<TSource>(this IQueryable<TSource> source)
+		{
+			if (source == null) throw new ArgumentNullException(nameof(source));
+
+			if (source is IAsyncEnumerable<TSource> asyncQuery)
+				return asyncQuery;
+
+			if (LinqExtensions.ExtensionsAdapter != null)
+				return LinqExtensions.ExtensionsAdapter.AsAsyncEnumerable(source);
+
+			// return an enumerator that will synchronously enumerate the source elements
+			return new AsyncEnumerableAdapter<TSource>(source);
+		}
+
+		private class AsyncEnumerableAdapter<T> : IAsyncEnumerable<T>
+		{
+			private readonly IQueryable<T> _query;
+			public AsyncEnumerableAdapter(IQueryable<T> query)
+			{
+				_query = query ?? throw new ArgumentNullException(nameof(query));
+			}
+
+#if !NATIVE_ASYNC
+			IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken)
+			{
+				return new AsyncEnumeratorImpl<T>(_query.GetEnumerator(), cancellationToken);
+			}
+		}
+#else
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+			async IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+			{
+				using var enumerator = _query.GetEnumerator();
+				while (enumerator.MoveNext())
+				{
+					yield return enumerator.Current;
+					cancellationToken.ThrowIfCancellationRequested();
+				}
+			}
+		}
+#endif
+#endregion
 
 		#region ForEachAsync
 
@@ -127,9 +182,9 @@ namespace LinqToDB
 			token);
 		}
 
-		#endregion
+#endregion
 
-		#region ToListAsync
+#region ToListAsync
 
 		/// <summary>
 		/// Asynchronously loads data from query to a list.
@@ -155,9 +210,9 @@ namespace LinqToDB
 			return await GetTask(() => source.AsEnumerable().TakeWhile(_ => !token.IsCancellationRequested).ToList(), token).ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
 		}
 
-		#endregion
+#endregion
 
-		#region ToArrayAsync
+#region ToArrayAsync
 
 		/// <summary>
 		/// Asynchronously loads data from query to an array.
@@ -191,9 +246,9 @@ namespace LinqToDB
 			return await GetTask(() => source.AsEnumerable().TakeWhile(_ => !token.IsCancellationRequested).ToArray(), token).ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
 		}
 
-		#endregion
+#endregion
 
-		#region ToDictionaryAsync
+#region ToDictionaryAsync
 
 		/// <summary>
 		/// Asynchronously loads data from query to a dictionary.
@@ -208,6 +263,7 @@ namespace LinqToDB
 			this IQueryable<TSource> source,
 			Func<TSource,TKey>       keySelector,
 			CancellationToken        token   = default)
+			where TKey : notnull
 		{
 			if (source is ExpressionQuery<TSource> query)
 			{
@@ -237,6 +293,7 @@ namespace LinqToDB
 			Func<TSource,TKey>       keySelector,
 			IEqualityComparer<TKey>  comparer,
 			CancellationToken        token = default)
+			where TKey : notnull
 		{
 			if (source is ExpressionQuery<TSource> query)
 			{
@@ -267,6 +324,7 @@ namespace LinqToDB
 			Func<TSource,TKey>       keySelector,
 			Func<TSource,TElement>   elementSelector,
 			CancellationToken        token = default)
+			where TKey : notnull
 		{
 			if (source is ExpressionQuery<TSource> query)
 			{
@@ -299,10 +357,11 @@ namespace LinqToDB
 			Func<TSource,TElement>   elementSelector,
 			IEqualityComparer<TKey>  comparer,
 			CancellationToken        token = default)
+			where TKey : notnull
 		{
 			if (source is ExpressionQuery<TSource> query)
 			{
-				var dic = new Dictionary<TKey,TElement>();
+				var dic = new Dictionary<TKey,TElement>(comparer);
 				await query.GetForEachAsync(item => dic.Add(keySelector(item), elementSelector(item)), token).ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
 				return dic;
 			}
@@ -313,7 +372,7 @@ namespace LinqToDB
 			return await GetTask(() => source.AsEnumerable().TakeWhile(_ => !token.IsCancellationRequested).ToDictionary(keySelector, elementSelector, comparer), token).ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
 		}
 
-		#endregion
+#endregion
 
 	}
 }

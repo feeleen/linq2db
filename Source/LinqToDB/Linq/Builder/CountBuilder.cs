@@ -8,11 +8,12 @@ namespace LinqToDB.Linq.Builder
 
 	class CountBuilder : MethodCallBuilder
 	{
-		public static readonly string[] MethodNames = { "Count", "LongCount" };
+		public  static readonly string[] MethodNames      = { "Count"     , "LongCount"      };
+		private static readonly string[] MethodNamesAsync = { "CountAsync", "LongCountAsync" };
 
 		protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 		{
-			return methodCall.IsQueryable(MethodNames) || methodCall.IsAsyncExtension(MethodNames);
+			return methodCall.IsQueryable(MethodNames) || methodCall.IsAsyncExtension(MethodNamesAsync);
 		}
 
 		protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
@@ -113,52 +114,51 @@ namespace LinqToDB.Linq.Builder
 
 			public override void BuildQuery<T>(Query<T> query, ParameterExpression queryParameter)
 			{
-				var expr   = Builder.BuildSql(_returnType, FieldIndex);
+				var expr   = Builder.BuildSql(_returnType, FieldIndex, Sql);
 				var mapper = Builder.BuildMapper<object>(expr);
 
+				CompleteColumns();
 				QueryRunner.SetRunQuery(query, mapper);
 			}
 
 			public override Expression BuildExpression(Expression? expression, int level, bool enforceServerSide)
 			{
-				var index = ConvertToIndex(expression, level, ConvertFlags.Field)[0].Index;
+				var info  = ConvertToIndex(expression, level, ConvertFlags.Field)[0];
+				var index = info.Index;
 				if (Parent != null)
 					index = ConvertToParentIndex(index, Parent);
-				return Builder.BuildSql(_returnType, index);
+				return Builder.BuildSql(_returnType, index, info.Sql);
 			}
 
 			public override SqlInfo[] ConvertToSql(Expression? expression, int level, ConvertFlags flags)
 			{
-				switch (flags)
+				return flags switch
 				{
-					case ConvertFlags.Field : return new[] { new SqlInfo { Query = Parent!.SelectQuery, Sql = Sql! } };
-				}
-
-				throw new NotImplementedException();
+					ConvertFlags.Field => new[] { new SqlInfo(Sql!, Parent!.SelectQuery) },
+					_                  => throw new NotImplementedException(),
+				};
 			}
 
 			public override SqlInfo[] ConvertToIndex(Expression? expression, int level, ConvertFlags flags)
 			{
-				switch (flags)
+				return flags switch
 				{
-					case ConvertFlags.Field :
-						return _index ?? (_index = new[]
+					ConvertFlags.Field => 
+						_index ??= new[]
 						{
-							new SqlInfo { Query = Parent!.SelectQuery, Index = Parent.SelectQuery.Select.Add(Sql!), Sql = Sql!, }
-						});
-				}
-
-				throw new NotImplementedException();
+							new SqlInfo(Sql!, Parent!.SelectQuery, Parent.SelectQuery.Select.Add(Sql!))
+						},
+					_ => throw new NotImplementedException(),
+				};
 			}
 
 			public override IsExpressionResult IsExpression(Expression? expression, int level, RequestFor requestFlag)
 			{
-				switch (requestFlag)
+				return requestFlag switch
 				{
-					case RequestFor.Expression : return IsExpressionResult.True;
-				}
-
-				return IsExpressionResult.False;
+					RequestFor.Expression => IsExpressionResult.True,
+					_                     => IsExpressionResult.False,
+				};
 			}
 
 			public override IBuildContext? GetContext(Expression? expression, int level, BuildInfo buildInfo)

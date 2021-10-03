@@ -3,10 +3,13 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Threading.Tasks;
+using LinqToDB;
+using LinqToDB.Common;
 using LinqToDB.Expressions;
 using NUnit.Framework;
 
-namespace Tests
+namespace Tests.TypeMapping
 {
 	namespace Dynamic
 	{
@@ -78,6 +81,11 @@ namespace Tests
 			public RegularEnum1 RegularEnum1Property { get; set; } = RegularEnum1.Two;
 			public RegularEnum2 RegularEnum2Property { get; set; } = RegularEnum2.Two;
 			public FlagsEnum   FlagsEnumProperty     { get; set; } = FlagsEnum   .Bit3;
+
+			public string MethodWithRemappedName(string value) => value;
+			public int MethodWithWrongReturnType(string value) => value.Length;
+
+			public string ReturnTypeMapper(string value) => value;
 		}
 
 		public static class SampleClassExtensions
@@ -153,10 +161,18 @@ namespace Tests
 		[Wrapper] delegate string      ReturningDelegate           (string input);
 		[Wrapper] delegate SampleClass ReturningDelegateWithMapping(SampleClass input);
 
+		class StringToIntMapper : ICustomMapper
+		{
+			public Expression Map(Expression expression)
+			{
+				return Expression.Property(expression, "Length");
+			}
+		}
+
 		class SampleClass : TypeWrapper
 		{
-			private static LambdaExpression[] Wrappers { get; }
-				= new LambdaExpression[]
+			private static object[] Wrappers { get; }
+				= new object[]
 			{
 				// [0]: get Id
 				(Expression<Func<SampleClass, int>>)((SampleClass this_) => this_.Id),
@@ -192,6 +208,15 @@ namespace Tests
 				(Expression<Func<SampleClass, RegularEnum2>>)((SampleClass this_) => this_.RegularEnum2Property),
 				// [16]: set RegularEnum2Property
 				PropertySetter((SampleClass this_) => this_.RegularEnum2Property),
+				// [17]: set MethodWithRemappedName
+				new Tuple<LambdaExpression, bool>
+					((Expression<Func<SampleClass, string, string>>     )((SampleClass this_, string value) => this_.MethodWithRemappedName2(value)), true),
+				// [18]: set MethodWithWrongReturnType
+				new Tuple<LambdaExpression, bool>
+					((Expression<Func<SampleClass, string, string>>     )((SampleClass this_, string value) => this_.MethodWithWrongReturnType(value)), true),
+				// [19]: set ReturnTypeMapper
+				new Tuple<LambdaExpression, bool>
+					((Expression<Func<SampleClass, string, int>>        )((SampleClass this_, string value) => this_.ReturnTypeMapper(value)), true),
 			};
 
 			private static string[] Events { get; }
@@ -220,6 +245,15 @@ namespace Tests
 			public int SetRegularEnum2(RegularEnum2 val) => ((Func<SampleClass, RegularEnum2, int>)CompiledWrappers[14])(this, val);
 			public int SetFlagsEnum   (FlagsEnum    val) => ((Func<SampleClass, FlagsEnum, int>)CompiledWrappers[7])(this, val);
 
+			[TypeWrapperName("MethodWithRemappedName")]
+			public string MethodWithRemappedName2(string value) => ((Func<SampleClass, string, string>)CompiledWrappers[17])(this, value);
+			public string MethodWithWrongReturnType(string value) => ((Func<SampleClass, string, string>)CompiledWrappers[18])(this, value);
+
+			public bool HasMethodWithWrongReturnType => CompiledWrappers[18] != null;
+
+			[return: CustomMapper(typeof(StringToIntMapper))]
+			public int ReturnTypeMapper(string value) => ((Func<SampleClass, string, int>)CompiledWrappers[19])(this, value);
+
 			public RegularEnum1 RegularEnum1Property
 			{
 				get => ((Func<SampleClass, RegularEnum1  >)CompiledWrappers[8])(this);
@@ -243,29 +277,29 @@ namespace Tests
 			private      SimpleDelegate? _SimpleDelegateEvent;
 			public event SimpleDelegate?  SimpleDelegateEvent
 			{
-				add    => _SimpleDelegateEvent = (SimpleDelegate)Delegate.Combine(_SimpleDelegateEvent, value);
-				remove => _SimpleDelegateEvent = (SimpleDelegate)Delegate.Remove (_SimpleDelegateEvent, value);
+				add    => _SimpleDelegateEvent = (SimpleDelegate?)Delegate.Combine(_SimpleDelegateEvent, value);
+				remove => _SimpleDelegateEvent = (SimpleDelegate?)Delegate.Remove (_SimpleDelegateEvent, value);
 			}
 
 			private      SimpleDelegateWithMapping? _SimpleDelegateWithMappingEvent;
 			public event SimpleDelegateWithMapping?  SimpleDelegateWithMappingEvent
 			{
-				add    => _SimpleDelegateWithMappingEvent = (SimpleDelegateWithMapping)Delegate.Combine(_SimpleDelegateWithMappingEvent, value);
-				remove => _SimpleDelegateWithMappingEvent = (SimpleDelegateWithMapping)Delegate.Remove (_SimpleDelegateWithMappingEvent, value);
+				add    => _SimpleDelegateWithMappingEvent = (SimpleDelegateWithMapping?)Delegate.Combine(_SimpleDelegateWithMappingEvent, value);
+				remove => _SimpleDelegateWithMappingEvent = (SimpleDelegateWithMapping?)Delegate.Remove (_SimpleDelegateWithMappingEvent, value);
 			}
 
 			private      ReturningDelegate? _ReturningDelegateEvent;
 			public event ReturningDelegate?  ReturningDelegateEvent
 			{
-				add    => _ReturningDelegateEvent = (ReturningDelegate)Delegate.Combine(_ReturningDelegateEvent, value);
-				remove => _ReturningDelegateEvent = (ReturningDelegate)Delegate.Remove (_ReturningDelegateEvent, value);
+				add    => _ReturningDelegateEvent = (ReturningDelegate?)Delegate.Combine(_ReturningDelegateEvent, value);
+				remove => _ReturningDelegateEvent = (ReturningDelegate?)Delegate.Remove (_ReturningDelegateEvent, value);
 			}
 
 			private      ReturningDelegateWithMapping? _ReturningDelegateWithMappingEvent;
 			public event ReturningDelegateWithMapping?  ReturningDelegateWithMappingEvent
 			{
-				add    => _ReturningDelegateWithMappingEvent = (ReturningDelegateWithMapping)Delegate.Combine(_ReturningDelegateWithMappingEvent, value);
-				remove => _ReturningDelegateWithMappingEvent = (ReturningDelegateWithMapping)Delegate.Remove (_ReturningDelegateWithMappingEvent, value);
+				add    => _ReturningDelegateWithMappingEvent = (ReturningDelegateWithMapping?)Delegate.Combine(_ReturningDelegateWithMappingEvent, value);
+				remove => _ReturningDelegateWithMappingEvent = (ReturningDelegateWithMapping?)Delegate.Remove (_ReturningDelegateWithMappingEvent, value);
 			}
 
 			public SampleClass(object instance, Delegate[] delegates) : base(instance, delegates)
@@ -355,7 +389,7 @@ namespace Tests
 					var e = GetEnumerator();
 
 					while (e.MoveNext())
-						yield return wrapper(e.Current);
+						yield return wrapper(e.Current!);
 				}
 			}
 		}
@@ -426,10 +460,10 @@ namespace Tests
 				var l4 = typeMapper.MapLambda((SampleClass s, int i) => s.GetOther(i).OtherStrProp);
 
 
-				var cl1 = (Func<Dynamic.SampleClass, int>)l1.Compile();
-				var cl2 = (Func<Dynamic.SampleClass, int>)l2.Compile();
-				var cl3 = (Func<Dynamic.SampleClass, int, Dynamic.OtherClass>)l3.Compile();
-				var cl4 = (Func<Dynamic.SampleClass, int, string>)l4.Compile();
+				var cl1 = (Func<Dynamic.SampleClass, int>)l1.CompileExpression();
+				var cl2 = (Func<Dynamic.SampleClass, int>)l2.CompileExpression();
+				var cl3 = (Func<Dynamic.SampleClass, int, Dynamic.OtherClass>)l3.CompileExpression();
+				var cl4 = (Func<Dynamic.SampleClass, int, string>)l4.CompileExpression();
 
 				Assert.That(cl1(concrete), Is.EqualTo(33));
 				Assert.That(cl2(concrete), Is.EqualTo(1));
@@ -453,7 +487,7 @@ namespace Tests
 
 				var newExpression = typeMapper.MapExpression(() => new SampleClass(55, 77));
 				var newLambda     = Expression.Lambda<Func<Dynamic.SampleClass>>(newExpression);
-				var instance      = newLambda.Compile()();
+				var instance      = newLambda.CompileExpression()();
 
 				Assert.That(instance.Id   , Is.EqualTo(55));
 				Assert.That(instance.Value, Is.EqualTo(77));
@@ -467,7 +501,7 @@ namespace Tests
 				var newMemberInit    = typeMapper.MapExpression(() => new SampleClass(55, 77) {StrValue = "Str"});
 				var memberInitLambda = Expression.Lambda<Func<Dynamic.SampleClass>>(newMemberInit);
 
-				var instance = memberInitLambda.Compile()();
+				var instance = memberInitLambda.CompileExpression()();
 
 				Assert.That(instance.Id      , Is.EqualTo(55));
 				Assert.That(instance.Value   , Is.EqualTo(77));
@@ -650,6 +684,68 @@ namespace Tests
 				var errors  = wrapped.Errors.ToArray();
 
 				Assert.AreEqual(2, errors.Length);
+			}
+
+			[Test]
+			public void TestMethodNameAttribute()
+			{
+				var typeMapper = CreateTypeMapper();
+
+				var wrapped = typeMapper.BuildWrappedFactory(() => new SampleClass(1, 2))();
+				var res = wrapped.MethodWithRemappedName2("value");
+
+				Assert.AreEqual("value", res);
+			}
+
+			[Test]
+			public void TestMethodWithWrongReturnType()
+			{
+				var typeMapper = CreateTypeMapper();
+
+				var wrapped = typeMapper.BuildWrappedFactory(() => new SampleClass(1, 2))();
+
+				Assert.False(wrapped.HasMethodWithWrongReturnType);
+			}
+
+			[Test]
+			public void TestReturnTypeMapper()
+			{
+				var typeMapper = CreateTypeMapper();
+
+				var wrapped = typeMapper.BuildWrappedFactory(() => new SampleClass(1, 2))();
+
+				Assert.AreEqual(4, wrapped.ReturnTypeMapper("test"));
+			}
+
+			[Test]
+			public void ValueTaskToTaskMapperTest1()
+			{
+				var taskExpression = Expression.Constant(new ValueTask<long>());
+				var mapper         = new ValueTaskToTaskMapper();
+				var result         = ((ICustomMapper)mapper).Map(taskExpression);
+
+				Assert.AreEqual(typeof(Task<long>), result.Type);
+				Assert.True(typeof(Task<long>).IsAssignableFrom(result.EvaluateExpression()!.GetType()));
+			}
+
+			[Test]
+			public void ValueTaskToTaskMapperTest2()
+			{
+				var taskExpression = Expression.Constant(new ValueTask());
+				var mapper         = new ValueTaskToTaskMapper();
+				var result         = ((ICustomMapper)mapper).Map(taskExpression);
+
+				Assert.AreEqual(typeof(Task), result.Type);
+				Assert.True(typeof(Task).IsAssignableFrom(result.EvaluateExpression()!.GetType()));
+			}
+
+			[Test]
+			public void ValueTaskToTaskMapperTest3()
+			{
+				var taskExpression = Expression.Constant(0);
+				var mapper         = new ValueTaskToTaskMapper();
+
+				Assert.Throws(typeof(LinqToDBException), () => ((ICustomMapper)mapper).Map(taskExpression));
 			}
 		}
 	}

@@ -32,14 +32,15 @@ namespace Tests.UserTests
 					where p.MyEnum != TestIssue358Enum.Value1
 					select p;
 
-				var sql = qry.ToString();
+				var sql = qry.ToString()!;
+				TestContext.WriteLine(sql);
 
-				Assert.That(sql.IndexOf("NULL"), Is.GreaterThan(0), sql);
+				Assert.That(sql, Does.Contain("NULL"));
 			}
 		}
 
 		[Test]
-		public void ContainsHasIsNull()
+		public void ContainsDoesNotHaveIsNull()
 		{
 			using (var db = new TestDataConnection())
 			{
@@ -50,28 +51,10 @@ namespace Tests.UserTests
 					where !!filter.Contains(p.MyEnum!.Value)
 					select p;
 
-				var sql = qry.ToString();
+				var sql = qry.ToString()!;
+				TestContext.WriteLine(sql);
 
-				Assert.That(sql.IndexOf("NULL"), Is.GreaterThan(0), sql);
-			}
-		}
-
-		[Test]
-		public void ContainsHasIsNullWithoutComparasionNullCheck()
-		{
-			using (new WithoutComparisonNullCheck())
-			using (var db = new TestDataConnection())
-			{
-				var filter = new[] {TestIssue358Enum.Value2};
-
-				var qry =
-					from p in db.GetTable<TestIssue358Class>()
-					where !!filter.Contains(p.MyEnum!.Value)
-					select p;
-
-				var sql = qry.ToString();
-
-				Assert.That(sql.IndexOf("NULL"), Is.LessThan(0), sql);
+				Assert.That(sql, Does.Not.Contain("NULL"));
 			}
 		}
 
@@ -85,9 +68,10 @@ namespace Tests.UserTests
 					where p.MyEnum2 != TestIssue358Enum.Value1
 					select p;
 
-				var sql = qry.ToString();
+				var sql = qry.ToString()!;
+				TestContext.WriteLine(sql);
 
-				Assert.That(sql.IndexOf("NULL"), Is.LessThan(0), sql);
+				Assert.That(sql, Does.Not.Contain("NULL"));
 			}
 		}
 
@@ -103,9 +87,10 @@ namespace Tests.UserTests
 					where !filter.Contains(p.MyEnum2)
 					select p;
 
-				var sql = qry.ToString();
+				var sql = qry.ToString()!;
+				TestContext.WriteLine(sql);
 
-				Assert.That(sql.IndexOf("NULL"), Is.LessThan(0), sql);
+				Assert.That(sql, Does.Not.Contain("NULL"));
 			}
 		}
 

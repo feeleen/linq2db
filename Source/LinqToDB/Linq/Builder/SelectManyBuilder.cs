@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 
 namespace LinqToDB.Linq.Builder
@@ -52,12 +51,9 @@ namespace LinqToDB.Linq.Builder
 			var leftJoin       = collection is DefaultIfEmptyBuilder.DefaultIfEmptyContext || collectionInfo.JoinType == JoinType.Left;
 			var sql            = collection.SelectQuery;
 
-			var sequenceTables = new HashSet<ISqlTableSource>(sequence.SelectQuery.From.Tables[0].GetTables());
-			var newQuery       = null != new QueryVisitor().Find(sql, e => e == collectionInfo.SelectQuery);
-			var crossApply     = null != new QueryVisitor().Find(sql, e =>
-				e.ElementType == QueryElementType.TableSource && sequenceTables.Contains((ISqlTableSource)e)  ||
-				e.ElementType == QueryElementType.SqlField    && sequenceTables.Contains(((SqlField)e).Table!) ||
-				e.ElementType == QueryElementType.Column      && sequenceTables.Contains(((SqlColumn)e).Parent!));
+			var newQuery       = QueryHelper.ContainsElement(sql, collectionInfo.SelectQuery);
+			var sequenceTables = new HashSet<ISqlTableSource>(QueryHelper.EnumerateAccessibleSources(sequence.SelectQuery));
+			var crossApply     = QueryHelper.IsDependsOn(sql, sequenceTables);
 
 			if (collection is JoinBuilder.GroupJoinSubQueryContext queryContext)
 			{
@@ -85,7 +81,7 @@ namespace LinqToDB.Linq.Builder
 								if (e is SqlColumn column)
 								{
 									if (column.Parent == collection.SelectQuery)
-										return column.UnderlyingColumn!;
+										return column.Expression!;
 								}
 								return e;
 							});
@@ -113,42 +109,6 @@ namespace LinqToDB.Linq.Builder
 					context.Collection = new SubQueryContext(collection, sequence.SelectQuery, false);
 
 					return new SelectContext(buildInfo.Parent, resultSelector, sequence, context);
-				}
-			}
-
-			void MoveSearchConditionsToJoin(SqlFromClause.Join join)
-			{
-				var tableSources = new HashSet<ISqlTableSource>();
-
-				((ISqlExpressionWalkable)sql.Where.SearchCondition).Walk(new WalkOptions(), e =>
-				{
-					if (e is ISqlTableSource ts && !tableSources.Contains(ts))
-						tableSources.Add(ts);
-					return e;
-				});
-
-				bool ContainsTable(ISqlTableSource tbl, IQueryElement qe)
-				{
-					return null != new QueryVisitor().Find(qe, e =>
-						e == tbl ||
-						e.ElementType == QueryElementType.SqlField && tbl == ((SqlField) e).Table ||
-						e.ElementType == QueryElementType.Column   && tbl == ((SqlColumn)e).Parent);
-				}
-
-				var conditions = sql.Where.SearchCondition.Conditions;
-
-				if (conditions.Count > 0)
-				{
-					for (var i = conditions.Count - 1; i >= 0; i--)
-					{
-						var condition = conditions[i];
-
-						if (!tableSources.Any(ts => ContainsTable(ts, condition)))
-						{
-							join.JoinedTable.Condition.Conditions.Insert(0, condition);
-							conditions.RemoveAt(i);
-						}
-					}
 				}
 			}
 
@@ -180,7 +140,7 @@ namespace LinqToDB.Linq.Builder
 
 				if (!(joinType == JoinType.CrossApply || joinType == JoinType.OuterApply))
 				{
-					MoveSearchConditionsToJoin(join);
+					QueryHelper.MoveSearchConditionsToJoin(sql, join.JoinedTable, null);
 				}
 
 				// Association.
@@ -188,12 +148,12 @@ namespace LinqToDB.Linq.Builder
 				if (collection.Parent is TableBuilder.TableContext collectionParent &&
 					collectionInfo.IsAssociationBuilt)
 				{
-					var ts = (SqlTableSource)new QueryVisitor().Find(sequence.SelectQuery.From, e =>
+					var ts = (SqlTableSource)sequence.SelectQuery.From.Find(collectionParent.SqlTable, static (table, e) =>
 					{
 						if (e.ElementType == QueryElementType.TableSource)
 						{
 							var t = (SqlTableSource)e;
-							return t.Source == collectionParent.SqlTable;
+							return t.Source == table;
 						}
 
 						return false;
@@ -203,17 +163,9 @@ namespace LinqToDB.Linq.Builder
 				}
 				else
 				{
-					//if (collectionInfo.IsAssociationBuilt)
-					//{
-					//	collectionInfo.AssosiationContext.ParentAssociationJoin.IsWeak = false;
-					//}
-					//else
-					{
-						sequence.SelectQuery.From.Tables[0].Joins.Add(join.JoinedTable);
-					}
+					sequence.SelectQuery.From.Tables[0].Joins.Add(join.JoinedTable);
 				}
 
-				QueryHelper.CorrectSearchConditionNesting(sequence.SelectQuery, join.JoinedTable.Condition);
 				context.Collection = new SubQueryContext(table, sequence.SelectQuery, false);
 				return new SelectContext(buildInfo.Parent, resultSelector, sequence, context);
 			}
@@ -226,12 +178,11 @@ namespace LinqToDB.Linq.Builder
 
 				if (!(joinType == JoinType.CrossApply || joinType == JoinType.OuterApply))
 				{
-					MoveSearchConditionsToJoin(join);
+					QueryHelper.MoveSearchConditionsToJoin(sql, join.JoinedTable, null);
 				}
 
 				sequence.SelectQuery.From.Tables[0].Joins.Add(join.JoinedTable);
-				QueryHelper.CorrectSearchConditionNesting(sequence.SelectQuery, join.JoinedTable.Condition);
-
+				
 				context.Collection = new SubQueryContext(collection, sequence.SelectQuery, false);
 				return new SelectContext(buildInfo.Parent, resultSelector, sequence, context);
 			}
@@ -271,7 +222,7 @@ namespace LinqToDB.Linq.Builder
 				if (expression == null)
 					return Collection!.BuildExpression(expression, level, enforceServerSide);
 
-				var root = expression.GetRootObject(Builder.MappingSchema);
+				var root = Builder.GetRootObject(expression);
 
 				if (root == Lambda.Parameters[0])
 					return base.BuildExpression(expression, level, enforceServerSide);
@@ -294,7 +245,7 @@ namespace LinqToDB.Linq.Builder
 					if (expression == null)
 						return Collection.ConvertToIndex(expression, level, flags);
 
-					var root = expression.GetRootObject(Builder.MappingSchema);
+					var root = Builder.GetRootObject(expression);
 
 					if (root != Lambda.Parameters[0])
 						return Collection.ConvertToIndex(expression, level, flags);
@@ -310,7 +261,7 @@ namespace LinqToDB.Linq.Builder
 					if (expression == null)
 						return Collection.ConvertToSql(expression, level, flags);
 
-					var root = expression.GetRootObject(Builder.MappingSchema);
+					var root = Builder.GetRootObject(expression);
 
 					if (root != Lambda.Parameters[0])
 						return Collection.ConvertToSql(expression, level, flags);
@@ -326,7 +277,7 @@ namespace LinqToDB.Linq.Builder
 					if (expression == null)
 						return Collection.GetContext(expression, level, buildInfo);
 
-					var root = expression.GetRootObject(Builder.MappingSchema);
+					var root = Builder.GetRootObject(expression);
 
 					if (root != Lambda.Parameters[0])
 						return Collection.GetContext(expression, level, buildInfo);
@@ -342,13 +293,20 @@ namespace LinqToDB.Linq.Builder
 					if (expression == null)
 						return Collection.IsExpression(expression, level, requestFlag);
 
-					var root = expression.GetRootObject(Builder.MappingSchema);
+					var root = Builder.GetRootObject(expression);
 
 					if (root != Lambda.Parameters[0])
 						return Collection.IsExpression(expression, level, requestFlag);
 				}
 
 				return base.IsExpression(expression, level, requestFlag);
+			}
+
+			public override void CompleteColumns()
+			{
+				base.CompleteColumns();
+
+				Collection?.CompleteColumns();
 			}
 		}
 	}

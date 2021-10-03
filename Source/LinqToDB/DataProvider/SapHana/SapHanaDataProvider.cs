@@ -1,7 +1,9 @@
-﻿#if !NETSTANDARD2_0
+﻿#if NETFRAMEWORK || NETCOREAPP
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace LinqToDB.DataProvider.SapHana
 {
@@ -46,13 +48,19 @@ namespace LinqToDB.DataProvider.SapHana
 			SqlProviderFlags.IsInsertOrUpdateSupported = false;
 			SqlProviderFlags.IsUpdateFromSupported     = false;
 
-			_sqlOptimizer = new SapHanaSqlOptimizer(SqlProviderFlags);
+			_sqlOptimizer = new SapHanaNativeSqlOptimizer(SqlProviderFlags);
 		}
 
 		public override SchemaProvider.ISchemaProvider GetSchemaProvider()
 		{
 			return new SapHanaSchemaProvider();
 		}
+
+		public override TableOptions SupportedTableOptions =>
+			TableOptions.IsTemporary                |
+			TableOptions.IsGlobalTemporaryStructure |
+			TableOptions.IsLocalTemporaryStructure  |
+			TableOptions.IsLocalTemporaryData;
 
 		public override ISqlBuilder CreateSqlBuilder(MappingSchema mappingSchema)
 		{
@@ -148,6 +156,30 @@ namespace LinqToDB.DataProvider.SapHana
 				options,
 				source);
 		}
+
+		public override Task<BulkCopyRowsCopied> BulkCopyAsync<T>(
+			ITable<T> table, BulkCopyOptions options, IEnumerable<T> source, CancellationToken cancellationToken)
+		{
+			return new SapHanaBulkCopy(this).BulkCopyAsync(
+				options.BulkCopyType == BulkCopyType.Default ? SapHanaTools.DefaultBulkCopyType : options.BulkCopyType,
+				table,
+				options,
+				source,
+				cancellationToken);
+		}
+
+#if NATIVE_ASYNC
+		public override Task<BulkCopyRowsCopied> BulkCopyAsync<T>(
+			ITable<T> table, BulkCopyOptions options, IAsyncEnumerable<T> source, CancellationToken cancellationToken)
+		{
+			return new SapHanaBulkCopy(this).BulkCopyAsync(
+				options.BulkCopyType == BulkCopyType.Default ? SapHanaTools.DefaultBulkCopyType : options.BulkCopyType,
+				table,
+				options,
+				source,
+				cancellationToken);
+		}
+#endif
 
 		public override bool? IsDBNullAllowed(IDataReader reader, int idx)
 		{

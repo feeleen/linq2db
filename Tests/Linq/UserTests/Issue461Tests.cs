@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Linq;
 
 using LinqToDB.Data;
 
@@ -32,8 +28,7 @@ namespace Tests.UserTests
 
 			public override bool Equals(object? obj)
 			{
-				var vh = obj as ValueHolder;
-				if (vh == null)
+				if (!(obj is ValueHolder vh))
 					return false;
 
 				if (ReferenceEquals(this, vh))
@@ -52,10 +47,9 @@ namespace Tests.UserTests
 		{
 			public ValueHolder? Child;
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 			{
-				var vvh = obj as ValueValueHolder;
-				if (vvh == null)
+				if (!(obj is ValueValueHolder vvh))
 					return false;
 
 				if (ReferenceEquals(this, vvh))
@@ -73,25 +67,9 @@ namespace Tests.UserTests
 			}
 		}
 
-		[ActiveIssue(SkipForNonLinqService = true, Details = "SELECT * query",
-			Configurations = new[]
-			{
-				ProviderName.Access,
-				ProviderName.DB2,
-				TestProvName.AllFirebird,
-				TestProvName.AllInformix,
-				TestProvName.AllMySql,
-				TestProvName.AllOracle,
-				ProviderName.PostgreSQL92,
-				TestProvName.AllSQLite,
-				TestProvName.AllSapHana,
-				ProviderName.SqlServer2000,
-				TestProvName.AllSybase
-			})]
 		[Test]
 		public void SelectToAnonimousTest1([DataSources] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			{
 				var result = (from sep in db.Parent
@@ -106,7 +84,7 @@ namespace Tests.UserTests
 							  }).ToList();
 
 				if (db is DataConnection connection)
-					Console.WriteLine(connection.LastQuery);
+					TestContext.WriteLine(connection.LastQuery);
 
 				var expected = from sep in Parent
 							   select new
@@ -123,25 +101,9 @@ namespace Tests.UserTests
 			}
 		}
 
-		[ActiveIssue(SkipForNonLinqService = true, Details = "SELECT * query",
-			Configurations = new[]
-			{
-				ProviderName.Access,
-				ProviderName.DB2,
-				TestProvName.AllFirebird,
-				TestProvName.AllInformix,
-				TestProvName.AllMySql,
-				TestProvName.AllOracle,
-				ProviderName.PostgreSQL92,
-				TestProvName.AllSQLite,
-				TestProvName.AllSapHana,
-				ProviderName.SqlServer2000,
-				TestProvName.AllSybase
-			})]
 		[Test]
 		public void SelectToAnonymousTest2([DataSources] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			{
 				var result = (from sep in db.Parent
@@ -157,7 +119,7 @@ namespace Tests.UserTests
 							  }).ToList();
 
 				if (db is DataConnection connection)
-					Console.WriteLine(connection.LastQuery);
+					TestContext.WriteLine(connection.LastQuery);
 
 				var expected = from sep in Parent
 							   select new
@@ -175,25 +137,9 @@ namespace Tests.UserTests
 			}
 		}
 
-		[ActiveIssue(SkipForNonLinqService = true, Details = "SELECT * query",
-			Configurations = new[]
-			{
-				ProviderName.Access,
-				ProviderName.DB2,
-				TestProvName.AllFirebird,
-				TestProvName.AllInformix,
-				TestProvName.AllMySql,
-				TestProvName.AllOracle,
-				ProviderName.PostgreSQL92,
-				TestProvName.AllSQLite,
-				TestProvName.AllSapHana,
-				ProviderName.SqlServer2000,
-				TestProvName.AllSybase
-			})]
 		[Test]
 		public void SelectToTypeTest1([DataSources] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			{
 				var result = (from sep in db.Parent
@@ -208,7 +154,7 @@ namespace Tests.UserTests
 							  }).ToList();
 
 				if (db is DataConnection connection)
-					Console.WriteLine(connection.LastQuery);
+					TestContext.WriteLine(connection.LastQuery);
 
 				var expected = from sep in Parent
 							   select new ValueValueHolder
@@ -225,25 +171,9 @@ namespace Tests.UserTests
 			}
 		}
 
-		[ActiveIssue(SkipForNonLinqService = true, Details = "SELECT * query",
-			Configurations = new[]
-			{
-				ProviderName.Access,
-				ProviderName.DB2,
-				TestProvName.AllFirebird,
-				TestProvName.AllInformix,
-				TestProvName.AllMySql,
-				TestProvName.AllOracle,
-				ProviderName.PostgreSQL92,
-				TestProvName.AllSQLite,
-				TestProvName.AllSapHana,
-				ProviderName.SqlServer2000,
-				TestProvName.AllSybase
-			})]
 		[Test]
 		public void SelectToTypeTest2([DataSources] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			{
 				var result = (from sep in db.Parent
@@ -259,7 +189,7 @@ namespace Tests.UserTests
 							  }).ToList();
 
 				if (db is DataConnection connection)
-					Console.WriteLine(connection.LastQuery);
+					TestContext.WriteLine(connection.LastQuery);
 
 				var expected = from sep in Parent
 							   select new ValueValueHolder
@@ -286,9 +216,6 @@ namespace Tests.UserTests
 				var expected =    Parent.Select(p =>    Child.Select(c => c.ParentID + 1).FirstOrDefault());
 				var result   = db.Parent.Select(p => db.Child.Select(c => c.ParentID + 1).FirstOrDefault());
 
-				if (db is DataConnection connection)
-					Console.WriteLine(connection.LastQuery);
-
 				AreEqual(expected, result);
 			}
 		}
@@ -301,9 +228,6 @@ namespace Tests.UserTests
 			{
 				var expected =    Parent.Select(p => new { Id = p.ParentID, V =    Child.Select(c => c.ParentID + 1).FirstOrDefault() }).ToList().Select(_ => _.V);
 				var result   = db.Parent.Select(p => new { Id = p.ParentID, V = db.Child.Select(c => c.ParentID + 1).FirstOrDefault() }).ToList().Select(_ => _.V);
-
-				if (db is DataConnection connection)
-					Console.WriteLine(connection.LastQuery);
 
 				AreEqual(expected, result);
 			}

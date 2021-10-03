@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-
 using LinqToDB;
 using LinqToDB.Data;
-
 using NUnit.Framework;
 
 namespace Tests.Linq
@@ -17,12 +16,12 @@ namespace Tests.Linq
 	public class AsyncTests : TestBase
 	{
 		[Test]
-		public void Test([DataSources(false)] string context)
+		public async Task Test([DataSources(false)] string context)
 		{
-			TestImpl(context);
+			await TestImpl(context);
 		}
 
-		async void TestImpl(string context)
+		async Task TestImpl(string context)
 		{
 			Test1(context);
 
@@ -44,12 +43,12 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void TestForEach([DataSources(false)] string context)
+		public async Task TestForEach([DataSources(false)] string context)
 		{
-			TestForEachImpl(context);
+			await TestForEachImpl(context);
 		}
 
-		async void TestForEachImpl(string context)
+		async Task TestForEachImpl(string context)
 		{
 			using (var db = GetDataContext(context + ".LinqService"))
 			{
@@ -62,18 +61,20 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void TestExecute1([DataSources(false)] string context)
+		public async Task TestExecute1([DataSources(false)] string context)
 		{
-			TestExecute1Impl(context);
+			await TestExecute1Impl(context);
 		}
 
-		async void TestExecute1Impl(string context)
+		async Task TestExecute1Impl(string context)
 		{
 			using (var conn = new TestDataConnection(context))
 			{
 				conn.InlineParameters = true;
 
-				var sql = conn.Person.Where(p => p.ID == 1).Select(p => p.Name).Take(1).ToString().Replace("-- Access", "");
+				var sql = conn.Person.Where(p => p.ID == 1).Select(p => p.Name).Take(1).ToString()!;
+				sql = string.Join(Environment.NewLine, sql.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+					.Where(line => !line.StartsWith("--")));
 
 				var res = await conn.SetCommand(sql).ExecuteAsync<string>();
 
@@ -87,8 +88,10 @@ namespace Tests.Linq
 			using (var conn = new TestDataConnection(context))
 			{
 				conn.InlineParameters = true;
-				
-				var sql = conn.Person.Where(p => p.ID == 1).Select(p => p.Name).Take(1).ToString().Replace("-- Access", "");
+
+				var sql = conn.Person.Where(p => p.ID == 1).Select(p => p.Name).Take(1).ToString()!;
+				sql = string.Join(Environment.NewLine, sql.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+					.Where(line => !line.StartsWith("--")));
 
 				var res = conn.SetCommand(sql).ExecuteAsync<string>().Result;
 
@@ -97,20 +100,22 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void TestQueryToArray([DataSources(false)] string context)
+		public async Task TestQueryToArray([DataSources(false)] string context)
 		{
-			TestQueryToArrayImpl(context);
+			await TestQueryToArrayImpl(context);
 		}
 
-		async void TestQueryToArrayImpl(string context)
+		async Task TestQueryToArrayImpl(string context)
 		{
 			using (var conn = new TestDataConnection(context))
 			{
 				conn.InlineParameters = true;
-				
-				var sql = conn.Person.Where(p => p.ID == 1).Select(p => p.Name).Take(1).ToString().Replace("-- Access", "");
 
-				using (var rd = await conn.SetCommand(sql).ExecuteReaderAsync())
+				var sql = conn.Person.Where(p => p.ID == 1).Select(p => p.Name).Take(1).ToString()!;
+				sql = string.Join(Environment.NewLine, sql.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+					.Where(line => !line.StartsWith("--")));
+
+				await using (var rd = await conn.SetCommand(sql).ExecuteReaderAsync())
 				{
 					var list = await rd.QueryToArrayAsync<string>();
 
@@ -158,10 +163,6 @@ namespace Tests.Linq
 			}
 		}
 
-		[ActiveIssue(SkipForNonLinqService = true, Details = "SELECT * query", Configurations = new[]
-		{ 
-			ProviderName.DB2
-		})]
 		[Test]
 		public async Task TakeSkipTest([DataSources] string context)
 		{
@@ -173,6 +174,80 @@ namespace Tests.Linq
 					resultQuery.ToArray(),
 					await resultQuery.ToArrayAsync());
 			}
+		}
+
+		[Test]
+		public async Task AsAsyncEnumerable1Test([DataSources] string context)
+		{
+			using var db = GetDataContext(context);
+			var resultQuery = db.Parent.AsAsyncEnumerable();
+			var list = new List<Parent>();
+			await foreach (var row in resultQuery)
+				list.Add(row);
+
+			AreEqual(Parent, list);
+		}
+
+		[Test]
+		public async Task AsAsyncEnumerable2Test([DataSources] string context)
+		{
+			using var db = GetDataContext(context);
+			var resultQuery = db.Parent.Where(x => x.ParentID > 1).AsAsyncEnumerable();
+			var list = new List<Parent>();
+			await foreach (var row in resultQuery)
+				list.Add(row);
+
+			AreEqual(Parent.Where(x => x.ParentID > 1), list);
+		}
+
+		[Test]
+		public async Task AsyncEnumerableCast1Test([DataSources] string context)
+		{
+			using var db = GetDataContext(context);
+			var resultQuery = (IAsyncEnumerable<Parent>)db.Parent;
+			var list = new List<Parent>();
+			await foreach (var row in resultQuery)
+				list.Add(row);
+
+			AreEqual(Parent, list);
+		}
+
+		[Test]
+		public async Task AsyncEnumerableCast2Test([DataSources] string context)
+		{
+			using var db = GetDataContext(context);
+			var resultQuery = (IAsyncEnumerable<Parent>)db.Parent.Where(x => x.ParentID > 1);
+			var list = new List<Parent>();
+			await foreach (var row in resultQuery)
+				list.Add(row);
+
+			AreEqual(Parent.Where(x => x.ParentID > 1), list);
+		}
+
+		[Test]
+		public void CancelableAsyncEnumerableTest([DataSources] string context)
+		{
+			using var cts = new CancellationTokenSource();
+			var cancellationToken = cts.Token;
+			cts.Cancel();
+			using var db = GetDataContext(context);
+			var resultQuery = db.Parent.AsAsyncEnumerable().WithCancellation(cancellationToken);
+			var list = new List<Parent>();
+			Assert.ThrowsAsync<OperationCanceledException>(async () =>
+			{
+				try
+				{
+					await foreach (var row in resultQuery)
+						list.Add(row);
+				}
+				catch (OperationCanceledException)
+				{
+					// this casts any exception that inherits from OperationCanceledException
+					//   to a OperationCanceledException to pass the assert check above
+					//   (needed for TaskCanceledException)
+					throw new OperationCanceledException();
+				}
+			});
 		}
 	}
 }

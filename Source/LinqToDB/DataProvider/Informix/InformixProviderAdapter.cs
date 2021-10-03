@@ -4,6 +4,7 @@ using System.Data;
 namespace LinqToDB.DataProvider.Informix
 {
 	using System.Linq.Expressions;
+	using LinqToDB.Common;
 	using LinqToDB.DataProvider.DB2;
 	using LinqToDB.Expressions;
 	using LinqToDB.Mapping;
@@ -189,12 +190,12 @@ namespace LinqToDB.DataProvider.Informix
 			if (assembly == null)
 				throw new InvalidOperationException($"Cannot load assembly {IfxAssemblyName}");
 
-			var connectionType  = assembly.GetType($"{IfxClientNamespace}.IfxConnection" , true);
-			var parameterType   = assembly.GetType($"{IfxClientNamespace}.IfxParameter"  , true);
-			var dataReaderType  = assembly.GetType($"{IfxClientNamespace}.IfxDataReader" , true);
-			var commandType     = assembly.GetType($"{IfxClientNamespace}.IfxCommand"    , true);
-			var transactionType = assembly.GetType($"{IfxClientNamespace}.IfxTransaction", true);
-			var dbType          = assembly.GetType($"{IfxClientNamespace}.IfxType"       , true);
+			var connectionType  = assembly.GetType($"{IfxClientNamespace}.IfxConnection" , true)!;
+			var parameterType   = assembly.GetType($"{IfxClientNamespace}.IfxParameter"  , true)!;
+			var dataReaderType  = assembly.GetType($"{IfxClientNamespace}.IfxDataReader" , true)!;
+			var commandType     = assembly.GetType($"{IfxClientNamespace}.IfxCommand"    , true)!;
+			var transactionType = assembly.GetType($"{IfxClientNamespace}.IfxTransaction", true)!;
+			var dbType          = assembly.GetType($"{IfxClientNamespace}.IfxType"       , true)!;
 
 			var mappingSchema = new MappingSchema();
 			var blobType      = loadType("IfxBlob"    , DataType.VarBinary)!;
@@ -217,11 +218,11 @@ namespace LinqToDB.DataProvider.Informix
 			var bulkCopyType = assembly.GetType($"{IfxClientNamespace}.IfxBulkCopy", false);
 			if (bulkCopyType != null)
 			{
-				var bulkCopyOptionsType                 = assembly.GetType($"{IfxClientNamespace}.IfxBulkCopyOptions"                , true);
-				var bulkRowsCopiedEventHandlerType      = assembly.GetType($"{IfxClientNamespace}.IfxRowsCopiedEventHandler"         , true);
-				var bulkCopyColumnMappingType           = assembly.GetType($"{IfxClientNamespace}.IfxBulkCopyColumnMapping"          , true);
-				var bulkCopyColumnMappingCollectionType = assembly.GetType($"{IfxClientNamespace}.IfxBulkCopyColumnMappingCollection", true);
-				var rowsCopiedEventArgsType             = assembly.GetType($"{IfxClientNamespace}.IfxRowsCopiedEventArgs"            , true);
+				var bulkCopyOptionsType                 = assembly.GetType($"{IfxClientNamespace}.IfxBulkCopyOptions"                , true)!;
+				var bulkRowsCopiedEventHandlerType      = assembly.GetType($"{IfxClientNamespace}.IfxRowsCopiedEventHandler"         , true)!;
+				var bulkCopyColumnMappingType           = assembly.GetType($"{IfxClientNamespace}.IfxBulkCopyColumnMapping"          , true)!;
+				var bulkCopyColumnMappingCollectionType = assembly.GetType($"{IfxClientNamespace}.IfxBulkCopyColumnMappingCollection", true)!;
+				var rowsCopiedEventArgsType             = assembly.GetType($"{IfxClientNamespace}.IfxRowsCopiedEventArgs"            , true)!;
 
 				typeMapper.RegisterTypeWrapper<IfxBulkCopy>(bulkCopyType);
 				typeMapper.RegisterTypeWrapper<IfxBulkCopyOptions>(bulkCopyOptionsType);
@@ -274,7 +275,7 @@ namespace LinqToDB.DataProvider.Informix
 
 				if (register)
 				{
-					var getNullValue = Expression.Lambda<Func<object>>(Expression.Convert(ExpressionHelper.Field(type, "Null"), typeof(object))).Compile();
+					var getNullValue = Expression.Lambda<Func<object>>(Expression.Convert(ExpressionHelper.Field(type, "Null"), typeof(object))).CompileExpression();
 					mappingSchema.AddScalarType(type, getNullValue(), true, dataType);
 				}
 
@@ -430,10 +431,10 @@ namespace LinqToDB.DataProvider.Informix
 			}
 
 			private      IfxRowsCopiedEventHandler? _IfxRowsCopied;
-			public event IfxRowsCopiedEventHandler   IfxRowsCopied
+			public event IfxRowsCopiedEventHandler?  IfxRowsCopied
 			{
-				add    => _IfxRowsCopied = (IfxRowsCopiedEventHandler)Delegate.Combine(_IfxRowsCopied, value);
-				remove => _IfxRowsCopied = (IfxRowsCopiedEventHandler)Delegate.Remove (_IfxRowsCopied, value);
+				add    => _IfxRowsCopied = (IfxRowsCopiedEventHandler?)Delegate.Combine(_IfxRowsCopied, value);
+				remove => _IfxRowsCopied = (IfxRowsCopiedEventHandler?)Delegate.Remove (_IfxRowsCopied, value);
 			}
 		}
 

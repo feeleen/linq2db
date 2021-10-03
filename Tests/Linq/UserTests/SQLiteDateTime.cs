@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 
 using LinqToDB;
@@ -51,7 +50,7 @@ namespace Tests.UserTests
 				var matchSymbolIds = new List<int>();
 
 				var queryable = GenerateQuery(db, new DateTime(2010, 3, 5)).Where(x => matchSymbolIds.Contains(x.ID));
-				return queryable.ToString();
+				return queryable.ToString()!;
 			}
 		}
 
@@ -62,9 +61,9 @@ namespace Tests.UserTests
 			var query2 = GetSql(context);
 			var query3 = GetSql(context);
 
-			Console.WriteLine(query1);
-			Console.WriteLine(query2);
-			Console.WriteLine(query3);
+			TestContext.WriteLine(query1);
+			TestContext.WriteLine(query2);
+			TestContext.WriteLine(query3);
 
 			Assert.AreEqual(query1, query2);
 		}

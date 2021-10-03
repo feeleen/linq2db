@@ -2,6 +2,8 @@
 using LinqToDB.DataProvider.SqlServer;
 using NUnit.Framework;
 using System.Linq;
+using FluentAssertions;
+using FluentAssertions.Common;
 using Tests.Model;
 
 namespace Tests.Linq
@@ -24,7 +26,7 @@ namespace Tests.Linq
 				var list = q.ToList();
 				Assert.That(list.Count, Is.GreaterThan(0));
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), N'sweetest candy bread and dry meat')"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), @p_1)"));
 			}
 		}
 
@@ -67,7 +69,7 @@ namespace Tests.Linq
 				Assert.AreEqual(7, results[2].CategoryID);
 				Assert.AreEqual(5, results[3].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), N'sweetest candy bread and dry meat')"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), @p_1)"));
 			}
 		}
 
@@ -85,7 +87,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName]), N'meat', LANGUAGE N'Turkish')"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName]), @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -103,7 +105,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), N'food', LANGUAGE N'Thai', 2)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -121,7 +123,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName]), N'sweetest candy bread and dry meat', LANGUAGE 2057)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName]), @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -139,7 +141,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), N'sweetest candy bread and dry meat', LANGUAGE 1045, 2)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -157,7 +159,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), N'sweetest candy bread and dry meat', 4)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), @p_1, @p_2)"));
 			}
 		}
 
@@ -180,7 +182,7 @@ namespace Tests.Linq
 				Assert.AreEqual(5, results[1].CategoryID);
 				Assert.AreEqual(8, results[2].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, N'seafood bread')"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, @p_1)"));
 			}
 		}
 
@@ -201,7 +203,7 @@ namespace Tests.Linq
 				Assert.AreEqual(1, results.Count);
 				Assert.AreEqual(8, results[0].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, N'seafood bread', LANGUAGE N'Russian')"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -223,7 +225,7 @@ namespace Tests.Linq
 				Assert.AreEqual(3, results[0].CategoryID);
 				Assert.AreEqual(5, results[1].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, N'seafood bread', LANGUAGE N'English', 2)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -244,7 +246,7 @@ namespace Tests.Linq
 				Assert.AreEqual(1, results.Count);
 				Assert.AreEqual(8, results[0].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, N'seafood bread', LANGUAGE 1062)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -265,7 +267,7 @@ namespace Tests.Linq
 				Assert.AreEqual(1, results.Count);
 				Assert.AreEqual(8, results[0].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, N'seafood bread', LANGUAGE 1053, 2)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -287,7 +289,7 @@ namespace Tests.Linq
 				Assert.AreEqual(3, results[0].CategoryID);
 				Assert.AreEqual(5, results[1].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, N'seafood bread', 2)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], *, @p_1, @p_2)"));
 			}
 		}
 
@@ -310,7 +312,7 @@ namespace Tests.Linq
 				Assert.AreEqual(3, results[1].CategoryID);
 				Assert.AreEqual(5, results[2].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName], [Description]), N'meat bread')"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName], [Description]), @p_1)"));
 			}
 		}
 
@@ -328,7 +330,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), N'meat bread', LANGUAGE N'Czech')"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description]), @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -346,7 +348,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description], [Description]), N'meat bread', LANGUAGE N'Bulgarian', 7)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([Description], [Description]), @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -364,7 +366,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName]), N'meat bread', LANGUAGE 2068)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName]), @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -382,7 +384,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName], [Description]), N'meat bread', LANGUAGE 2070, 2)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName], [Description]), @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -400,7 +402,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName], [Description]), N'meat bread', 3)"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName], [Description]), @p_1, @p_2)"));
 			}
 		}
 
@@ -409,7 +411,7 @@ namespace Tests.Linq
 			[IncludeDataSources(TestProvName.Northwind)] string context,
 			[Values("meat", "bread")] string search,
 			[Values(1033, 1048)] int lang,
-			[Values(1, 2, 3, 2)] int top)
+			[Values(1, 2, 3)] int top)
 		{
 			using (var db = new NorthwindDB(context))
 			{
@@ -422,7 +424,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains($"FREETEXTTABLE([Categories], ([CategoryName], [Description]), N'{search}', LANGUAGE {lang}, {top})"));
+				Assert.That(db.LastQuery!.Contains("FREETEXTTABLE([Categories], ([CategoryName], [Description]), @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -749,7 +751,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void FreeTextTableByColumnsTopAsExpressionMethod([IncludeDataSources(TestProvName.Northwind)] string context, [Values(1, 2, 3, 2)] int top)
+		public void FreeTextTableByColumnsTopAsExpressionMethod([IncludeDataSources(TestProvName.Northwind)] string context, [Values(1, 2, 3)] int top)
 		{
 			using (var db = new NorthwindDB(context))
 			{
@@ -770,7 +772,7 @@ namespace Tests.Linq
 			[IncludeDataSources(TestProvName.Northwind)] string context,
 			[Values("meat", "bread")] string search,
 			[Values(1033, 1048)] int lang,
-			[Values(1, 2, 3, 2)] int top)
+			[Values(1, 2, 3)] int top)
 		{
 			using (var db = new NorthwindDB(context))
 			{
@@ -821,7 +823,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description]), N'sweetest &! meat')"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description]), @p_1)"));
 			}
 		}
 
@@ -839,7 +841,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName]), N'meat', LANGUAGE N'Turkish')"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName]), @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -857,7 +859,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description]), N'food', LANGUAGE N'Thai', 2)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description]), @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -875,7 +877,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName]), N'sweetest NEAR candy', LANGUAGE 2057)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName]), @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -893,7 +895,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description]), N'bread', LANGUAGE 1045, 2)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description]), @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -911,7 +913,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description]), N'bread AND NOT meat', 4)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description]), @p_1, @p_2)"));
 			}
 		}
 
@@ -932,7 +934,7 @@ namespace Tests.Linq
 				Assert.AreEqual(1, results.Count);
 				Assert.AreEqual(8, results[0].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, N'seafood OR bread')"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, @p_1)"));
 			}
 		}
 
@@ -953,7 +955,7 @@ namespace Tests.Linq
 				Assert.AreEqual(1, results.Count);
 				Assert.AreEqual(8, results[0].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, N'seafood OR bread', LANGUAGE N'Russian')"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -974,7 +976,7 @@ namespace Tests.Linq
 				Assert.AreEqual(1, results.Count);
 				Assert.AreEqual(8, results[0].CategoryID);
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, N'seafood | bread', LANGUAGE N'English', 2)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -992,7 +994,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, N'seafood AND bread', LANGUAGE 1062)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -1010,7 +1012,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, N'NEAR(seafood, \"bread\")', LANGUAGE 1053, 2)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -1028,7 +1030,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, N'seafood & bread', 2)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], *, @p_1, @p_2)"));
 			}
 		}
 
@@ -1046,7 +1048,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName], [Description]), N'meat NEAR bread')"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName], [Description]), @p_1)"));
 			}
 		}
 
@@ -1064,7 +1066,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description]), N'meat OR bread', LANGUAGE N'Czech')"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description]), @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -1082,7 +1084,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description], [Description]), N'bread', LANGUAGE N'Bulgarian', 7)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([Description], [Description]), @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
@@ -1100,7 +1102,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName]), N'meat OR bread', LANGUAGE 2068)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName]), @p_1, LANGUAGE @p_2)"));
 			}
 		}
 
@@ -1118,12 +1120,12 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName], [Description]), N'meat AND bread', LANGUAGE 2070, 2)"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName], [Description]), @p_1, LANGUAGE @p_2, @p_3)"));
 			}
 		}
 
 		[Test]
-		public void ContainsTableByColumnsTop([IncludeDataSources(TestProvName.Northwind)] string context, [Values(1, 2, 3, 2)] int top)
+		public void ContainsTableByColumnsTop([IncludeDataSources(TestProvName.Northwind)] string context, [Values(1, 2, 3)] int top)
 		{
 			using (var db = new NorthwindDB(context))
 			{
@@ -1136,7 +1138,7 @@ namespace Tests.Linq
 
 				var results = q.ToList();
 
-				Assert.That(db.LastQuery!.Contains($"CONTAINSTABLE([Categories], ([CategoryName], [Description]), N'meat', {top})"));
+				Assert.That(db.LastQuery!.Contains("CONTAINSTABLE([Categories], ([CategoryName], [Description]), @p_1, @p_2)"));
 			}
 		}
 
@@ -1460,7 +1462,7 @@ namespace Tests.Linq
 			[IncludeDataSources(TestProvName.Northwind)] string context,
 			[Values("meat", "bread")] string search,
 			[Values("English", "Russian")] string lang,
-			[Values(1, 2, 3, 2)] int top)
+			[Values(1, 2, 3)] int top)
 		{
 			using (var db = new NorthwindDB(context))
 			{
@@ -1704,7 +1706,7 @@ namespace Tests.Linq
 		public void FreeTextWithParameters(
 			[IncludeDataSources(TestProvName.Northwind)] string context,
 			[Values("sweetest candy bread and dry meat")] string search,
-			[Values("English", "French", "English")] string lang)
+			[Values("English", "French")] string lang)
 		{
 			using (var db = new NorthwindDB(context))
 			{
@@ -1958,7 +1960,7 @@ namespace Tests.Linq
 		public void ContainsWithParameters(
 			[IncludeDataSources(TestProvName.Northwind)] string context,
 			[Values("bread", "meat")] string search,
-			[Values(1033, 1036, 1033)] int code)
+			[Values(1033, 1036)] int code)
 		{
 			using (var db = new NorthwindDB(context))
 			{
@@ -2011,6 +2013,24 @@ namespace Tests.Linq
 			}
 		}
 
+		[Test]
+		public void ContainsWithWindowFunction([IncludeDataSources(TestProvName.Northwind)] string context)
+		{
+			using (var db = new NorthwindDB(context))
+			{
+				var q =
+					from c1 in db.Category
+					from c in db.Category.InnerJoin(c => c.CategoryID == c1.CategoryID)
+					where Sql.Ext.SqlServer().Contains("candy OR meat", c)
+					select Sql.Ext.Max(c.CategoryName).Over().PartitionBy(c != null ? 1 : 0).ToValue();
+
+				q.Should().HaveCount(1);
+
+				db.LastQuery!.Should().Contain("*", Exactly.Once());
+			}
+		}
+
+
 		#endregion
 
 		#region ContainsProperty
@@ -2027,7 +2047,7 @@ namespace Tests.Linq
 					orderby c.CategoryID descending
 					select c;
 
-				Assert.That(q.ToString().Contains("CONTAINS(PROPERTY([c_1].[Description], N'title'), N'bread')"));
+				Assert.That(q.ToString()!.Contains("CONTAINS(PROPERTY([c_1].[Description], N'title'), N'bread')"));
 			}
 		}
 
@@ -2042,7 +2062,7 @@ namespace Tests.Linq
 					orderby c.CategoryID descending
 					select c;
 
-				Assert.That(q.ToString().Contains("CONTAINS(PROPERTY([c_1].[Description], N'Title'), N'dry & bread', LANGUAGE N'English')"));
+				Assert.That(q.ToString()!.Contains("CONTAINS(PROPERTY([c_1].[Description], N'Title'), N'dry & bread', LANGUAGE N'English')"));
 			}
 		}
 
@@ -2057,7 +2077,7 @@ namespace Tests.Linq
 					orderby c.CategoryID descending
 					select c;
 
-				Assert.That(q.ToString().Contains("CONTAINS(PROPERTY([c_1].[CategoryName], N'Title'), N'candy | meat', LANGUAGE 1033)"));
+				Assert.That(q.ToString()!.Contains("CONTAINS(PROPERTY([c_1].[CategoryName], N'Title'), N'candy | meat', LANGUAGE 1033)"));
 			}
 		}
 
@@ -2075,7 +2095,7 @@ namespace Tests.Linq
 					orderby c.CategoryID descending
 					select c;
 
-				Assert.That(q.ToString().Contains($"CONTAINS(PROPERTY([c_1].[Description], N'{property}'), @search_1)"));
+				Assert.That(q.ToString()!.Contains($"CONTAINS(PROPERTY([c_1].[Description], N'{property}'), @search_1)"));
 			}
 		}
 
@@ -2094,7 +2114,7 @@ namespace Tests.Linq
 					orderby c.CategoryID descending
 					select c;
 
-				Assert.That(q.ToString().Contains($"CONTAINS(PROPERTY([c_1].[Description], N'{property}'), @search_1, LANGUAGE @lang)"));
+				Assert.That(q.ToString()!.Contains($"CONTAINS(PROPERTY([c_1].[Description], N'{property}'), @search_1, LANGUAGE @lang)"));
 			}
 		}
 
@@ -2113,7 +2133,7 @@ namespace Tests.Linq
 					orderby c.CategoryID descending
 					select c;
 
-				Assert.That(q.ToString().Contains($"CONTAINS(PROPERTY([c_1].[CategoryName], N'{property}'), @search_1, LANGUAGE @lang)"));
+				Assert.That(q.ToString()!.Contains($"CONTAINS(PROPERTY([c_1].[CategoryName], N'{property}'), @search_1, LANGUAGE @lang)"));
 			}
 		}
 		#endregion

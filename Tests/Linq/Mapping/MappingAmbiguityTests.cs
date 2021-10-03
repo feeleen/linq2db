@@ -1,6 +1,4 @@
-﻿using System.Linq;
-
-using LinqToDB;
+﻿using LinqToDB;
 using LinqToDB.Mapping;
 
 using NUnit.Framework;
@@ -75,7 +73,10 @@ namespace Tests.Mapping
 					.UpdateWhenMatched()
 					.Merge();
 
-				Assert.AreEqual(0, res);
+				if (context.Contains("Oracle") && context.Contains("Native"))
+					Assert.AreEqual(-1, res);
+				else
+					Assert.AreEqual(0, res);
 			}
 		}
 	}

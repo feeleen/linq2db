@@ -35,7 +35,7 @@ namespace Tests.xUpdate
 			[Column]     public string Diagnosis = null!;
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void TargetAssociation([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -64,7 +64,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void TargetQueryAssociation([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -93,7 +93,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void SourceAssociationAsInnerJoin1([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -116,7 +116,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void SourceAssociationAsInnerJoin2([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -139,7 +139,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void SourceAssociationAsOuterJoin([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -162,9 +162,11 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void OtherSourceAssociationInDeleteBySourcePredicate([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -199,6 +201,8 @@ namespace Tests.xUpdate
 			TestProvName.AllSapHana, TestProvName.AllFirebird)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -232,6 +236,8 @@ namespace Tests.xUpdate
 			TestProvName.AllSapHana, ProviderName.Firebird)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -281,6 +287,8 @@ namespace Tests.xUpdate
 			ProviderName.Sybase, ProviderName.SybaseManaged, TestProvName.AllInformix, TestProvName.AllSapHana)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -327,6 +335,8 @@ namespace Tests.xUpdate
 			TestProvName.AllSapHana, ProviderName.Firebird)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -373,6 +383,8 @@ namespace Tests.xUpdate
 			ProviderName.DB2, ProviderName.Sybase, ProviderName.SybaseManaged, TestProvName.AllInformix)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -419,6 +431,8 @@ namespace Tests.xUpdate
 			ProviderName.Sybase, ProviderName.SybaseManaged, TestProvName.AllInformix)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -456,9 +470,11 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void OtherSourceAssociationInUpdateBySource([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -472,7 +488,7 @@ namespace Tests.xUpdate
 						t => new Person()
 						{
 							FirstName = "Updated",
-							LastName = t.Patient!.Diagnosis
+							LastName = t.Patient!.Person.Patient!.Diagnosis
 						})
 					.Merge();
 
@@ -497,10 +513,12 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void OtherSourceAssociationInUpdateBySourcePredicate(
 			[IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -546,6 +564,8 @@ namespace Tests.xUpdate
 			TestProvName.AllSapHana, ProviderName.Firebird)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -584,10 +604,12 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void SameSourceAssociationInDeleteBySourcePredicate(
 			[IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -622,6 +644,8 @@ namespace Tests.xUpdate
 			TestProvName.AllSapHana, ProviderName.Firebird)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -655,6 +679,8 @@ namespace Tests.xUpdate
 			TestProvName.AllSapHana, ProviderName.Firebird)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -706,6 +732,8 @@ namespace Tests.xUpdate
 			ProviderName.Sybase, ProviderName.SybaseManaged, TestProvName.AllInformix, TestProvName.AllSapHana)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -752,6 +780,8 @@ namespace Tests.xUpdate
 			TestProvName.AllSapHana, ProviderName.Firebird)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -800,6 +830,8 @@ namespace Tests.xUpdate
 			ProviderName.DB2, ProviderName.Sybase, ProviderName.SybaseManaged, TestProvName.AllInformix)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -846,6 +878,8 @@ namespace Tests.xUpdate
 			ProviderName.Sybase, ProviderName.SybaseManaged, TestProvName.AllInformix)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -883,7 +917,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void SameSourceAssociationInUpdateBySource([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
 			using (var db = new TestDataConnection(context))
@@ -925,7 +959,7 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void SameSourceAssociationInUpdateBySourcePredicate(
 			[IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
@@ -975,6 +1009,8 @@ namespace Tests.xUpdate
 			TestProvName.AllSapHana, ProviderName.Firebird)]
 			string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -1016,6 +1052,8 @@ namespace Tests.xUpdate
 		[Test]
 		public void TestAssociationsData([DataSources(false)] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -1087,6 +1125,8 @@ namespace Tests.xUpdate
 		public void OtherSourceAssociationInUpdateWithDeleteDeletePredicate(
 			[IncludeDataSources(TestProvName.AllOracle)] string context)
 		{
+			ResetPersonIdentity(context);
+
 			using (var db = new TestDataConnection(context))
 			using (db.BeginTransaction())
 			{

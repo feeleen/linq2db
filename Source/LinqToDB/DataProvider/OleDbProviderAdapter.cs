@@ -51,7 +51,7 @@ namespace LinqToDB.DataProvider
 				lock (_syncRoot)
 					if (_instance == null)
 					{
-#if NET45 || NET46
+#if NETFRAMEWORK
 						var assembly = typeof(System.Data.OleDb.OleDbConnection).Assembly;
 #else
 						var assembly = LinqToDB.Common.Tools.TryLoadAssembly(AssemblyName, null);
@@ -59,12 +59,12 @@ namespace LinqToDB.DataProvider
 							throw new InvalidOperationException($"Cannot load assembly {AssemblyName}");
 #endif
 
-						var connectionType  = assembly.GetType($"{ClientNamespace}.OleDbConnection" , true);
-						var dataReaderType  = assembly.GetType($"{ClientNamespace}.OleDbDataReader" , true);
-						var parameterType   = assembly.GetType($"{ClientNamespace}.OleDbParameter"  , true);
-						var commandType     = assembly.GetType($"{ClientNamespace}.OleDbCommand"    , true);
-						var transactionType = assembly.GetType($"{ClientNamespace}.OleDbTransaction", true);
-						var dbType          = assembly.GetType($"{ClientNamespace}.OleDbType"       , true);
+						var connectionType  = assembly.GetType($"{ClientNamespace}.OleDbConnection" , true)!;
+						var dataReaderType  = assembly.GetType($"{ClientNamespace}.OleDbDataReader" , true)!;
+						var parameterType   = assembly.GetType($"{ClientNamespace}.OleDbParameter"  , true)!;
+						var commandType     = assembly.GetType($"{ClientNamespace}.OleDbCommand"    , true)!;
+						var transactionType = assembly.GetType($"{ClientNamespace}.OleDbTransaction", true)!;
+						var dbType          = assembly.GetType($"{ClientNamespace}.OleDbType"       , true)!;
 
 						var typeMapper = new TypeMapper();
 						typeMapper.RegisterTypeWrapper<OleDbConnection>(connectionType);
@@ -152,6 +152,37 @@ namespace LinqToDB.DataProvider
 			VarNumeric       = 139,
 			VarWChar         = 202,
 			WChar            = 130
+		}
+
+		// not wrapper, OLE DB enum
+		// https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms722704%28v%3dvs.85%29
+		/// <summary>
+		/// DBCOLUMNFLAGS OLE DB enumeration.
+		/// https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms722704(v=vs.85).
+		/// </summary>
+		[Flags]
+		public enum ColumnFlags : long
+		{
+			IsBookmark        = 0x00001,
+			MayDefer          = 0x00002,
+			Write             = 0x00004,
+			WriteUnknown      = 0x00008,
+			IsFixedLength     = 0x00010,
+			IsNullable        = 0x00020,
+			MayBeNull         = 0x00040,
+			IsLong            = 0x00080,
+			IsRowId           = 0x00100,
+			IsRowVer          = 0x00200,
+			CacheDeferred     = 0x00400,
+			ScaleIsNegative   = 0x00800,
+			Reserved          = 0x01000,
+			IsRowUrl          = 0x02000,
+			IsDefaultStream   = 0x04000,
+			IsCollection      = 0x08000,
+			IsStream          = 0x10000,
+			IsRowset          = 0x20000,
+			IsRow             = 0x40000,
+			RowSpecificColumn = 0x80000,
 		}
 		#endregion
 	}

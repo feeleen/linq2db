@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 
 using LinqToDB;
 
@@ -13,7 +12,6 @@ namespace Tests.Linq
 		//[Test]
 		public void Test1([DataSources] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 				AreEqual(
 					from p in    Parent select p.Children,
@@ -23,18 +21,15 @@ namespace Tests.Linq
 		//[Test]
 		public void Test2([DataSources] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 				AreEqual(
 					from p in    Parent select p.Children.ToList(),
 					from p in db.Parent select p.Children.ToList());
 		}
 
-		[ActiveIssue(SkipForNonLinqService = true, Details = "SELECT * query")]
 		[Test]
 		public void Test3([DataSources] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 				AreEqual(
 					from p in    Parent select    Child,
@@ -44,7 +39,6 @@ namespace Tests.Linq
 		[Test]
 		public void Test4([DataSources] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			{
 				AreEqual(
@@ -54,9 +48,8 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Test5([DataSources(ProviderName.Access)] string context)
+		public void Test5([DataSources(TestProvName.AllAccess)] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 				AreEqual(
 					from ch in    Child

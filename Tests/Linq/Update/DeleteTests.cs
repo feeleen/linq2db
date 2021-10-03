@@ -159,7 +159,7 @@ namespace Tests.xUpdate
 		[Test]
 		public void DeleteMany1(
 			[DataSources(
-				ProviderName.Access,
+				TestProvName.AllAccess,
 				ProviderName.DB2,
 				TestProvName.AllInformix,
 				TestProvName.AllOracle,
@@ -198,7 +198,7 @@ namespace Tests.xUpdate
 		[Test]
 		public void DeleteMany2(
 			[DataSources(
-				ProviderName.Access,
+				TestProvName.AllAccess,
 				ProviderName.DB2,
 				TestProvName.AllInformix,
 				TestProvName.AllOracle,
@@ -246,7 +246,7 @@ namespace Tests.xUpdate
 		[Test]
 		public void DeleteMany3(
 			[DataSources(
-				ProviderName.Access,
+				TestProvName.AllAccess,
 				ProviderName.DB2,
 				TestProvName.AllInformix,
 				TestProvName.AllOracle,
@@ -291,9 +291,9 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
-		public void DeleteTop(
+		public void DeleteTakeNotOrdered(
 			[DataSources(
-				ProviderName.Access,
+				TestProvName.AllAccess,
 				ProviderName.DB2,
 				TestProvName.AllPostgreSQL,
 				TestProvName.AllSQLite,
@@ -320,6 +320,75 @@ namespace Tests.xUpdate
 						.Delete();
 
 					Assert.That(rowsAffected, Is.EqualTo(5));
+				}
+				finally
+				{
+					db.Parent.Delete(c => c.ParentID >= 1000);
+				}
+			}
+		}
+
+		[Test]
+		public void DeleteTakeOrdered([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				try
+				{
+					using (new DisableLogging())
+					{
+						db.Parent.Delete(c => c.ParentID >= 1000);
+						for (var i = 0; i < 10; i++)
+							db.Insert(new Parent { ParentID = 1000 + i });
+					}
+
+					var entities =
+						from x in db.Parent
+						where x.ParentID > 1000
+						orderby x.ParentID descending
+						select x;
+
+					var rowsAffected = entities
+						.Take(5)
+						.Delete();
+
+					Assert.That(rowsAffected, Is.EqualTo(5));
+				}
+				finally
+				{
+					db.Parent.Delete(c => c.ParentID >= 1000);
+				}
+			}
+		}
+
+		[Test]
+		public void DeleteSkipTake([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				try
+				{
+					using (new DisableLogging())
+					{
+						db.Parent.Delete(c => c.ParentID >= 1000);
+						for (var i = 0; i < 10; i++)
+							db.Insert(new Parent { ParentID = 1000 + i });
+					}
+
+					var entities =
+						from x in db.Parent
+						where x.ParentID > 1000
+						orderby x.ParentID descending
+						select x;
+
+					var rowsAffected = entities
+						.Skip(1)
+						.Take(5)
+						.Delete();
+
+					Assert.That(rowsAffected, Is.EqualTo(5));
+
+					Assert.False(db.Parent.Where(p => p.ParentID == 1000 + 9).Single().Value1 == 1);
 				}
 				finally
 				{

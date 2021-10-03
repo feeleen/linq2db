@@ -1,7 +1,7 @@
-﻿using LinqToDB;
+﻿using System.Linq;
+using LinqToDB;
 using LinqToDB.Mapping;
 using NUnit.Framework;
-using System.Linq;
 
 namespace Tests.UserTests
 {
@@ -106,7 +106,7 @@ namespace Tests.UserTests
 			{
 				db.Insert(PersonCache.TestInstance);
 
-				object claimedKeyType = KeyTypes2.EC;
+				var claimedKeyType = (KeyTypes)KeyTypes2.EC;
 
 				table.Where(p => p.Id == 0).AsUpdatable()
 					.Set(p => p.ClaimedKeyType , claimedKeyType)
@@ -127,7 +127,7 @@ namespace Tests.UserTests
 			{
 				db.Insert(PersonCache.TestInstance);
 
-				var claimedKeyType = (KeyTypes)KeyTypes2.EC;
+				object claimedKeyType = (KeyTypes)KeyTypes2.EC;
 
 				table.Where(p => p.Id == 0).AsUpdatable()
 					.Set(p => p.ClaimedKeyType , claimedKeyType)
@@ -148,49 +148,9 @@ namespace Tests.UserTests
 			{
 				db.Insert(PersonCache.TestInstance);
 
-				object claimedKeyType = (KeyTypes)KeyTypes2.EC;
-
-				table.Where(p => p.Id == 0).AsUpdatable()
-					.Set(p => p.ClaimedKeyType , claimedKeyType)
-					.Set(p => p.ClaimedKeyTypeN, claimedKeyType)
-					.Update();
-
-				var record = table.Single();
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyType);
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyTypeN);
-			}
-		}
-
-		[Test]
-		public void TestUpdate6([DataSources] string context)
-		{
-			using (var db    = GetDataContext(context))
-			using (var table = db.CreateLocalTable<PersonCache>())
-			{
-				db.Insert(PersonCache.TestInstance);
-
 				table.Where(p => p.Id == 0).AsUpdatable()
 					.Set(p => p.ClaimedKeyType , (KeyTypes)KeyTypes2.EC)
 					.Set(p => p.ClaimedKeyTypeN, (KeyTypes)KeyTypes2.EC)
-					.Update();
-
-				var record = table.Single();
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyType);
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyTypeN);
-			}
-		}
-
-		[Test]
-		public void TestUpdate7([DataSources] string context)
-		{
-			using (var db    = GetDataContext(context))
-			using (var table = db.CreateLocalTable<PersonCache>())
-			{
-				db.Insert(PersonCache.TestInstance);
-
-				table.Where(p => p.Id == 0).AsUpdatable()
-					.Set(p => p.ClaimedKeyType , (object)KeyTypes2.EC)
-					.Set(p => p.ClaimedKeyTypeN, (object)KeyTypes2.EC)
 					.Update();
 
 				var record = table.Single();
@@ -243,7 +203,7 @@ namespace Tests.UserTests
 			using (var db    = GetDataContext(context))
 			using (var table = db.CreateLocalTable<PersonCache>())
 			{
-				object claimedKeyType = KeyTypes2.EC;
+				var claimedKeyType = (KeyTypes)KeyTypes2.EC;
 
 				table.Value(p => p.Id, 0)
 					.Value(p => p.ClaimedKeyType , claimedKeyType)
@@ -262,7 +222,7 @@ namespace Tests.UserTests
 			using (var db    = GetDataContext(context))
 			using (var table = db.CreateLocalTable<PersonCache>())
 			{
-				var claimedKeyType = (KeyTypes)KeyTypes2.EC;
+				object claimedKeyType = (KeyTypes)KeyTypes2.EC;
 
 				table.Value(p => p.Id, 0)
 					.Value(p => p.ClaimedKeyType , claimedKeyType)
@@ -281,45 +241,9 @@ namespace Tests.UserTests
 			using (var db    = GetDataContext(context))
 			using (var table = db.CreateLocalTable<PersonCache>())
 			{
-				object claimedKeyType = (KeyTypes)KeyTypes2.EC;
-
-				table.Value(p => p.Id, 0)
-					.Value(p => p.ClaimedKeyType , claimedKeyType)
-					.Value(p => p.ClaimedKeyTypeN, claimedKeyType)
-					.Insert();
-
-				var record = table.Single();
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyType);
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyTypeN);
-			}
-		}
-
-		[Test]
-		public void TestInsert6([DataSources] string context)
-		{
-			using (var db    = GetDataContext(context))
-			using (var table = db.CreateLocalTable<PersonCache>())
-			{
 				table.Value(p => p.Id, 0)
 					.Value(p => p.ClaimedKeyType , (KeyTypes)KeyTypes2.EC)
 					.Value(p => p.ClaimedKeyTypeN, (KeyTypes)KeyTypes2.EC)
-					.Insert();
-
-				var record = table.Single();
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyType);
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyTypeN);
-			}
-		}
-
-		[Test]
-		public void TestInsert7([DataSources] string context)
-		{
-			using (var db    = GetDataContext(context))
-			using (var table = db.CreateLocalTable<PersonCache>())
-			{
-				table.Value(p => p.Id, 0)
-					.Value(p => p.ClaimedKeyType , (object)KeyTypes2.EC)
-					.Value(p => p.ClaimedKeyTypeN, (object)KeyTypes2.EC)
 					.Insert();
 
 				var record = table.Single();
@@ -378,7 +302,7 @@ namespace Tests.UserTests
 			{
 				db.Insert(PersonCacheFluent.TestInstance);
 
-				object claimedKeyType = KeyTypes2.EC;
+				var claimedKeyType = (KeyTypes)KeyTypes2.EC;
 
 				table.Where(p => p.Id == 0).AsUpdatable()
 					.Set(p => p.ClaimedKeyType , claimedKeyType)
@@ -399,7 +323,7 @@ namespace Tests.UserTests
 			{
 				db.Insert(PersonCacheFluent.TestInstance);
 
-				var claimedKeyType = (KeyTypes)KeyTypes2.EC;
+				object claimedKeyType = (KeyTypes)KeyTypes2.EC;
 
 				table.Where(p => p.Id == 0).AsUpdatable()
 					.Set(p => p.ClaimedKeyType , claimedKeyType)
@@ -420,49 +344,9 @@ namespace Tests.UserTests
 			{
 				db.Insert(PersonCacheFluent.TestInstance);
 
-				object claimedKeyType = (KeyTypes)KeyTypes2.EC;
-
-				table.Where(p => p.Id == 0).AsUpdatable()
-					.Set(p => p.ClaimedKeyType , claimedKeyType)
-					.Set(p => p.ClaimedKeyTypeN, claimedKeyType)
-					.Update();
-
-				var record = table.Single();
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyType);
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyTypeN);
-			}
-		}
-
-		[Test]
-		public void TestFluentUpdate6([DataSources] string context)
-		{
-			using (var db    = GetDataContext(context, ConfigureFluentMapping()))
-			using (var table = db.CreateLocalTable<PersonCacheFluent>())
-			{
-				db.Insert(PersonCacheFluent.TestInstance);
-
 				table.Where(p => p.Id == 0).AsUpdatable()
 					.Set(p => p.ClaimedKeyType , (KeyTypes)KeyTypes2.EC)
 					.Set(p => p.ClaimedKeyTypeN, (KeyTypes)KeyTypes2.EC)
-					.Update();
-
-				var record = table.Single();
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyType);
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyTypeN);
-			}
-		}
-
-		[Test]
-		public void TestFluentUpdate7([DataSources] string context)
-		{
-			using (var db    = GetDataContext(context, ConfigureFluentMapping()))
-			using (var table = db.CreateLocalTable<PersonCacheFluent>())
-			{
-				db.Insert(PersonCacheFluent.TestInstance);
-
-				table.Where(p => p.Id == 0).AsUpdatable()
-					.Set(p => p.ClaimedKeyType , (object)KeyTypes2.EC)
-					.Set(p => p.ClaimedKeyTypeN, (object)KeyTypes2.EC)
 					.Update();
 
 				var record = table.Single();
@@ -516,25 +400,6 @@ namespace Tests.UserTests
 			using (var db    = GetDataContext(context, ConfigureFluentMapping()))
 			using (var table = db.CreateLocalTable<PersonCacheFluent>())
 			{
-				object claimedKeyType = KeyTypes2.EC;
-
-				table.Value(p => p.Id, 0)
-					.Value(p => p.ClaimedKeyType , claimedKeyType)
-					.Value(p => p.ClaimedKeyTypeN, claimedKeyType)
-					.Insert();
-
-				var record = table.Single();
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyType);
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyTypeN);
-			}
-		}
-
-		[Test]
-		public void TestFluentInsert4([DataSources] string context)
-		{
-			using (var db    = GetDataContext(context, ConfigureFluentMapping()))
-			using (var table = db.CreateLocalTable<PersonCacheFluent>())
-			{
 				var claimedKeyType = (KeyTypes)KeyTypes2.EC;
 
 				table.Value(p => p.Id, 0)
@@ -549,7 +414,7 @@ namespace Tests.UserTests
 		}
 
 		[Test]
-		public void TestFluentInsert5([DataSources] string context)
+		public void TestFluentInsert4([DataSources] string context)
 		{
 			using (var db    = GetDataContext(context, ConfigureFluentMapping()))
 			using (var table = db.CreateLocalTable<PersonCacheFluent>())
@@ -576,23 +441,6 @@ namespace Tests.UserTests
 				table.Value(p => p.Id, 0)
 					.Value(p => p.ClaimedKeyType , (KeyTypes)KeyTypes2.EC)
 					.Value(p => p.ClaimedKeyTypeN, (KeyTypes)KeyTypes2.EC)
-					.Insert();
-
-				var record = table.Single();
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyType);
-				Assert.AreEqual(KeyTypes.EC, record.ClaimedKeyTypeN);
-			}
-		}
-
-		[Test]
-		public void TestFluentInsert7([DataSources] string context)
-		{
-			using (var db    = GetDataContext(context, ConfigureFluentMapping()))
-			using (var table = db.CreateLocalTable<PersonCacheFluent>())
-			{
-				table.Value(p => p.Id, 0)
-					.Value(p => p.ClaimedKeyType , (object)KeyTypes2.EC)
-					.Value(p => p.ClaimedKeyTypeN, (object)KeyTypes2.EC)
 					.Insert();
 
 				var record = table.Single();

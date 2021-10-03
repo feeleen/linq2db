@@ -12,7 +12,7 @@ using LinqToDB.SqlQuery;
 using Newtonsoft.Json;
 using NUnit.Framework;
 
-namespace Tests.Playground
+namespace Tests.Samples
 {
 
 	[AttributeUsage(AttributeTargets.Property)]
@@ -28,9 +28,9 @@ namespace Tests.Playground
 
 		static MappingHelper()
 		{
-			_deserializeMethod = MemberHelper.MethodOf(() => JsonConvert.DeserializeObject(null!, typeof(int)));
-			_serializeMethod = MemberHelper.MethodOf(() => JsonConvert.SerializeObject(null));
-			_dataParamContructor = typeof(DataParameter).GetConstructor(new[] { typeof(string), typeof(object) });
+			_deserializeMethod   = MemberHelper.MethodOf(() => JsonConvert.DeserializeObject(null!, typeof(int)));
+			_serializeMethod     = MemberHelper.MethodOf(() => JsonConvert.SerializeObject(null));
+			_dataParamContructor = typeof(DataParameter).GetConstructor(new[] { typeof(string), typeof(object) })!;
 		}
 
 		public static void GenerateConvertorsForTables(Type dataConnectionType, MappingSchema ms)
@@ -126,7 +126,7 @@ namespace Tests.Playground
 					pathList.Add(current);
 					if (current.NodeType == ExpressionType.MemberAccess)
 					{
-						current = ((MemberExpression) current).Expression;
+						current = ((MemberExpression) current).Expression!;
 					}
 					else
 						break;

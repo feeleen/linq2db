@@ -7,7 +7,7 @@ namespace LinqToDB.DataProvider.MySql
 {
 	using Common;
 	using Data;
-	using SchemaProvider;
+	using LinqToDB.SchemaProvider;
 
 	class MySqlSchemaProvider : SchemaProviderBase
 	{
@@ -43,13 +43,14 @@ namespace LinqToDB.DataProvider.MySql
 		// mysql provider will execute procedure
 		protected override bool GetProcedureSchemaExecutesProcedure => true;
 
-		protected override List<TableInfo> GetTables(DataConnection dataConnection)
+		protected override List<TableInfo> GetTables(DataConnection dataConnection, GetSchemaOptions options)
 		{
 			// https://dev.mysql.com/doc/refman/8.0/en/tables-table.html
 			// all selected columns are not nullable
 			return dataConnection
 				.Query(rd =>
 				{
+					// IMPORTANT: reader calls must be ordered to support SequentialAccess
 					var catalog = rd.GetString(0);
 					var name    = rd.GetString(1);
 					// BASE TABLE/VIEW/SYSTEM VIEW
@@ -78,7 +79,8 @@ SELECT
 				.ToList();
 		}
 
-		protected override List<PrimaryKeyInfo> GetPrimaryKeys(DataConnection dataConnection)
+		protected override IReadOnlyCollection<PrimaryKeyInfo> GetPrimaryKeys(DataConnection dataConnection,
+			IEnumerable<TableSchema> tables, GetSchemaOptions options)
 		{
 			return dataConnection.Query<PrimaryKeyInfo>(@"
 			SELECT
@@ -111,18 +113,29 @@ SELECT
 			return dataConnection
 				.Query(rd =>
 				{
+					// IMPORTANT: reader calls must be ordered to support SequentialAccess
+					var dataType   = rd.GetString(0);
+					var columnType = rd.GetString(1);
+					var tableId    = rd.GetString(2).ToLower() + ".." + rd.GetString(3);
+					var name       = rd.GetString(4);
+					var isNullable = rd.GetString(5) == "YES";
+					var ordinal    = Converter.ChangeTypeTo<int>(rd[6]);
+					var length     = Converter.ChangeTypeTo<long?>(rd[7]);
+					var precision  = Converter.ChangeTypeTo<int?>(rd[8]);
+					var scale      = Converter.ChangeTypeTo<int?>(rd[9]);
 					var extra      = rd.GetString(10);
+
 					return new ColumnInfo()
 					{
-						TableID      = rd.GetString(2).ToLower() + ".." + rd.GetString(3),
-						Name         = rd.GetString(4),
-						IsNullable   = rd.GetString(5) == "YES",
-						Ordinal      = Converter.ChangeTypeTo<int>(rd[6]),
-						DataType     = rd.GetString(0),
-						Length       = Converter.ChangeTypeTo<long?>(rd[7]),
-						Precision    = Converter.ChangeTypeTo<int?>(rd[8]),
-						Scale        = Converter.ChangeTypeTo<int?>(rd[9]),
-						ColumnType   = rd.GetString(1),
+						TableID      = tableId,
+						Name         = name,
+						IsNullable   = isNullable,
+						Ordinal      = ordinal,
+						DataType     = dataType,
+						Length       = length,
+						Precision    = precision,
+						Scale        = scale,
+						ColumnType   = columnType,
 						IsIdentity   = extra.Contains("auto_increment"),
 						Description  = rd.GetString(11),
 						// also starting from 5.1 we can utilise provileges column for skip properties
@@ -149,7 +162,8 @@ SELECT
 				.ToList();
 		}
 
-		protected override IReadOnlyCollection<ForeignKeyInfo> GetForeignKeys(DataConnection dataConnection)
+		protected override IReadOnlyCollection<ForeignKeyInfo> GetForeignKeys(DataConnection dataConnection,
+			IEnumerable<TableSchema> tables, GetSchemaOptions options)
 		{
 			// https://dev.mysql.com/doc/refman/8.0/en/key-column-usage-table.html
 			// https://dev.mysql.com/doc/refman/8.0/en/table-constraints-table.html
@@ -158,10 +172,11 @@ SELECT
 			return dataConnection
 				.Query(rd =>
 				{
+					// IMPORTANT: reader calls must be ordered to support SequentialAccess
 					return new ForeignKeyInfo()
 					{
+						ThisTableID  = rd.GetString(0).ToLower() + ".." + rd.GetString(1),
 						Name         = rd.GetString(2),
-						ThisTableID  = rd.GetString(1).ToLower() + ".." + rd.GetString(0),
 						ThisColumn   = rd.GetString(3),
 						OtherTableID = rd.GetString(4).ToLower() + ".." + rd.GetString(5),
 						OtherColumn  = rd.GetString(6),
@@ -169,8 +184,8 @@ SELECT
 					};
 				}, @"
 SELECT
-		c.TABLE_NAME,
 		c.TABLE_SCHEMA,
+		c.TABLE_NAME,
 		c.CONSTRAINT_NAME,
 		c.COLUMN_NAME,
 		c.REFERENCED_TABLE_SCHEMA,
@@ -190,53 +205,58 @@ SELECT
 
 		protected override DataType GetDataType(string? dataType, string? columnType, long? length, int? prec, int? scale)
 		{
-			switch (dataType?.ToLower())
+			return dataType?.ToLower() switch
 			{
-				case "bit"        : return DataType.UInt64;
-				case "blob"       : return DataType.Blob;
-				case "tinyblob"   : return DataType.Binary;
-				case "mediumblob" : return DataType.Binary;
-				case "longblob"   : return DataType.Binary;
-				case "binary"     : return DataType.Binary;
-				case "varbinary"  : return DataType.VarBinary;
-				case "date"       : return DataType.Date;
-				case "datetime"   : return DataType.DateTime;
-				case "timestamp"  : return DataType.Timestamp;
-				case "time"       : return DataType.Time;
-				case "char"       : return DataType.Char;
-				case "nchar"      : return DataType.NChar;
-				case "varchar"    : return DataType.VarChar;
-				case "nvarchar"   : return DataType.NVarChar;
-				case "set"        : return DataType.NVarChar;
-				case "enum"       : return DataType.NVarChar;
-				case "tinytext"   : return DataType.Text;
-				case "text"       : return DataType.Text;
-				case "mediumtext" : return DataType.Text;
-				case "longtext"   : return DataType.Text;
-				case "double"     : return DataType.Double;
-				case "float"      : return DataType.Single;
-				case "tinyint"    : return columnType == "tinyint(1)" ? DataType.Boolean : DataType.SByte;
-				case "smallint"   : return columnType != null && columnType.Contains("unsigned") ? DataType.UInt16 : DataType.Int16;
-				case "int"        : return columnType != null && columnType.Contains("unsigned") ? DataType.UInt32 : DataType.Int32;
-				case "year"       : return DataType.Int32;
-				case "mediumint"  : return columnType != null && columnType.Contains("unsigned") ? DataType.UInt32 : DataType.Int32;
-				case "bigint"     : return columnType != null && columnType.Contains("unsigned") ? DataType.UInt64 : DataType.Int64;
-				case "decimal"    : return DataType.Decimal;
-				case "tiny int"   : return DataType.Byte;
-			}
-
-			return DataType.Undefined;
+				"tinyint unsigned"  => DataType.Byte,
+				"smallint unsigned" => DataType.UInt16,
+				"mediumint unsigned"=> DataType.UInt32,
+				"int unsigned"      => DataType.UInt32,
+				"bigint unsigned"   => DataType.UInt64,
+				"bool"              => DataType.SByte, // tinyint(1) alias
+				"bit"               => DataType.BitArray,
+				"blob"              => DataType.Blob,
+				"tinyblob"          => DataType.Blob,
+				"mediumblob"        => DataType.Blob,
+				"longblob"          => DataType.Blob,
+				"binary"            => DataType.Binary,
+				"varbinary"         => DataType.VarBinary,
+				"date"              => DataType.Date,
+				"datetime"          => DataType.DateTime,
+				"timestamp"         => DataType.DateTime,
+				"time"              => DataType.Time,
+				"char"              => DataType.Char,
+				"varchar"           => DataType.VarChar,
+				"set"               => DataType.VarChar,
+				"enum"              => DataType.VarChar,
+				"tinytext"          => DataType.Text,
+				"text"              => DataType.Text,
+				"mediumtext"        => DataType.Text,
+				"longtext"          => DataType.Text,
+				"double"            => DataType.Double,
+				"float"             => DataType.Single,
+				"tinyint"           => columnType != null && columnType.Contains("unsigned") ? DataType.Byte   : DataType.SByte,
+				"smallint"          => columnType != null && columnType.Contains("unsigned") ? DataType.UInt16 : DataType.Int16,
+				"int"               => columnType != null && columnType.Contains("unsigned") ? DataType.UInt32 : DataType.Int32,
+				"year"              => DataType.Int32,
+				"mediumint"         => columnType != null && columnType.Contains("unsigned") ? DataType.UInt32 : DataType.Int32,
+				"bigint"            => columnType != null && columnType.Contains("unsigned") ? DataType.UInt64 : DataType.Int64,
+				"decimal"           => DataType.Decimal,
+				"json"              => DataType.Json,
+				_                   => DataType.Undefined,
+			};
 		}
 
-		protected override List<ProcedureInfo> GetProcedures(DataConnection dataConnection)
+		protected override List<ProcedureInfo>? GetProcedures(DataConnection dataConnection, GetSchemaOptions options)
 		{
 			// GetSchema("PROCEDURES") not used, as for MySql 5.7 (but not mariadb/mysql 5.6) it returns procedures from
 			// sys database too
 			return dataConnection
 				.Query(rd =>
 				{
+					// IMPORTANT: reader calls must be ordered to support SequentialAccess
 					var catalog = Converter.ChangeTypeTo<string>(rd[0]);
 					var name    = Converter.ChangeTypeTo<string>(rd[1]);
+
 					return new ProcedureInfo()
 					{
 						ProcedureID         = catalog + "." + name,
@@ -253,34 +273,51 @@ SELECT
 				.ToList();
 		}
 
-		protected override List<ProcedureParameterInfo> GetProcedureParameters(DataConnection dataConnection)
+		protected override List<ProcedureParameterInfo> GetProcedureParameters(DataConnection dataConnection, IEnumerable<ProcedureInfo> procedures, GetSchemaOptions options)
 		{
 			// don't use GetSchema("PROCEDURE PARAMETERS") as MySql provider's implementation does strange stuff
 			// instead of just quering of INFORMATION_SCHEMA view. It returns incorrect results and breaks provider
 			return dataConnection
 				.Query(rd =>
 				{
-					var mode = Converter.ChangeTypeTo<string>(rd[2]);
+					// IMPORTANT: reader calls must be ordered to support SequentialAccess
+					var procId  = rd.GetString(0) + "." + rd.GetString(1);
+					var mode    = Converter.ChangeTypeTo<string>(rd[2]);
+					var ordinal = Converter.ChangeTypeTo<int>(rd[3]);
+
 					return new ProcedureParameterInfo()
 					{
-						ProcedureID   = rd.GetString(0) + "." + rd.GetString(1),
+						ProcedureID   = procId,
 						ParameterName = Converter.ChangeTypeTo<string>(rd[4]),
 						IsIn          = mode == "IN"  || mode == "INOUT",
 						IsOut         = mode == "OUT" || mode == "INOUT",
-						Precision     = Converter.ChangeTypeTo<int?>(rd["NUMERIC_PRECISION"]),
-						Scale         = Converter.ChangeTypeTo<int?>(rd["NUMERIC_SCALE"]),
-						Ordinal       = Converter.ChangeTypeTo<int>(rd["ORDINAL_POSITION"]),
+						Precision     = Converter.ChangeTypeTo<int?>(rd[5]),
+						Scale         = Converter.ChangeTypeTo<int?>(rd[6]),
+						Ordinal       = ordinal,
 						IsResult      = mode == null,
 						DataType      = rd.GetString(7).ToUpper(),
+						Length        = Converter.ChangeTypeTo<long?>(rd[8]),
+						DataTypeExact = Converter.ChangeTypeTo<string>(rd[9]),
 						IsNullable    = true
 					};
-				}, "SELECT SPECIFIC_SCHEMA, SPECIFIC_NAME, PARAMETER_MODE, ORDINAL_POSITION, PARAMETER_NAME, NUMERIC_PRECISION, NUMERIC_SCALE, DATA_TYPE FROM INFORMATION_SCHEMA.parameters WHERE SPECIFIC_SCHEMA = database()")
+				}, "SELECT SPECIFIC_SCHEMA, SPECIFIC_NAME, PARAMETER_MODE, ORDINAL_POSITION, PARAMETER_NAME, NUMERIC_PRECISION, NUMERIC_SCALE, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, DTD_IDENTIFIER FROM INFORMATION_SCHEMA.parameters WHERE SPECIFIC_SCHEMA = database()")
 				.ToList();
 		}
 
-		protected override DataTable? GetProcedureSchema(DataConnection dataConnection, string commandText, CommandType commandType, DataParameter[] parameters)
+		protected override DataParameter BuildProcedureParameter(ParameterSchema p)
 		{
-			var rv = base.GetProcedureSchema(dataConnection, commandText, commandType, parameters);
+			var param = base.BuildProcedureParameter(p);
+
+			// mysql procedure parameters are nullable so better to pass NULL, as at least JSON parameters
+			// doesn't work with empty string (and we cannot detect json-typed parameters for MariaDB)
+			param.Value = null;
+
+			return param;
+		}
+
+		protected override DataTable? GetProcedureSchema(DataConnection dataConnection, string commandText, CommandType commandType, DataParameter[] parameters, GetSchemaOptions options)
+		{
+			var rv = base.GetProcedureSchema(dataConnection, commandText, commandType, parameters, options);
 
 			// for no good reason if procedure doesn't return table data but have output parameters, MySql provider
 			// returns fake schema with output parameters as columns
@@ -304,26 +341,26 @@ SELECT
 				from r in resultTable.AsEnumerable()
 
 				let providerType = Converter.ChangeTypeTo<int>(r["ProviderType"])
-				let dataType     = GetDataTypeByProviderDbType(providerType, options)
-				let columnType   = dataType == null ? null : dataType.TypeName
+				let dt           = GetDataTypeByProviderDbType(providerType, options)
+				let dataType     = dt == null ? null : dt.TypeName
 				let columnName   = r.Field<string>("ColumnName")
 				let isNullable   = r.Field<bool>("AllowDBNull")
 				let length       = r.Field<int>("ColumnSize")
 				let precision    = Converter.ChangeTypeTo<int>(r["NumericPrecision"])
 				let scale        = Converter.ChangeTypeTo<int>(r["NumericScale"])
 
-				let systemType = GetSystemType(columnType, null, dataType, length, precision, scale)
+				let systemType = GetSystemType(dataType, null, dt, length, precision, scale, options)
 
 				select new ColumnSchema
 				{
 					ColumnName           = columnName,
-					ColumnType           = GetDbType(options, columnType, dataType, length, precision, scale, null, null, null),
+					ColumnType           = GetDbType(options, dataType, dt, length, precision, scale, null, null, null),
 					IsNullable           = isNullable,
-					MemberName           = ToValidName(columnName),
+					MemberName           = ToValidName(columnName.Trim('`')),
 					MemberType           = ToTypeName(systemType, isNullable),
 					SystemType           = systemType ?? typeof(object),
-					DataType             = GetDataType(columnType, null, length, precision, scale),
-					ProviderSpecificType = GetProviderSpecificType(columnType),
+					DataType             = GetDataType(dataType, null, length, precision, scale),
+					ProviderSpecificType = GetProviderSpecificType(dataType),
 					IsIdentity           = r.IsNull("IsIdentity") ? false : r.Field<bool>("IsIdentity")
 				}
 			).ToList();
@@ -349,30 +386,52 @@ SELECT
 			return base.GetProviderSpecificType(dataType);
 		}
 
-		protected override Type? GetSystemType(string? dataType, string? columnType, DataTypeInfo? dataTypeInfo, long? length, int? precision, int? scale)
+		protected override Type? GetSystemType(string? dataType, string? columnType, DataTypeInfo? dataTypeInfo, long? length, int? precision, int? scale, GetSchemaOptions options)
 		{
-			if (dataType != null && columnType != null && columnType.Contains("unsigned"))
+			switch (dataType?.ToLower())
 			{
-				switch (dataType.ToLower())
-				{
-					case "smallint"   : return typeof(ushort);
-					case "int"        :
-					case "mediumint"  : return typeof(uint);
-					case "bigint"     : return typeof(ulong);
-					case "tiny int"   : return typeof(byte);
-				}
+				case "bit"               :
+					{
+						// C - "Consistency"
+						var size = precision > 0 ? precision : length;
+						if (size ==  1) return typeof(bool);
+						if (size <=  8) return typeof(byte);
+						if (size <= 16) return typeof(ushort);
+						if (size <= 32) return typeof(uint);
+						return typeof(ulong);
+					}
+				case "tinyint unsigned"  : return typeof(byte);
+				case "smallint unsigned" : return typeof(ushort);
+				case "mediumint unsigned": return typeof(uint);
+				case "int unsigned"      : return typeof(uint);
+				case "bigint unsigned"   : return typeof(ulong);
+				case "tinyint"           :
+					{
+						var size = precision > 0 ? precision : length;
+						if (columnType == "tinyint(1)" || size == 1)
+							return typeof(bool);
+						return columnType?.Contains("unsigned") == true ? typeof(byte) : typeof(sbyte);
+					}
+				case "smallint"          : return columnType?.Contains("unsigned") == true ? typeof(ushort) : typeof(short);
+				case "mediumint"         :
+				case "int"               : return columnType?.Contains("unsigned") == true ? typeof(uint)   : typeof(int);
+				case "bigint"            : return columnType?.Contains("unsigned") == true ? typeof(ulong)  : typeof(long);
+				case "json"              :
+				case "longtext"          : return typeof(string);
+				case "timestamp"         : return typeof(DateTime);
+				case "bool"              : return typeof(bool);
+				case "point"             :
+				case "linestring"        :
+				case "polygon"           :
+				case "multipoint"        :
+				case "multipolygon"      :
+				case "multilinestring"   :
+				case "geomcollection"    :
+				case "geometrycollection":
+				case "geometry"          : return typeof(byte[]);
 			}
 
-			switch (dataType)
-			{
-				case "tinyint"   :
-					if (columnType == "tinyint(1)")
-						return typeof(bool);
-					break;
-				case "datetime2" : return typeof(DateTime);
-			}
-
-			return base.GetSystemType(dataType, columnType, dataTypeInfo, length, precision, scale);
+			return base.GetSystemType(dataType, columnType, dataTypeInfo, length, precision, scale, options);
 		}
 
 		protected override StringComparison ForeignKeyColumnComparison(string column)

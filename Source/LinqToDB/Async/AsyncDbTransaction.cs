@@ -2,6 +2,9 @@
 using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
+#if NETSTANDARD2_1PLUS
+using System.Data.Common;
+#endif
 
 using JetBrains.Annotations;
 
@@ -33,6 +36,11 @@ namespace LinqToDB.Async
 
 		public virtual Task CommitAsync(CancellationToken cancellationToken = default)
 		{
+#if NETSTANDARD2_1PLUS
+			if (Transaction is DbTransaction dbTransaction)
+				return dbTransaction.CommitAsync(cancellationToken);
+#endif
+
 			Commit();
 
 			return TaskEx.CompletedTask;
@@ -43,12 +51,23 @@ namespace LinqToDB.Async
 			Transaction.Dispose();
 		}
 
+#if !NATIVE_ASYNC
 		public virtual Task DisposeAsync()
 		{
 			Dispose();
 
 			return TaskEx.CompletedTask;
 		}
+#else
+		public virtual ValueTask DisposeAsync()
+		{
+			if (Transaction is IAsyncDisposable asyncDisposable)
+				return asyncDisposable.DisposeAsync();
+
+			Dispose();
+			return default;
+		}
+#endif
 
 		public virtual void Rollback()
 		{
@@ -57,6 +76,11 @@ namespace LinqToDB.Async
 
 		public virtual Task RollbackAsync(CancellationToken cancellationToken = default)
 		{
+#if NETSTANDARD2_1PLUS
+			if (Transaction is DbTransaction dbTransaction)
+				return dbTransaction.RollbackAsync(cancellationToken);
+#endif
+
 			Rollback();
 
 			return TaskEx.CompletedTask;

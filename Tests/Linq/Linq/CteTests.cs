@@ -11,23 +11,24 @@ using NUnit.Framework;
 
 namespace Tests.Linq
 {
+	using LinqToDB.Linq;
 	using Model;
-	using Tools;
 
 	public class CteTests : TestBase
 	{
 		public static string[] CteSupportedProviders = new[]
 		{
 			TestProvName.AllSqlServer2008Plus,
-			ProviderName.Firebird,
+			TestProvName.AllFirebird,
 			TestProvName.AllPostgreSQL,
 			ProviderName.DB2,
 			TestProvName.AllSQLite,
-			TestProvName.AllOracle 
+			TestProvName.AllOracle,
+			TestProvName.AllMySqlWithCTE,
 			// TODO: v14
 			//TestProvName.AllInformix,
 			// Will be supported in SQL 8.0 - ProviderName.MySql
-		};
+		}.SelectMany(_ => _.Split(',')).ToArray();
 
 		public class CteContextSourceAttribute : IncludeDataSourcesAttribute
 		{
@@ -41,12 +42,12 @@ namespace Tests.Linq
 			}
 
 			public CteContextSourceAttribute(params string[] excludedProviders)
-				: base(CteSupportedProviders.Except(excludedProviders).ToArray())
+				: base(CteSupportedProviders.Except(excludedProviders.SelectMany(_ => _.Split(','))).ToArray())
 			{
 			}
 
 			public CteContextSourceAttribute(bool includeLinqService, params string[] excludedProviders)
-				: base(includeLinqService, CteSupportedProviders.Except(excludedProviders).ToArray())
+				: base(includeLinqService, CteSupportedProviders.Except(excludedProviders.SelectMany(_ => _.Split(','))).ToArray())
 			{
 			}
 		}
@@ -86,7 +87,7 @@ namespace Tests.Linq
 					join c in cte1 on p.ParentID equals c.ParentID
 					join c2 in cte2 on p.ParentID equals c2.ParentID
 					join c3 in cte3 on p.ParentID equals c3.ParentID
-					from c4 in db.Child.Where(c4 => c4.ParentID % 2 == 0).AsCte("LAST").InnerJoin(c4 => c4.ParentID == c3.ParentID)
+					from c4 in db.Child.Where(c4 => c4.ParentID % 2 == 0).AsCte("LATEST").InnerJoin(c4 => c4.ParentID == c3.ParentID)
 					select c3;
 
 				var ncte1 = db.GetTable<Child>().Where(c => c.ParentID > 1);
@@ -121,7 +122,7 @@ namespace Tests.Linq
 
 		static IQueryable<TSource> RemoveCte<TSource>(IQueryable<TSource> source)
 		{
-			var newExpr = source.Expression.Transform(e =>
+			var newExpr = source.Expression.Transform<object?>(null, static (_, e) =>
 			{
 				if (e is MethodCallExpression methodCall && methodCall.Method.Name == "AsCte")
 					return methodCall.Arguments[0];
@@ -464,7 +465,7 @@ namespace Tests.Linq
 				return ChildID == other.ChildID && ParentID == other.ParentID;
 			}
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 			{
 				if (ReferenceEquals(null, obj)) return false;
 				if (ReferenceEquals(this, obj)) return true;
@@ -518,7 +519,7 @@ namespace Tests.Linq
 				var cte = db.GetTable<Child>().AsCte();
 
 				var query = cte.Where(t => t.ChildID == var3 || var3 == null);
-				var str = query.ToString();
+				var str = query.ToString()!;
 				Assert.That(str.Contains("WITH"), Is.EqualTo(true));
 			}
 		}
@@ -556,8 +557,9 @@ namespace Tests.Linq
 			}
 		}
 
+		// MariaDB support expected in v10.6 : https://jira.mariadb.org/browse/MDEV-18511
 		[Test]
-		public void TestDelete([CteContextSource(ProviderName.Firebird, ProviderName.DB2)] string context)
+		public void TestDelete([CteContextSource(TestProvName.AllFirebird, ProviderName.DB2, TestProvName.MariaDB)] string context)
 		{
 			using (var db  = GetDataContext(context))
 			using (var tmp = db.CreateLocalTable("CteChild",
@@ -575,10 +577,11 @@ namespace Tests.Linq
 			}
 		}
 
+		// MariaDB support expected in v10.6 : https://jira.mariadb.org/browse/MDEV-18511
 		[ActiveIssue(Configuration = TestProvName.AllOracle, Details = "Oracle needs special syntax for CTE + UPDATE")]
 		[Test]
 		public void TestUpdate(
-			[CteContextSource(ProviderName.Firebird, ProviderName.DB2, TestProvName.AllOracle)]
+			[CteContextSource(TestProvName.AllFirebird, ProviderName.DB2, TestProvName.AllOracle, TestProvName.MariaDB)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -826,7 +829,7 @@ namespace Tests.Linq
 						q.Level
 					};
 
-				Assert.DoesNotThrow(() => Console.WriteLine(query.ToString()));
+				Assert.DoesNotThrow(() => TestContext.WriteLine(query.ToString()));
 			}
 		}
 
@@ -839,7 +842,7 @@ namespace Tests.Linq
 				return Equals(Child, other.Child);
 			}
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 			{
 				if (ReferenceEquals(null, obj)) return false;
 				if (ReferenceEquals(this, obj)) return true;
@@ -864,7 +867,7 @@ namespace Tests.Linq
 				return Equals(Child, other.Child) && Equals(Parent, other.Parent);
 			}
 
-			public override bool Equals(object obj)
+			public override bool Equals(object? obj)
 			{
 				if (ReferenceEquals(null, obj)) return false;
 				if (ReferenceEquals(this, obj)) return true;
@@ -980,7 +983,7 @@ namespace Tests.Linq
 					select c;
 
 				var sql = query.ToString();
-				Console.WriteLine(sql);
+				TestContext.WriteLine(sql);
 
 				Assert.That(sql, Is.Not.Contains("WITH"));
 			}
@@ -1104,6 +1107,79 @@ namespace Tests.Linq
 				var sql = cte3.ToArray();
 			}
 		}
+
+		#region Issue 2029
+		[Test]
+		public void Issue2029Test([CteContextSource] string context)
+		{
+			using (new GenerateFinalAliases(true))
+			using (var db = GetDataContext(context))
+			using (db.CreateLocalTable<NcCode>())
+			using (db.CreateLocalTable<NcGroupMember>())
+			{
+				var wipCte = new WipCte(db);
+
+				var ncCodeBo = "NCCodeBO:8110,SETUP_OSCILLOSCO";
+
+				var result = from item in wipCte.AllowedNcCode() where item.NcCodeBo == ncCodeBo select item;
+				var sql = ((IExpressionQuery)result).SqlText;
+
+				Assert.True(sql.Replace("\"", "").Replace("`", "").Replace("[", "").Replace("]", "").ToLowerInvariant().Contains("WITH AllowedNcCode (NcCodeBo, NcCode, NcCodeDescription)".ToLowerInvariant()));
+			}
+		}
+
+		internal class WipCte
+		{
+			private readonly IDataContext db;
+
+			internal WipCte(IDataContext db)
+			{
+				this.db = db;
+			}
+
+			internal IQueryable<AllowedNcCodeOutput> AllowedNcCode()
+			{
+				return (from ncCode in db.GetTable<NcCode>()
+						join ncGroupMember in db.GetTable<NcGroupMember>()
+						on ncCode.Handle equals ncGroupMember.NcCodeOrGroupGbo
+						where
+							ncGroupMember.NcGroupBo == "NCGroupBO:" + ncCode.Site + ",CATAN_AUTO" ||
+							ncGroupMember.NcGroupBo == "NCGroupBO:" + ncCode.Site + ",CATAN_MAN" ||
+							ncGroupMember.NcGroupBo == "NCGroupBO:" + ncCode.Site + ",CATAN_ALL"
+						select new AllowedNcCodeOutput { NcCodeBo = ncCode.Handle, NcCode = ncCode.NcCodeColumn, NcCodeDescription = ncCode.Description }).Distinct().AsCte(nameof(AllowedNcCode));
+			}
+
+			internal class AllowedNcCodeOutput
+			{
+				internal string? NcCodeBo          { get; set; }
+				internal string? NcCode            { get; set; }
+				internal string? NcCodeDescription { get; set; }
+			}
+		}
+
+		[Table(Name = "NC_CODE")]
+		public partial class NcCode
+		{
+			[Column("HANDLE"), NotNull             ] public string    Handle           { get; set; } = null!; // NVARCHAR2(1236)
+			[Column("CHANGE_STAMP"), Nullable      ] public decimal?  ChangeStamp      { get; set; } // NUMBER (38,0)
+			[Column("SITE"), Nullable              ] public string?   Site             { get; set; } // NVARCHAR2(18)
+			[Column("NC_CODE"), Nullable           ] public string?   NcCodeColumn     { get; set; } // NVARCHAR2(48)
+			[Column("DESCRIPTION"), Nullable       ] public string?   Description      { get; set; } // NVARCHAR2(120)
+			[Column("STATUS_BO"), Nullable         ] public string?   StatusBo         { get; set; } // NVARCHAR2(1236)
+			[Column("CREATED_DATE_TIME"), Nullable ] public DateTime? CreatedDateTime  { get; set; } // DATE
+			[Column("MODIFIED_DATE_TIME"), Nullable] public DateTime? ModifiedDateTime { get; set; } // DATE
+			[Column("NC_CATEGORY"), Nullable       ] public string?   NcCategory       { get; set; } // NVARCHAR2(60)
+			[Column("DPMO_CATEGORY_BO"), Nullable  ] public string?   DpmoCategoryBo   { get; set; } // NVARCHAR2(1236)
+		}
+		[Table(Name = "NC_GROUP_MEMBER")]
+		public partial class NcGroupMember
+		{
+			[Column("HANDLE"), NotNull               ] public string   Handle           { get; set; } = null!; // NVARCHAR2(1236)
+			[Column("NC_GROUP_BO"), Nullable         ] public string?  NcGroupBo        { get; set; } // NVARCHAR2(1236)
+			[Column("NC_CODE_OR_GROUP_GBO"), Nullable] public string?  NcCodeOrGroupGbo { get; set; } // NVARCHAR2(1236)
+			[Column("SEQUENCE"), Nullable            ] public decimal? Sequence         { get; set; } // NUMBER (38,0)
+		}
+		#endregion
 
 	}
 }

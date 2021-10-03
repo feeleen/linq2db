@@ -40,7 +40,7 @@ namespace LinqToDB.DataProvider.SqlCe
 
 	class SqlCeSchemaProvider : SchemaProviderBase
 	{
-		protected override List<TableInfo> GetTables(DataConnection dataConnection)
+		protected override List<TableInfo> GetTables(DataConnection dataConnection, GetSchemaOptions options)
 		{
 			var tables = ((DbConnection)dataConnection.Connection).GetSchema("Tables");
 
@@ -63,7 +63,8 @@ namespace LinqToDB.DataProvider.SqlCe
 			).ToList();
 		}
 
-		protected override List<PrimaryKeyInfo> GetPrimaryKeys(DataConnection dataConnection)
+		protected override IReadOnlyCollection<PrimaryKeyInfo> GetPrimaryKeys(DataConnection dataConnection,
+			IEnumerable<TableSchema> tables, GetSchemaOptions options)
 		{
 			var data = dataConnection.Query<PrimaryKeyInfo>(
 				@"
@@ -100,7 +101,8 @@ WHERE PRIMARY_KEY = 1");
 			).ToList();
 		}
 
-		protected override IReadOnlyCollection<ForeignKeyInfo> GetForeignKeys(DataConnection dataConnection)
+		protected override IReadOnlyCollection<ForeignKeyInfo> GetForeignKeys(DataConnection dataConnection,
+			IEnumerable<TableSchema> tables, GetSchemaOptions options)
 		{
 			var data = dataConnection.Query<ForeignKeyInfo>(
 				@"
@@ -117,46 +119,44 @@ INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE oc ON oc.CONSTRAINT_NAME = rc.UNI
 			return data.ToList();
 		}
 
-		protected override string GetDatabaseName(DataConnection connection)
+		protected override string GetDatabaseName(DataConnection dbConnection)
 		{
-			return Path.GetFileNameWithoutExtension(((DbConnection)connection.Connection).Database);
+			return Path.GetFileNameWithoutExtension(((DbConnection)dbConnection.Connection).Database);
 		}
 
-		protected override Type? GetSystemType(string? dataType, string? columnType, DataTypeInfo? dataTypeInfo, long? length, int? precision, int? scale)
+		protected override Type? GetSystemType(string? dataType, string? columnType, DataTypeInfo? dataTypeInfo, long? length, int? precision, int? scale, GetSchemaOptions options)
 		{
-			switch (dataType?.ToLower())
+			return (dataType?.ToLower()) switch
 			{
-				case "tinyint" : return typeof(byte);
-			}
-
-			return base.GetSystemType(dataType, columnType, dataTypeInfo, length, precision, scale);
+				"tinyint" => typeof(byte),
+				_         => base.GetSystemType(dataType, columnType, dataTypeInfo, length, precision, scale, options),
+			};
 		}
 
 		protected override DataType GetDataType(string? dataType, string? columnType, long? length, int? prec, int? scale)
 		{
-			switch (dataType?.ToLower())
+			return dataType?.ToLower() switch
 			{
-				case "smallint"         : return DataType.Int16;
-				case "int"              : return DataType.Int32;
-				case "real"             : return DataType.Single;
-				case "float"            : return DataType.Double;
-				case "money"            : return DataType.Money;
-				case "bit"              : return DataType.Boolean;
-				case "tinyint"          : return DataType.Byte;
-				case "bigint"           : return DataType.Int64;
-				case "uniqueidentifier" : return DataType.Guid;
-				case "varbinary"        : return DataType.VarBinary;
-				case "binary"           : return DataType.Binary;
-				case "image"            : return DataType.Image;
-				case "nvarchar"         : return DataType.NVarChar;
-				case "nchar"            : return DataType.NChar;
-				case "ntext"            : return DataType.NText;
-				case "numeric"          : return DataType.Decimal;
-				case "datetime"         : return DataType.DateTime;
-				case "rowversion"       : return DataType.Timestamp;
-			}
-
-			return DataType.Undefined;
+				"smallint"         => DataType.Int16,
+				"int"              => DataType.Int32,
+				"real"             => DataType.Single,
+				"float"            => DataType.Double,
+				"money"            => DataType.Money,
+				"bit"              => DataType.Boolean,
+				"tinyint"          => DataType.Byte,
+				"bigint"           => DataType.Int64,
+				"uniqueidentifier" => DataType.Guid,
+				"varbinary"        => DataType.VarBinary,
+				"binary"           => DataType.Binary,
+				"image"            => DataType.Image,
+				"nvarchar"         => DataType.NVarChar,
+				"nchar"            => DataType.NChar,
+				"ntext"            => DataType.NText,
+				"numeric"          => DataType.Decimal,
+				"datetime"         => DataType.DateTime,
+				"rowversion"       => DataType.Timestamp,
+				_           	   => DataType.Undefined,
+			};
 		}
 
 		protected override string GetProviderSpecificTypeNamespace() => SqlTypes.TypesNamespace;

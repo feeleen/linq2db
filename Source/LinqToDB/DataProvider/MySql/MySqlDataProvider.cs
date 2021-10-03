@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace LinqToDB.DataProvider.MySql
 {
@@ -8,7 +10,6 @@ namespace LinqToDB.DataProvider.MySql
 	using Data;
 	using Mapping;
 	using SqlProvider;
-	using Tools;
 
 	public class MySqlDataProvider : DynamicDataProviderBase<MySqlProviderAdapter>
 	{
@@ -25,8 +26,7 @@ namespace LinqToDB.DataProvider.MySql
 					: GetMappingSchema(name, MySqlProviderAdapter.GetInstance(name).MappingSchema),
 				  MySqlProviderAdapter.GetInstance(name))
 		{
-
-			SqlProviderFlags.IsDistinctOrderBySupported        = true;
+			SqlProviderFlags.IsDistinctOrderBySupported        = false;
 			SqlProviderFlags.IsSubQueryOrderBySupported        = true;
 			SqlProviderFlags.IsCommonTableExpressionsSupported = true;
 			SqlProviderFlags.IsDistinctSetOperationsSupported  = false;
@@ -56,6 +56,13 @@ namespace LinqToDB.DataProvider.MySql
 			return new MySqlSchemaProvider(this);
 		}
 
+		public override TableOptions SupportedTableOptions =>
+			TableOptions.IsTemporary               |
+			TableOptions.IsLocalTemporaryStructure |
+			TableOptions.IsLocalTemporaryData      |
+			TableOptions.CreateIfNotExists         |
+			TableOptions.DropIfExists;
+
 		public override ISqlBuilder CreateSqlBuilder(MappingSchema mappingSchema)
 		{
 			return new MySqlSqlBuilder(this, mappingSchema, GetSqlOptimizer(), SqlProviderFlags);
@@ -63,12 +70,11 @@ namespace LinqToDB.DataProvider.MySql
 
 		private static MappingSchema GetMappingSchema(string name, MappingSchema providerSchema)
 		{
-			switch (name)
+			return name switch
 			{
-				case ProviderName.MySqlConnector: return new MySqlMappingSchema.MySqlConnectorMappingSchema(providerSchema);
-				default                         :
-				case ProviderName.MySqlOfficial : return new MySqlMappingSchema.MySqlOfficialMappingSchema (providerSchema);
-			}
+				ProviderName.MySqlConnector => new MySqlMappingSchema.MySqlConnectorMappingSchema(providerSchema),
+				_                           => new MySqlMappingSchema.MySqlOfficialMappingSchema(providerSchema),
+			};
 		}
 
 		readonly ISqlOptimizer _sqlOptimizer;
@@ -78,7 +84,7 @@ namespace LinqToDB.DataProvider.MySql
 			return _sqlOptimizer;
 		}
 
-#if NETSTANDARD2_0 || NETCOREAPP2_1
+#if !NETFRAMEWORK
 		public override bool? IsDBNullAllowed(IDataReader reader, int idx)
 		{
 			return true;
@@ -89,8 +95,8 @@ namespace LinqToDB.DataProvider.MySql
 		{
 			switch (dataType.DataType)
 			{
-				case DataType.Decimal    :
-				case DataType.VarNumeric :
+				case DataType.Decimal   :
+				case DataType.VarNumeric:
 					if (Adapter.MySqlDecimalGetter != null && value != null && value.GetType() == Adapter.MySqlDecimalType)
 						value = Adapter.MySqlDecimalGetter(value);
 					break;
@@ -108,6 +114,7 @@ namespace LinqToDB.DataProvider.MySql
 				case DataType.VarNumeric: parameter.DbType = DbType.Decimal;  return;
 				case DataType.Date:
 				case DataType.DateTime2 : parameter.DbType = DbType.DateTime; return;
+				case DataType.BitArray  : parameter.DbType = DbType.UInt64;   return;
 			}
 
 			base.SetParameterType(dataConnection, parameter, dataType);
@@ -119,14 +126,44 @@ namespace LinqToDB.DataProvider.MySql
 			ITable<T> table, BulkCopyOptions options, IEnumerable<T> source)
 		{
 			if (source == null)
-				throw new ArgumentException(nameof(source));
+				throw new ArgumentNullException(nameof(source));
 
-			return new MySqlBulkCopy().BulkCopy(
+			return new MySqlBulkCopy(this).BulkCopy(
 				options.BulkCopyType == BulkCopyType.Default ? MySqlTools.DefaultBulkCopyType : options.BulkCopyType,
 				table,
 				options,
 				source);
 		}
+
+		public override Task<BulkCopyRowsCopied> BulkCopyAsync<T>(
+			ITable<T> table, BulkCopyOptions options, IEnumerable<T> source, CancellationToken cancellationToken)
+		{
+			if (source == null)
+				throw new ArgumentNullException(nameof(source));
+
+			return new MySqlBulkCopy(this).BulkCopyAsync(
+				options.BulkCopyType == BulkCopyType.Default ? MySqlTools.DefaultBulkCopyType : options.BulkCopyType,
+				table,
+				options,
+				source,
+				cancellationToken);
+		}
+
+#if NATIVE_ASYNC
+		public override Task<BulkCopyRowsCopied> BulkCopyAsync<T>(
+			ITable<T> table, BulkCopyOptions options, IAsyncEnumerable<T> source, CancellationToken cancellationToken)
+		{
+			if (source == null)
+				throw new ArgumentNullException(nameof(source));
+
+			return new MySqlBulkCopy(this).BulkCopyAsync(
+				options.BulkCopyType == BulkCopyType.Default ? MySqlTools.DefaultBulkCopyType : options.BulkCopyType,
+				table,
+				options,
+				source,
+				cancellationToken);
+		}
+#endif
 
 		#endregion
 	}

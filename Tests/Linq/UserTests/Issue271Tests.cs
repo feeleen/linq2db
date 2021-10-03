@@ -33,9 +33,9 @@ namespace Tests.UserTests
 						e.NVarCharValue == "NVarCharValue"
 					select e;
 
-				var str = q.ToString();
+				var str = q.ToString()!;
 
-				Console.WriteLine(str);
+				TestContext.WriteLine(str);
 
 				Assert.False(str.Contains("N'CharValue'"));
 				Assert.False(str.Contains("N'VarCharValue'"));
@@ -65,9 +65,9 @@ namespace Tests.UserTests
 						@nVarChar.Contains(e.NVarCharValue)
 					select e;
 
-				var str = q.ToString();
+				var str = q.ToString()!;
 
-				Console.WriteLine(str);
+				TestContext.WriteLine(str);
 
 				Assert.False(str.Contains("N'CharValue'"));
 				Assert.False(str.Contains("N'VarCharValue'"));

@@ -8,11 +8,14 @@ namespace LinqToDB.Linq.Builder
 
 	class ContainsBuilder : MethodCallBuilder
 	{
+		private static readonly string[] MethodNames      = { "Contains"      };
+		private static readonly string[] MethodNamesAsync = { "ContainsAsync" };
+
 		protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 		{
 			return
-				methodCall.IsQueryable     ("Contains") && methodCall.Arguments.Count == 2 ||
-				methodCall.IsAsyncExtension("Contains") && methodCall.Arguments.Count == 3;
+				methodCall.IsQueryable     (MethodNames     ) && methodCall.Arguments.Count == 2 ||
+				methodCall.IsAsyncExtension(MethodNamesAsync) && methodCall.Arguments.Count == 3;
 		}
 
 		protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
@@ -65,16 +68,20 @@ namespace LinqToDB.Linq.Builder
 
 				query.Queries[0].Statement = sq;
 
-				var expr   = Builder.BuildSql(typeof(bool), 0);
+				var expr   = Builder.BuildSql(typeof(bool), 0, sql);
 				var mapper = Builder.BuildMapper<object>(expr);
 
+				CompleteColumns();
 				QueryRunner.SetRunQuery(query, mapper);
 			}
 
 			public override Expression BuildExpression(Expression? expression, int level, bool enforceServerSide)
 			{
-				var idx = ConvertToIndex(expression, level, ConvertFlags.Field);
-				return Builder.BuildSql(typeof(bool), idx[0].Index);
+				var info  = ConvertToIndex(expression, level, ConvertFlags.Field)[0];
+				var index = info.Index;
+				if (Parent != null)
+					index = ConvertToParentIndex(index, Parent);
+				return Builder.BuildSql(typeof(bool), index, info.Sql);
 			}
 
 			public override SqlInfo[] ConvertToSql(Expression? expression, int level, ConvertFlags flags)
@@ -87,7 +94,7 @@ namespace LinqToDB.Linq.Builder
 					if (Parent != null)
 						query = Parent.SelectQuery;
 
-					return new[] { new SqlInfo { Query = query, Sql = sql } };
+					return new[] { new SqlInfo(sql, query) };
 				}
 
 				throw new InvalidOperationException();
@@ -98,7 +105,7 @@ namespace LinqToDB.Linq.Builder
 				var sql = ConvertToSql(expression, level, flags);
 
 				if (sql[0].Index < 0)
-					sql[0].Index = sql[0].Query!.Select.Add(sql[0].Sql);
+					sql[0] = sql[0].WithIndex(sql[0].Query!.Select.Add(sql[0].Sql));
 
 				return sql;
 			}
@@ -114,12 +121,11 @@ namespace LinqToDB.Linq.Builder
 					}
 				}
 
-				switch (requestFlag)
+				return requestFlag switch
 				{
-					case RequestFor.Root : return IsExpressionResult.False;
-				}
-
-				throw new InvalidOperationException();
+					RequestFor.Root => IsExpressionResult.False,
+					_               => throw new InvalidOperationException(),
+				};
 			}
 
 			public override IBuildContext GetContext(Expression? expression, int level, BuildInfo buildInfo)

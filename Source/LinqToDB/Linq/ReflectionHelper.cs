@@ -153,7 +153,7 @@ namespace LinqToDB.Linq
 		{
 			public class String : Expressor<string>
 			{
-#if !NETSTANDARD2_0 && !NETCOREAPP2_1
+#if NETFRAMEWORK
 				public static MethodInfo Like11 = MethodOf(s => System.Data.Linq.SqlClient.SqlMethods.Like("", ""));
 				public static MethodInfo Like12 = MethodOf(s => System.Data.Linq.SqlClient.SqlMethods.Like("", "", ' '));
 #endif
@@ -161,6 +161,13 @@ namespace LinqToDB.Linq
 				public static MethodInfo Like21 = MethodOf(s => Sql.Like(s, ""));
 				public static MethodInfo Like22 = MethodOf(s => Sql.Like(s, "", ' '));
 			}
+
+#if !NET45
+			public class FormattableString : Expressor<System.FormattableString>
+			{
+				public static MethodInfo GetArguments = MethodOf(s => s.GetArgument(0));
+			}
+#endif
 		}
 	}
 }

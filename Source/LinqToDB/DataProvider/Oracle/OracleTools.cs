@@ -19,7 +19,7 @@ namespace LinqToDB.DataProvider.Oracle
 
 	public static partial class OracleTools
 	{
-#if NET45 || NET46
+#if NETFRAMEWORK
 		private static readonly Lazy<IDataProvider> _oracleNativeDataProvider11 = new Lazy<IDataProvider>(() =>
 		{
 			var provider = new OracleDataProvider(ProviderName.OracleNative, OracleVersion.v11);
@@ -64,7 +64,7 @@ namespace LinqToDB.DataProvider.Oracle
 			bool? managed = null;
 			switch (css.ProviderName)
 			{
-#if NET45 || NET46
+#if NETFRAMEWORK
 				case OracleProviderAdapter.NativeAssemblyName    :
 				case OracleProviderAdapter.NativeClientNamespace :
 				case ProviderName.OracleNative                   :
@@ -84,7 +84,7 @@ namespace LinqToDB.DataProvider.Oracle
 						goto case ProviderName.Oracle;
 					break;
 				case ProviderName.Oracle                         :
-#if NET45 || NET46
+#if NETFRAMEWORK
 					if (css.Name.Contains("Native") || managed == false)
 					{
 						if (css.Name.Contains("11"))
@@ -118,7 +118,7 @@ namespace LinqToDB.DataProvider.Oracle
 			{
 				var cs = string.IsNullOrWhiteSpace(connectionString) ? css.ConnectionString : connectionString;
 
-#if NET45 || NET46
+#if NETFRAMEWORK
 				if (!managed)
 					providerAdapter = OracleProviderAdapter.GetInstance(ProviderName.OracleNative);
 				else
@@ -132,8 +132,7 @@ namespace LinqToDB.DataProvider.Oracle
 					var command = conn.CreateCommand();
 					command.CommandText =
 						"select VERSION from PRODUCT_COMPONENT_VERSION where PRODUCT like 'PL/SQL%'";
-					var result = command.ExecuteScalar() as string;
-					if (result != null)
+					if (command.ExecuteScalar() is string result)
 					{
 						var version = int.Parse(result.Split('.')[0]);
 
@@ -166,33 +165,29 @@ namespace LinqToDB.DataProvider.Oracle
 
 		private static IDataProvider GetVersionedDataProvider(OracleVersion version, bool managed)
 		{
-#if NET45 || NET46
+#if NETFRAMEWORK
 			if (!managed)
 			{
-				switch (version)
+				return version switch
 				{
-					case OracleVersion.v11:
-						return _oracleNativeDataProvider11.Value;
-				}
-
-				return _oracleNativeDataProvider12.Value;
+					OracleVersion.v11 => _oracleNativeDataProvider11.Value,
+					_                 => _oracleNativeDataProvider12.Value,
+				};
 			}
 #endif
-			switch (version)
+			return version switch
 			{
-				case OracleVersion.v11:
-					return _oracleManagedDataProvider11.Value;
-			}
-
-			return _oracleManagedDataProvider12.Value;
+				OracleVersion.v11 => _oracleManagedDataProvider11.Value,
+				_                 => _oracleManagedDataProvider12.Value,
+			};
 		}
 
 		public static string  DetectedProviderName =>
-			_detectedProviderName ?? (_detectedProviderName = DetectProviderName());
+			_detectedProviderName ??= DetectProviderName();
 
 		private static string DetectProviderName()
 		{
-#if NET45 || NET46
+#if NETFRAMEWORK
 			try
 			{
 				var path = typeof(OracleTools).Assembly.GetPath();
@@ -210,29 +205,31 @@ namespace LinqToDB.DataProvider.Oracle
 #endif
 		}
 
-		public static IDataProvider GetDataProvider(string? providerName = null, string? assemblyName = null)
+		public static IDataProvider GetDataProvider(string? providerName = null, string? assemblyName = null, OracleVersion? version = null)
 		{
-#if NET45 || NET46
-			if (assemblyName == OracleProviderAdapter.NativeAssemblyName ) return GetVersionedDataProvider(DefaultVersion, false);
-			if (assemblyName == OracleProviderAdapter.ManagedAssemblyName) return GetVersionedDataProvider(DefaultVersion, true);
+			version ??= DefaultVersion;
 
-			switch (providerName)
+#if NETFRAMEWORK
+			if (assemblyName == OracleProviderAdapter.NativeAssemblyName ) return GetVersionedDataProvider(version.Value, false);
+			if (assemblyName == OracleProviderAdapter.ManagedAssemblyName) return GetVersionedDataProvider(version.Value, true);
+
+			return providerName switch
 			{
-				case ProviderName.OracleNative : return GetVersionedDataProvider(DefaultVersion, false);
-				case ProviderName.OracleManaged: return GetVersionedDataProvider(DefaultVersion, true);
-			}
-
-			return DetectedProviderName == ProviderName.OracleNative
-				? GetVersionedDataProvider(DefaultVersion, false)
-				: GetVersionedDataProvider(DefaultVersion, true);
+				ProviderName.OracleNative  => GetVersionedDataProvider(version.Value, false),
+				ProviderName.OracleManaged => GetVersionedDataProvider(version.Value, true),
+				_						   => 
+					DetectedProviderName == ProviderName.OracleNative
+					? GetVersionedDataProvider(version.Value, false)
+					: GetVersionedDataProvider(version.Value, true),
+			};
 #else
-			return GetVersionedDataProvider(DefaultVersion, true);
+			return GetVersionedDataProvider(version.Value, true);
 #endif
 		}
 
 		public static void ResolveOracle(string path)       => new AssemblyResolver(
 			path,
-#if NET45 || NET46
+#if NETFRAMEWORK
 			DetectedProviderName == ProviderName.OracleManaged
 				? OracleProviderAdapter.ManagedAssemblyName
 				: OracleProviderAdapter.NativeAssemblyName
@@ -241,7 +238,7 @@ namespace LinqToDB.DataProvider.Oracle
 #endif
 			);
 
-		public static void ResolveOracle(Assembly assembly) => new AssemblyResolver(assembly, assembly.FullName);
+		public static void ResolveOracle(Assembly assembly) => new AssemblyResolver(assembly, assembly.FullName!);
 
 #region CreateDataConnection
 
@@ -266,6 +263,7 @@ namespace LinqToDB.DataProvider.Oracle
 
 		public  static BulkCopyType  DefaultBulkCopyType { get; set; } = BulkCopyType.MultipleRows;
 
+		[Obsolete("Please use the BulkCopy extension methods within DataConnectionExtensions")]
 		public static BulkCopyRowsCopied MultipleRowsCopy<T>(
 			this DataConnection          dataConnection,
 			IEnumerable<T>               source,
@@ -282,6 +280,7 @@ namespace LinqToDB.DataProvider.Oracle
 				}, source);
 		}
 
+		[Obsolete("Please use the BulkCopy extension methods within DataConnectionExtensions")]
 		public static BulkCopyRowsCopied ProviderSpecificBulkCopy<T>(
 			DataConnection               dataConnection,
 			IEnumerable<T>               source,
@@ -306,14 +305,14 @@ namespace LinqToDB.DataProvider.Oracle
 
 		public static AlternativeBulkCopy UseAlternativeBulkCopy = AlternativeBulkCopy.InsertAll;
 
+		[Obsolete("This field is not used by linq2db. Configure reader expressions on DataProvider directly")]
 		public static Func<IDataReader,int,decimal> DataReaderGetDecimal = (dr, i) => dr.GetDecimal(i);
 
 		/// <summary>
 		/// Gets or sets flag to tell LinqToDB to quote identifiers, if they contain lowercase letters.
-		/// Default value: <c>true</c>.
-		/// This flag added for backward compatibility and will be removed later, so it is recommended to
-		/// set it to <c>false</c> and and fix mappings to use uppercase letters for non-quoted identifiers.
+		/// Default value: <c>false</c>.
+		/// This flag is added for backward compatibility and not recommended for use with new applications.
 		/// </summary>
-		public static bool DontEscapeLowercaseIdentifiers { get; set; } = true;
+		public static bool DontEscapeLowercaseIdentifiers { get; set; }
 	}
 }

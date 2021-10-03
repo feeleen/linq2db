@@ -7,14 +7,23 @@ using LinqToDB.Mapping;
 using NUnit.Framework;
 using Tests.Model;
 using LinqToDB.Tools.Comparers;
+using LinqToDB.Common;
 
-namespace Tests.Playground
+namespace Tests.xUpdate
 {
 	[TestFixture]
 	public class InsertWithOutputTests : TestBase
 	{
 		[Table]
 		class TableWithData
+		{
+			[Column]              public int     Id       { get; set; }
+			[Column]              public int     Value    { get; set; }
+			[Column(Length = 50)] public string? ValueStr { get; set; }
+		}
+
+		[Table(Schema = "TestSchema")]
+		class TableWithDataAndSchema
 		{
 			[Column]              public int     Id       { get; set; }
 			[Column]              public int     Value    { get; set; }
@@ -260,7 +269,7 @@ namespace Tests.Playground
 				};
 
 				var output = source.InsertWithOutput(dataFunc);
-				var data   = dataFunc.Compile()();
+				var data   = dataFunc.CompileExpression()();
 
 				Assert.AreEqual(data.Id,       output.Id);
 				Assert.AreEqual(data.Value,    output.Value);
@@ -282,7 +291,7 @@ namespace Tests.Playground
 				};
 
 				var output = await source.InsertWithOutputAsync(dataFunc);
-				var data = dataFunc.Compile()();
+				var data = dataFunc.CompileExpression()();
 
 				Assert.AreEqual(data.Id,       output.Id);
 				Assert.AreEqual(data.Value,    output.Value);
@@ -305,7 +314,7 @@ namespace Tests.Playground
 
 				var output = source.InsertWithOutput(dataFunc,
 					inserted => new { inserted.Id, inserted.Value, inserted.ValueStr });
-				var data = dataFunc.Compile()();
+				var data = dataFunc.CompileExpression()();
 
 				Assert.AreEqual(data.Id,       output.Id);
 				Assert.AreEqual(data.Value,    output.Value);
@@ -418,6 +427,25 @@ namespace Tests.Playground
 			}
 		}
 
+		[Test]
+		public void InsertWithOutputWithSchema([IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context, [Values(1, 2)] int value)
+		{
+			using (var db     = GetDataContext(context))
+			using (var source = db.CreateLocalTable<TableWithDataAndSchema>())
+			{
+				var data = new TableWithDataAndSchema()
+				{
+					Value    = value * 100,
+					Id       = value,
+					ValueStr = "SomeStr" + value
+				};
 
+				var output = source.InsertWithOutput(data);
+
+				Assert.AreEqual(data.Id,       output.Id);
+				Assert.AreEqual(data.Value,    output.Value);
+				Assert.AreEqual(data.ValueStr, output.ValueStr);
+			}
+		}
 	}
 }

@@ -752,10 +752,11 @@ namespace Tests.Linq
 					.GetMyContext();
 
 				var sql = ctx.ConvertToSql(null, 0, ConvertFlags.Field);
+				var field = ((SqlColumn)sql[0].Sql).Expression;
 
 				Assert.AreEqual        (1, sql.Length);
-				Assert.IsAssignableFrom(typeof(SqlField), sql[0].Sql);
-				Assert.AreEqual        ("ParentID", ((SqlField)sql[0].Sql).Name);
+				Assert.IsAssignableFrom(typeof(SqlField), field);
+				Assert.AreEqual        ("ParentID", ((SqlField)field).Name);
 			}
 		}
 
@@ -872,26 +873,17 @@ namespace Tests.Linq
 		{
 			using (var db = new TestDataConnection(context))
 			{
-				var q =
+				var actual =
 					from g in db.GrandChild
 					join p in db.Parent4 on g.Child!.ParentID equals p.ParentID
 					select g;
 
-				var ctx = q.GetMyContext();
+				var expected = 
+					from g in GrandChild
+					join p in Parent4 on g.Child!.ParentID equals p.ParentID
+					select g;
 
-				ctx.BuildExpression(null, 0, false);
-
-				var sql = db.GetSqlText(ctx.SelectQuery);
-
-				CompareSql(sql, @"
-					SELECT
-						[g_1].[ParentID],
-						[g_1].[ChildID],
-						[g_1].[GrandChildID]
-					FROM
-						[GrandChild] [g_1]
-							LEFT JOIN [Child] [a_Child] ON [g_1].[ParentID] = [a_Child].[ParentID] AND [g_1].[ChildID] = [a_Child].[ChildID]
-							INNER JOIN [Parent] [p] ON [a_Child].[ParentID] = [p].[ParentID]");
+				AreEqual(expected, actual);
 			}
 		}
 
@@ -915,21 +907,21 @@ namespace Tests.Linq
 			{
 				var q   = db.GetTable<Issue95Entity>().Where(_ => _.EnumValue == TinyIntEnum.Value1);
 				var ctx = q.GetMyContext();
-				Assert.IsNull(new QueryVisitor().Find(ctx.SelectQuery.Where, _ => _.ElementType == QueryElementType.SqlExpression), db.GetSqlText(ctx.SelectQuery));
+				Assert.IsNull(ctx.SelectQuery.Where.Find(QueryElementType.SqlExpression), db.GetSqlText(ctx.SelectQuery));
 
 				q   = db.GetTable<Issue95Entity>().Where(_ => TinyIntEnum.Value1 == _.EnumValue);
 				ctx = q.GetMyContext();
-				Assert.IsNull(new QueryVisitor().Find(ctx.SelectQuery.Where, _ => _.ElementType == QueryElementType.SqlExpression), db.GetSqlText(ctx.SelectQuery));
+				Assert.IsNull(ctx.SelectQuery.Where.Find(QueryElementType.SqlExpression), db.GetSqlText(ctx.SelectQuery));
 
 				var p = TinyIntEnum.Value2;
 
 				q   = db.GetTable<Issue95Entity>().Where(_ => _.EnumValue == p);
 				ctx = q.GetMyContext();
-				Assert.IsNull(new QueryVisitor().Find(ctx.SelectQuery.Where, _ => _.ElementType == QueryElementType.SqlExpression), db.GetSqlText(ctx.SelectQuery));
+				Assert.IsNull(ctx.SelectQuery.Where.Find(QueryElementType.SqlExpression), db.GetSqlText(ctx.SelectQuery));
 
 				q   = db.GetTable<Issue95Entity>().Where(_ => p == _.EnumValue);
 				ctx = q.GetMyContext();
-				Assert.IsNull(new QueryVisitor().Find(ctx.SelectQuery.Where, _ => _.ElementType == QueryElementType.SqlExpression), db.GetSqlText(ctx.SelectQuery));
+				Assert.IsNull(ctx.SelectQuery.Where.Find(QueryElementType.SqlExpression), db.GetSqlText(ctx.SelectQuery));
 			}
 		}
 	}
@@ -988,7 +980,7 @@ namespace Tests.Linq
 	{
 		public static MyContextParser.Context GetMyContext<T>(this IQueryable<T> source)
 		{
-			if (source == null) throw new ArgumentNullException("source");
+			if (source == null) throw new ArgumentNullException(nameof(source));
 
 			var methodInfo = MemberHelper.MethodOf(() => GetMyContext<T>(null!));
 

@@ -1,24 +1,22 @@
-﻿using LinqToDB.Expressions;
-using System.Linq;
+﻿using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace LinqToDB.Linq.Builder
 {
+	using LinqToDB.Expressions;
+
+	using static LinqToDB.Reflection.Methods.LinqToDB.Merge;
+
 	internal partial class MergeBuilder
 	{
 		internal class On : MethodCallBuilder
 		{
+			static readonly MethodInfo[] _supportedMethods = {OnMethodInfo1, OnMethodInfo2, OnTargetKeyMethodInfo};
+
 			protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 			{
-				if (methodCall.Method.IsGenericMethod)
-				{
-					var genericMethod = methodCall.Method.GetGenericMethodDefinition();
-					return  LinqExtensions.OnMethodInfo1         == genericMethod
-						 || LinqExtensions.OnMethodInfo2         == genericMethod
-						 || LinqExtensions.OnTargetKeyMethodInfo == genericMethod;
-				}
-
-				return false;
+				return methodCall.IsSameGenericMethod(_supportedMethods);
 			}
 
 			protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
@@ -37,11 +35,10 @@ namespace LinqToDB.Linq.Builder
 					mergeContext.AddTargetParameter(condition.Parameters[0]);
 					mergeContext.AddSourceParameter(condition.Parameters[1]);
 
-					builder.BuildSearchCondition(
-						new ExpressionContext(null, new[] { mergeContext.TargetContext, mergeContext.SourceContext }, condition),
-						conditionExpr,
-						statement.On.Conditions,
-						false);
+					var filterExpression = BuildSearchCondition(builder, statement, mergeContext.TargetContext, mergeContext.SourceContext,
+						condition);
+
+					statement.On.Conditions.AddRange(filterExpression.Conditions);
 				}
 				else if (methodCall.Arguments.Count == 3)
 				{
@@ -96,7 +93,7 @@ namespace LinqToDB.Linq.Builder
 				else
 				{
 					// OnTargetKey<TTarget>(IMergeableOn<TTarget, TTarget> merge)
-					var targetType       = methodCall.Method.GetGenericArguments()[0];
+					var targetType       = statement.Target.SystemType!;
 					var pTarget          = Expression.Parameter(targetType, "t");
 					var pSource          = Expression.Parameter(targetType, "s");
 					var targetDescriptor = builder.MappingSchema.GetEntityDescriptor(targetType);
@@ -120,11 +117,10 @@ namespace LinqToDB.Linq.Builder
 
 					var condition = Expression.Lambda(ex, pTarget, pSource);
 
-					builder.BuildSearchCondition(
-						new ExpressionContext(null, new[] { mergeContext.TargetContext, mergeContext.SourceContext }, condition),
-						ex,
-						statement.On.Conditions,
-						false);
+					var filterExpression = BuildSearchCondition(builder, statement, mergeContext.TargetContext, mergeContext.SourceContext,
+						condition);
+
+					statement.On.Conditions.AddRange(filterExpression.Conditions);
 				}
 
 				mergeContext.SourceContext.MatchBuilt();

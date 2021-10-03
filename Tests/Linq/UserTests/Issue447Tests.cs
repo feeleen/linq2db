@@ -9,12 +9,9 @@
 	[TestFixture]
 	public class Issue447Tests : TestBase
 	{
-		[Explicit("https://github.com/linq2db/linq2db/issues/447")]
-		[Category(TestCategory.Explicit)]
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void TestLinq2DbComplexQuery2([DataSources] string context)
 		{
-			using (new UseBinaryAggregateExpression(false))
 			using (var db = GetDataContext(context))
 			{
 				var result = db.Child.Where(c => c.ChildID > 1 || c.ChildID > 0);
@@ -38,51 +35,16 @@
 					predicate = predicate != null ? Or(predicate, filterExpression) : filterExpression;
 				}
 
-				result = result.Where(predicate);
+				result = result.Where(predicate!);
 
 				// StackOverflowException cannot be handled and will terminate process
 				result.ToString();
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
-		public void TestLinq2DbComplexQuery3([DataSources] string context)
-		{
-			using (new UseBinaryAggregateExpression(true))
-			using (var db = GetDataContext(context))
-			{
-				var result = db.Child.Where(c => c.ChildID > 1 || c.ChildID > 0);
-
-				var array = Enumerable.Range(0, 3000).ToArray();
-
-				// Build "where" conditions
-				var param = Expression.Parameter(typeof(Model.Child));
-				Expression<Func<Model.Child, bool>>? predicate = null;
-
-				for (var i = 0; i < array.Length; i++)
-				{
-					var id = array[i];
-
-					var filterExpression = Expression.Lambda<Func<Model.Child, bool>>
-					(Expression.Equal(
-						Expression.Convert(Expression.Field(param, "ChildID"), typeof(int)),
-						Expression.Constant(id)
-					), param);
-
-					predicate = predicate != null ? Or(predicate, filterExpression) : filterExpression;
-				}
-
-				result = result.Where(predicate);
-
-				// StackOverflowException cannot be handled and will terminate process
-				var _ = result.ToString();
-			}
-		}
-
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void TestLinq2DbComplexQueryCache([DataSources] string context)
 		{
-			using (new UseBinaryAggregateExpression(true))
 			using (var db = GetDataContext(context))
 			{
 				var result = db.Child.Where(c => c.ChildID > 1 || c.ChildID > 0);
@@ -108,8 +70,8 @@
 					predicate2 = predicate2 != null ? Or(predicate2, filterExpression) : filterExpression;
 				}
 
-				var result1 = result.Where(predicate1);
-				var result2 = result.Where(predicate2);
+				var result1 = result.Where(predicate1!);
+				var result2 = result.Where(predicate2!);
 
 				// StackOverflowException cannot be handled and will terminate process
 				result1.ToString();
@@ -119,12 +81,11 @@
 			}
 		}
 
-		[Test, Parallelizable(ParallelScope.None)]
+		[Test]
 		public void TestLinq2DbComplexQueryWithParameters([DataSources] string context)
 		{
 			var value = true;
 
-			using (new UseBinaryAggregateExpression(true))
 			using (var db = GetDataContext(context))
 			{
 				var query = from p in db.Parent where p.ParentID > 2 && value && true && !false select p;

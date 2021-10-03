@@ -6,11 +6,13 @@ using System.Threading.Tasks;
 
 using LinqToDB;
 using LinqToDB.Linq;
+using LinqToDB.Mapping;
 using LinqToDB.SqlQuery;
 using NUnit.Framework;
 
 namespace Tests.Linq
 {
+	using LinqToDB.Common;
 	using Model;
 
 	[TestFixture]
@@ -28,6 +30,8 @@ namespace Tests.Linq
 			Expressions.MapBinary((long v, int s) => v >> s, (v, s) => Shr(v, s));
 			Expressions.MapBinary((int  v, int s) => v << s, (v, s) => Shl(v, s));
 			Expressions.MapBinary((int  v, int s) => v >> s, (v, s) => Shr(v, s));
+			Expressions.MapMember((Enum e, Enum e2) => e.HasFlag(e2),
+				(t, flag) => (Sql.ConvertTo<int>.From(t) & Sql.ConvertTo<int>.From(flag)) != 0);
 		}
 
 		[Test]
@@ -46,7 +50,53 @@ namespace Tests.Linq
 				AreEqual(expected, query);
 			}
 		}
-		
+
+		[Flags]
+		public enum FlagsEnum
+		{
+			None = 0,
+
+			Flag1 = 0x1,
+			Flag2 = 0x2,
+			Flag3 = 0x4,
+
+			All = Flag1 | Flag2 | Flag3
+		}
+
+		[Table]
+		class MappingTestClass
+		{
+			[Column] public int       Id    { get; set; }
+			[Column] public int       Value { get; set; }
+			[Column] public FlagsEnum Flags { get; set; }
+		}
+
+		[Test]
+		public void MapHasFlag([IncludeDataSources(TestProvName.AllSQLite)] string context, [Values (FlagsEnum.Flag1, FlagsEnum.Flag3)] FlagsEnum flag)
+		{
+			var data = Enumerable.Range(1, 10).Select(i => new MappingTestClass
+				{
+					Id = i,
+					Value = i * 10,
+					Flags = (FlagsEnum)(i & (int)FlagsEnum.All)
+				})
+				.ToArray();
+
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable(data))
+			{
+				var query = from t in table
+					where t.Flags.HasFlag(flag)
+					select t;
+
+				var expected = from t in data
+					where t.Flags.HasFlag(flag)
+					select t;
+
+				AreEqualWithComparer(expected, query);
+			}
+		}
+
 		static int Count1(Parent p) { return p.Children.Count(c => c.ChildID > 0); }
 
 		[Test]
@@ -85,7 +135,7 @@ namespace Tests.Linq
 		[ExpressionMethod(nameof(Count4Expression))]
 		static int Count4(Parent p, int id, int n)
 		{
-			return (_count4Expression ?? (_count4Expression = Count4Expression().Compile()))(p, id, n);
+			return (_count4Expression ??= Count4Expression().CompileExpression())(p, id, n);
 		}
 
 		static Func<Parent,int,int,int>? _count4Expression;
@@ -109,7 +159,7 @@ namespace Tests.Linq
 		[ExpressionMethod(nameof(Count5Expression))]
 		static int Count5(ITestDataContext db, Parent p, int n)
 		{
-			return (_count5Expression ?? (_count5Expression = Count5Expression().Compile()))(db, p, n);
+			return (_count5Expression ??= Count5Expression().CompileExpression())(db, p, n);
 		}
 
 		static Func<ITestDataContext,Parent,int,int>? _count5Expression;
@@ -133,7 +183,7 @@ namespace Tests.Linq
 		[ExpressionMethod(nameof(Count6Expression))]
 		static int Count6(ITable<Child> c, Parent p)
 		{
-			return (_count6Expression ?? (_count6Expression = Count6Expression().Compile()))(c, p);
+			return (_count6Expression ??= Count6Expression().CompileExpression())(c, p);
 		}
 
 		static Func<ITable<Child>,Parent,int>? _count6Expression;
@@ -155,7 +205,7 @@ namespace Tests.Linq
 		[ExpressionMethod(nameof(Count7Expression))]
 		static int Count7(ITable<Child> ch, Parent p, int n)
 		{
-			return (_count7Expression ?? (_count7Expression = Count7Expression().Compile()))(ch, p, n);
+			return (_count7Expression ??= Count7Expression().CompileExpression())(ch, p, n);
 		}
 
 		static Func<ITable<Child>,Parent,int,int>? _count7Expression;
@@ -765,6 +815,257 @@ namespace Tests.Linq
 		{
 			throw new InvalidOperationException();
 		}
+
+		#region issue 2688
+		[Test]
+		public void NullableNullValueTest1([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				db.Person.Where(p => p.ID != GetTernaryExpressionValue1(null)).ToList();
+			}
+		}
+
+		[Test]
+		public void NullableNullValueTest2([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				db.Person.Where(p => p.ID != GetTernaryExpressionValue2(null)).ToList();
+			}
+		}
+
+		[Test]
+		public void NullableNullValueTest3([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				db.Person.Where(p => p.ID != GetTernaryExpressionValue3(null)).ToList();
+			}
+		}
+
+		[Test]
+		public void NullableNullValueTest4([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				db.Person.Where(p => p.ID != GetTernaryExpressionValue4(null)).ToList();
+			}
+		}
+
+		[Test]
+		public void NullableNullValueTest5([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				db.Person.Where(p => p.ID != GetTernaryExpressionValue5(null)).ToList();
+			}
+		}
+
+		[ExpressionMethod(nameof(GetTernaryExpressionValue1Expr))]
+		public static int? GetTernaryExpressionValue1(int? value)
+		{
+			throw new InvalidOperationException();
+		}
+
+		private static Expression<Func<int?, int?>> GetTernaryExpressionValue1Expr()
+		{
+			// null.Value
+			return value => value == null ? null : (int?)GetTernaryExpressionValueFunction(value.Value, int.MaxValue);
+		}
+
+		[ExpressionMethod(nameof(GetTernaryExpressionValue2Expr))]
+		public static int? GetTernaryExpressionValue2(int? value)
+		{
+			throw new InvalidOperationException();
+		}
+
+		private static Expression<Func<int?, int?>> GetTernaryExpressionValue2Expr()
+		{
+			// (int)null
+			return value => value == null ? null : (int?)GetTernaryExpressionValueFunction((int)value, int.MaxValue);
+		}
+
+		[ExpressionMethod(nameof(GetTernaryExpressionValue3Expr))]
+		public static int? GetTernaryExpressionValue3(int? value)
+		{
+			throw new InvalidOperationException();
+		}
+
+		private static Expression<Func<int?, int?>> GetTernaryExpressionValue3Expr()
+		{
+			// null.GetValueOrDefault()
+			return value => value == null ? null : (int?)GetTernaryExpressionValueFunction(value.GetValueOrDefault(), int.MaxValue);
+		}
+
+		[ExpressionMethod(nameof(GetTernaryExpressionValue4Expr))]
+		public static int? GetTernaryExpressionValue4(int? value)
+		{
+			throw new InvalidOperationException();
+		}
+
+		private static Expression<Func<int?, int?>> GetTernaryExpressionValue4Expr()
+		{
+			// null.GetValueOrDefault(0)
+			return value => value == null ? null : (int?)GetTernaryExpressionValueFunction(value.GetValueOrDefault(0), int.MaxValue);
+		}
+
+		[ExpressionMethod(nameof(GetTernaryExpressionValue5Expr))]
+		public static int? GetTernaryExpressionValue5(int? value)
+		{
+			throw new InvalidOperationException();
+		}
+
+		private static Expression<Func<int?, int?>> GetTernaryExpressionValue5Expr()
+		{
+			// this actually works
+			// null.HasValue
+			return value => value.HasValue ? null : (int?)GetTernaryExpressionValueFunction(1, int.MaxValue);
+		}
+
+		[Sql.Function("COALESCE", ServerSideOnly = true)]
+		private static int GetTernaryExpressionValueFunction(int value, int defaultValue)
+		{
+			throw new InvalidOperationException();
+		}
+		#endregion
+
+		#region issue 2431
+		[Table]
+		class Issue2431Table
+		{
+			[Column] public int Id;
+			[Column(DataType = DataType.NVarChar)] public JsonType? Json;
+
+			public static readonly Issue2431Table[] Data = new []
+			{
+				new Issue2431Table() { Id = 1 },
+				new Issue2431Table() { Id = 2 },
+				new Issue2431Table() { Id = 3 }
+			};
+
+			public class JsonType
+			{
+				public string? Text;
+			}
+		}
+
+		[Test]
+		public void Issue2431Test([IncludeDataSources(true, TestProvName.AllPostgreSQL93Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var table = db.CreateLocalTable(Issue2431Table.Data))
+			{
+				db.GetTable<Issue2431Table>().Where(r => JsonExtractPathText(r.Json, json => json!.Text) == "test" ? true : false).ToList();
+			}
+		}
+
+		[ExpressionMethod(nameof(JsonExtractPathExpression))]
+		public static TJsonProp JsonExtractPathText<TColumn, TJsonProp>(
+			TColumn field,
+			Expression<Func<TColumn, TJsonProp>> path)
+			=> throw new InvalidOperationException();
+
+		private static Expression<Func<TColumn, Expression<Func<TColumn, TJsonProp>>, TJsonProp>>
+			JsonExtractPathExpression<TColumn, TJsonProp>()
+		{
+			return (column, jsonProp) => JsonExtractPathText<TColumn, TJsonProp>(column, Sql.Expr<string>(JsonPath(jsonProp)));
+		}
+
+		[Sql.Expression("{0}::json #>> {1}", ServerSideOnly = true, IsPredicate = true)]
+		public static TJsonProp JsonExtractPathText<TColumn, TJsonProp>(TColumn left, string right)
+			=> throw new InvalidOperationException();
+
+		public static string JsonPath<TColumn, TJsonProp>(Expression<Func<TColumn, TJsonProp>> extractor) => "'{json, text}'";
+		#endregion
+
+		#region issue 2434
+		[Table]
+		class Issue2434Table
+		{
+			[Column] public int     Id;
+			[Column] public string? FirstName;
+			[Column] public string? LastName;
+
+			[ExpressionMethod(nameof(FullNameExpr), IsColumn = true)]
+			public string? FullName { get; set; }
+
+			private static Expression<Func<Issue2434Table, string>> FullNameExpr() => t => $"{t.FirstName} {t.LastName}";
+		}
+
+		[Test]
+		public void Issue2434Test([DataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var tb = db.CreateLocalTable<Issue2434Table>())
+			{
+				tb.OrderBy(x => x.FullName).ToArray();
+			}
+		}
+		#endregion
+
+		#region Null check generated
+
+		[Test]
+		public void TestNullCheckInExpressionLeft([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				db.Person.Any(p => p.ID == Function2(Function1Left(null)));
+			}
+		}
+
+		[Test]
+		public void TestNullCheckInExpressionRight([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				db.Person.Any(p => p.ID == Function2(Function1Right(null)));
+			}
+		}
+
+		[Test]
+		public void TestNullCheckInExpressionUsingFieldLeft([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				db.Parent.Where(p => p.Value1 == null).Any(p => p.ParentID == Function2(Function1Left(p.Value1)));
+			}
+		}
+
+		[Test]
+		public void TestNullCheckInExpressionUsingFieldRight([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				db.Parent.Where(p => p.Value1 == null).Any(p => p.ParentID == Function2(Function1Right(p.Value1)));
+			}
+		}
+
+		[Sql.Expression("{0}", ServerSideOnly = true, IsNullable = Sql.IsNullableType.SameAsFirstParameter)]
+		public static int? Function2(int? Value) => throw new InvalidOperationException();
+
+		[ExpressionMethod(nameof(Function1LeftExpr))]
+		public static int? Function1Left(int? value) => throw new InvalidOperationException();
+
+		[ExpressionMethod(nameof(Function1RightExpr))]
+		public static int? Function1Right(int? value) => throw new InvalidOperationException();
+
+		[Sql.Expression("CAST(N'SHOULD NOT BE CALLED' AS INT)", ServerSideOnly = true)]
+		private static int Fail(int value) => throw new InvalidOperationException();
+
+		private static Expression<Func<int?, int?>> Function1LeftExpr()
+		{
+			return value => value == null ? null : Fail(value.Value);
+		}
+
+		private static Expression<Func<int?, int?>> Function1RightExpr()
+		{
+			return value => value != null ? Fail(value.Value) : null;
+		}
+
+		#endregion
+
 	}
 
 	static class ExpressionTestExtensions
@@ -784,7 +1085,7 @@ namespace Tests.Linq
 		{
 			return outer
 				.GroupJoin(inner, outerKeySelector, innerKeySelector, (o, gr) => new { o, gr })
-				.SelectMany(t => t.gr.DefaultIfEmpty(), (o,i) => new LeftJoinInfo<TOuter,TInner> { Outer = o.o, Inner = i });
+				.SelectMany(t => t.gr.DefaultIfEmpty(), (o,i) => new LeftJoinInfo<TOuter,TInner> { Outer = o.o, Inner = i! });
 		}
 
 		static Expression<Func<
@@ -797,7 +1098,7 @@ namespace Tests.Linq
 		{
 			return (outer,inner,outerKeySelector,innerKeySelector) => outer
 				.GroupJoin(inner, outerKeySelector, innerKeySelector, (o, gr) => new { o, gr })
-				.SelectMany(t => t.gr.DefaultIfEmpty(), (o,i) => new LeftJoinInfo<TOuter,TInner> { Outer = o.o, Inner = i });
+				.SelectMany(t => t.gr.DefaultIfEmpty(), (o,i) => new LeftJoinInfo<TOuter,TInner> { Outer = o.o, Inner = i! });
 		}
 
 		/*

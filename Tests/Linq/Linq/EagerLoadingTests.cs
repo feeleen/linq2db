@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+using FluentAssertions;
 using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Mapping;
+using LinqToDB.Tools;
 using LinqToDB.Tools.Comparers;
 using NUnit.Framework;
 
@@ -19,6 +22,8 @@ namespace Tests.Linq
 			[Column] [PrimaryKey] public int Id1    { get; set; }
 			[Column] [PrimaryKey] public int Id2    { get; set; }
 			[Column] public string? Value { get; set; }
+
+			[Column] public byte[]? ByteValues        { get; set; }
 
 			[Association(ThisKey = nameof(Id1), OtherKey = nameof(DetailClass.MasterId))]
 			public List<DetailClass> Details { get; set; } = null!;
@@ -67,6 +72,10 @@ namespace Tests.Linq
 			[Column] [PrimaryKey] public int SubDetailId    { get; set; }
 			[Column] public int? DetailId    { get; set; }
 			[Column] public string? SubDetailValue { get; set; }
+
+			[Association(ThisKey = nameof(DetailId), OtherKey = nameof(DetailClass.DetailId))]
+			public SubDetailClass? Detail { get; set; } = null!;
+
 		}
 
 		class SubDetailDTO
@@ -144,7 +153,6 @@ namespace Tests.Linq
 			var (masterRecords, detailRecords) = GenerateData();
 			var intParam = 0;
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -171,13 +179,184 @@ namespace Tests.Linq
 			}
 		}
 
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/2442")]
+		public async Task TestLoadWithAsyncEnumerator([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords) = GenerateData();
+			var intParam = 0;
+
+			using (var db     = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			{
+				var query = from m in master.LoadWith(m => m.Details).LoadWith(m => m.DetailsQuery)
+							where m.Id1 >= intParam
+							select m;
+
+				var expectedQuery = from m in masterRecords
+									where m.Id1 >= intParam
+									select new MasterClass
+									{
+										Id1          = m.Id1,
+										Id2          = m.Id2,
+										Value        = m.Value,
+										Details      = detailRecords.Where(d => d.MasterId == m.Id1).ToList(),
+										DetailsQuery = detailRecords.Where(d => d.MasterId == m.Id1 && d.MasterId == m.Id2 && d.DetailId % 2 == 0).ToArray(),
+									};
+
+				var result = new List<MasterClass>();
+
+				await foreach (var item in (IAsyncEnumerable<MasterClass>)query)
+					result.Add(item);
+
+				var expected = expectedQuery.ToList();
+
+				AreEqual(expected, result, ComparerBuilder.GetEqualityComparer(expected));
+			}
+		}
+
+		[Test]
+		public void TestLoadWithAndExtensions([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords, subDetailRecords) = GenerateDataWithSubDetail();
+			
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			using (var subDetail = db.CreateLocalTable(subDetailRecords))
+			{
+				var query = 
+					from d in detail
+					from m in master.InnerJoin(m => m.Id1 == d.MasterId)
+					where m.Id1.In(1, 2)
+					select d;
+
+				query = query.LoadWith(d => d.SubDetails).ThenLoad(sd => sd.Detail);
+				var result = query.ToArray();
+
+				Assert.That(result.Length, Is.EqualTo(1));
+				Assert.That(result[0].SubDetails.Length, Is.EqualTo(100));
+				Assert.That(result[0].SubDetails[0].Detail, Is.Not.Null);
+			}
+		}
+
+
+		[Test]
+		public void TestLoadWithAndDuplications([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords) = GenerateData();
+			
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			{
+				var query = 
+					from m in master
+					from d in detail.InnerJoin(d => m.Id1 == d.MasterId)
+					select m;
+
+				query = query.LoadWith(d => d.Details);
+
+
+				var expectedQuery = from m in masterRecords
+					join dd in detailRecords on m.Id1 equals dd.MasterId
+					select new MasterClass
+					{
+						Id1 = m.Id1,
+						Id2 = m.Id2,
+						Value = m.Value,
+						Details = detailRecords.Where(d => m.Id1 == d.MasterId).ToList(),
+					};
+
+				var result = query.ToList();
+				var expected = expectedQuery.ToList();
+
+				AreEqual(expected, result, ComparerBuilder.GetEqualityComparer(expected));
+			}
+		}
+
+		[Test]
+		public void TestLoadWithFromProjection([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords, subDetailRecords) = GenerateDataWithSubDetail();
+			
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			using (var subDetail = db.CreateLocalTable(subDetailRecords))
+			{
+				var subQuery = 
+					from m in master
+					from d in detail.InnerJoin(d => m.Id1 == d.MasterId)
+					select new {m, d};
+
+				var query = subQuery.Select(r => new { One = r, Two = r.d });
+
+				query = query.LoadWith(a => a.One.m.Details).ThenLoad(d => d.SubDetails)
+					.LoadWith(a => a.One.d.SubDetails)
+					.LoadWith(b => b.Two.SubDetails).ThenLoad(sd => sd.Detail);
+
+
+				var result = query.ToArray();
+
+				foreach (var item in result)
+				{
+					Assert.That(ReferenceEquals(item.One.d, item.Two), Is.True);
+					Assert.That(item.Two.SubDetails.Length, Is.GreaterThan(0));
+					Assert.That(item.Two.SubDetails[0].Detail, Is.Not.Null);
+				}
+			}
+		}
+
+
+		[Test]
+		public void TestLoadWithToString1([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				var sql = db.Parent.LoadWith(p => p.Children).ToString()!;
+
+				Assert.False(sql.Contains("LoadWithQueryable"));
+
+				// two queries generated, now returns sql for main query
+				CompareSql(@"SELECT
+	[t1].[ParentID],
+	[t1].[Value1]
+FROM
+	[Parent] [t1]", sql);
+			}
+		}
+
+		[Test]
+		public void TestLoadWithToString2([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				var sql = db.Person.LoadWith(p => p.Patient).ToString()!;
+
+				Assert.False(sql.Contains("LoadWithQueryable"));
+
+				// one query with join generated
+				CompareSql(@"SELECT
+	[t1].[FirstName],
+	[t1].[PersonID],
+	[t1].[LastName],
+	[t1].[MiddleName],
+	[t1].[Gender],
+	[a_Patient].[PersonID],
+	[a_Patient].[Diagnosis]
+FROM
+	[Person] [t1]
+		LEFT JOIN [Patient] [a_Patient] ON [t1].[PersonID] = [a_Patient].[PersonID]", sql);
+			}
+		}
+
 		[Test]
 		public void TestLoadWithDeep([IncludeDataSources(TestProvName.AllSQLite)] string context)
 		{
 			var (masterRecords, detailRecords, subDetailRecords) = GenerateDataWithSubDetail();
 			var intParam = 1;
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -216,7 +395,6 @@ namespace Tests.Linq
 			var (masterRecords, detailRecords, subDetailRecords) = GenerateDataWithSubDetail();
 			var intParam = 1;
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -249,7 +427,6 @@ namespace Tests.Linq
 			var (masterRecords, detailRecords) = GenerateData();
 			var intParam = 0;
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -273,7 +450,6 @@ namespace Tests.Linq
 			var (masterRecords, detailRecords) = GenerateData();
 			var intParam = 0;
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -298,7 +474,6 @@ namespace Tests.Linq
 			var (masterRecords, detailRecords) = GenerateData();
 			var intParam = 0;
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -324,7 +499,6 @@ namespace Tests.Linq
 		{
 			var (masterRecords, detailRecords) = GenerateDataManyId();
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -348,7 +522,6 @@ namespace Tests.Linq
 		{
 			var (masterRecords, detailRecords) = GenerateData();
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -373,7 +546,6 @@ namespace Tests.Linq
 			var (masterRecords, detailRecords, subDetailRecords) = GenerateDataWithSubDetail();
 
 			var masterFilter = 5;
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -386,7 +558,8 @@ namespace Tests.Linq
 						master_1.Id1,
 						Details = detail.Where(d_1 => d_1.MasterId == master_1.Id1).Select(masterP_1 => new
 						{
-							SubDetails = subDetail.Where(d_b => d_b.DetailId == masterP_1.DetailId).ToArray()
+							SubDetails = subDetail.Where(d_b => d_b.DetailId == masterP_1.DetailId).ToArray(),
+							Another = masterP_1.SubDetails
 						}).ToArray()
 					};
 
@@ -397,7 +570,8 @@ namespace Tests.Linq
 						master_1.Id1,
 						Details = detailRecords.Where(d_1 => d_1.MasterId == master_1.Id1).Select(masterP_1 => new
 						{
-							SubDetails = subDetailRecords.Where(d_b => d_b.DetailId == masterP_1.DetailId).ToArray()
+							SubDetails = subDetailRecords.Where(d_b => d_b.DetailId == masterP_1.DetailId).ToArray(),
+							Another = subDetailRecords.Where(d_b => d_b.DetailId == masterP_1.DetailId).ToArray()
 						}).ToArray()
 					};
 
@@ -413,7 +587,6 @@ namespace Tests.Linq
 		{
 			var (masterRecords, detailRecords) = GenerateDataManyId();
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -448,7 +621,6 @@ namespace Tests.Linq
 		{
 			var (masterRecords, detailRecords, subDetailRecords) = GenerateDataWithSubDetail();
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -459,7 +631,8 @@ namespace Tests.Linq
 					select new
 					{
 						Detail = d,
-						SubDetails = subDetails.Where(sd => sd.DetailId == d.DetailId).ToArray()
+						SubDetails = subDetails.Where(sd => sd.DetailId == d.DetailId).ToArray(),
+						SubDetailsAssocaited = d.SubDetails
 					};
 
 				var expectedQuery = from m in masterRecords.Take(20)
@@ -467,7 +640,8 @@ namespace Tests.Linq
 					select new
 					{
 						Detail = d,
-						SubDetails = subDetailRecords.Where(sd => sd.DetailId == d.DetailId).ToArray()
+						SubDetails = subDetailRecords.Where(sd => sd.DetailId == d.DetailId).ToArray(),
+						SubDetailsAssocaited = subDetailRecords.Where(sd => sd.DetailId == d.DetailId).ToArray()
 					};
 
 				var result   = query.ToArray();
@@ -482,7 +656,6 @@ namespace Tests.Linq
 		{
 			var (masterRecords, detailRecords) = GenerateData();
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -515,7 +688,6 @@ namespace Tests.Linq
 		{
 			var (masterRecords, detailRecords) = GenerateData();
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -538,9 +710,166 @@ namespace Tests.Linq
 		[Test]
 		public void TestGroupJoin([IncludeDataSources(TestProvName.AllSQLite)] string context)
 		{
+			var (masterRecords, detailRecords, subDetailRecords) = GenerateDataWithSubDetail();
+
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			using (var subDetail = db.CreateLocalTable(subDetailRecords))
+			{
+				var query = from m in master.OrderByDescending(m => m.Id2).Take(20)
+					join d in detail on m.Id1 equals d.MasterId into j
+					from dd in j
+					select new
+					{
+						Master = m,
+						Detail = dd,
+						DetailAssociated = dd.SubDetails,
+						DetailAssociatedFiltered = dd.SubDetails.OrderBy(sd => sd.SubDetailValue).Take(10).ToArray(),
+						Masters = master.Where(mm => m.Id1 == dd.MasterId).OrderBy(mm => mm.Value).Take(10).ToArray()
+					};
+
+				var expectedQuery = from m in masterRecords.OrderByDescending(m => m.Id2).Take(20)
+					join d in detailRecords on m.Id1 equals d.MasterId into j
+					from dd in j
+					select new
+					{
+						Master = m,
+						Detail = dd,
+						DetailAssociated = subDetailRecords.Where(sd => sd.DetailId == dd.DetailId).ToArray(),
+						DetailAssociatedFiltered = subDetailRecords.OrderBy(sd => sd.SubDetailValue).Where(sd => sd.DetailId == dd.DetailId).Take(10).ToArray(),
+						Masters = masterRecords.Where(mm => m.Id1 == dd.MasterId).OrderBy(mm => mm.Value).Take(10).ToArray()
+					};
+
+				var result   = query.ToArray();
+				var expected = expectedQuery.ToArray();
+
+				AreEqual(expected, result, ComparerBuilder.GetEqualityComparer(result));
+			}
+		}
+
+		[Test]
+		public void TestDeepGroupJoin([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords, subDetailRecords) = GenerateDataWithSubDetail();
+
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			using (var subDetail = db.CreateLocalTable(subDetailRecords))
+			{
+				var query = master.OrderByDescending(m => m.Id2)
+					.Take(20)
+					.GroupJoin(detail, m => m.Id1, d => d.MasterId, (m, ds) => new { m, ds })
+					.GroupJoin(master, dd => dd.m.Id1, mm => mm.Id1, (dd, mm) =>
+						new
+						{
+							dd.m.Id1,
+							Details = dd.ds.ToArray(),
+							Masters = mm.ToArray()
+						}
+					);
+
+				var expectedQuery = masterRecords.OrderByDescending(m => m.Id2)
+					.Take(20)
+					.GroupJoin(detailRecords, m => m.Id1, d => d.MasterId, (m, ds) => new { m, ds })
+					.GroupJoin(masterRecords, dd => dd.m.Id1, mm => mm.Id1, (dd, mm) =>
+						new
+						{
+							dd.m.Id1,
+							Details = dd.ds.ToArray(),
+							Masters = mm.ToArray()
+						}
+					);
+
+				var result   = query.ToArray();
+				var expected = expectedQuery.ToArray();
+				
+				AreEqual(expected, result, ComparerBuilder.GetEqualityComparer(result));
+			}
+		}
+
+		[Test]
+		public void TestDeepJoin([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords, subDetailRecords) = GenerateDataWithSubDetail();
+
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			using (var subDetail = db.CreateLocalTable(subDetailRecords))
+			{
+				var query = master.OrderByDescending(m => m.Id2)
+					.Take(20)
+					.GroupJoin(detail, m => m.Id1, d => d.MasterId, (m, ds) => new { m, ds })
+					.Join(master, dd => dd.m.Id1, mm => mm.Id1, (dd, mm) =>
+						new
+						{
+							dd.m.Id1,
+							Details = dd.ds.ToArray(),
+							Master = mm
+						}
+					);
+
+				var expectedQuery = masterRecords.OrderByDescending(m => m.Id2)
+					.Take(20)
+					.GroupJoin(detailRecords, m => m.Id1, d => d.MasterId, (m, ds) => new { m, ds })
+					.Join(masterRecords, dd => dd.m.Id1, mm => mm.Id1, (dd, mm) =>
+						new
+						{
+							dd.m.Id1,
+							Details = dd.ds.ToArray(),
+							Master = mm
+						}
+					);
+
+				var result   = query.ToArray();
+				var expected = expectedQuery.ToArray();
+				
+				AreEqual(expected, result, ComparerBuilder.GetEqualityComparer(result));
+			}
+		}
+
+		[Test]
+		public void TestSubSelect([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords, subDetailRecords) = GenerateDataWithSubDetail();
+
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			{
+				var query = master.OrderByDescending(m => m.Id2)
+					.Take(20)
+					.Select(m => new { Master = m })
+					.Distinct();
+
+				var result = query.Select(e => new
+				{
+					e.Master,
+					Details = e.Master.Details.Select(d => new { d.DetailId, d.DetailValue }).ToArray()
+				});
+
+				var expectedQuery = masterRecords.OrderByDescending(m => m.Id2)
+					.Take(20)
+					.Select(m => new { Master = m })
+					.Distinct();
+
+				var expected = expectedQuery.Select(e => new
+				{
+					e.Master,
+					Details = detailRecords.Where(dr => dr.MasterId == e.Master.Id1).Select(d => new { d.DetailId, d.DetailValue }).ToArray()
+				});;
+				
+				AreEqual(expected, result, ComparerBuilder.GetEqualityComparer(result));
+			}
+		}
+
+		[Test]
+		public void TestSelectGroupBy([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
 			var (masterRecords, detailRecords) = GenerateData();
 
-			using (new AllowMultipleQuery())
 			using (var db = GetDataContext(context))
 			using (var master = db.CreateLocalTable(masterRecords))
 			using (var detail = db.CreateLocalTable(detailRecords))
@@ -552,7 +881,10 @@ namespace Tests.Linq
 					{
 						Master = m,
 						Detail = dd,
-						Masters = master.Where(mm => m.Id1 == dd.MasterId).ToArray()
+						FirstMaster = master.Where(mm => m.Id1 == dd.MasterId)
+							.AsEnumerable()
+							.GroupBy(_ => _.Id1)
+							.Select(_ => _.OrderBy(mm => mm.Id1).First())
 					};
 
 				var expectedQuery = from m in masterRecords.OrderByDescending(m => m.Id2).Take(20)
@@ -562,7 +894,9 @@ namespace Tests.Linq
 					{
 						Master = m,
 						Detail = dd,
-						Masters = masterRecords.Where(mm => m.Id1 == dd.MasterId).ToArray()
+						FirstMaster = masterRecords.Where(mm => m.Id1 == dd.MasterId)
+							.GroupBy(_ => _.Id1)
+							.Select(_ => _.OrderBy(mm => mm.Id1).First())
 					};
 
 				var result   = query.ToArray();
@@ -612,6 +946,136 @@ namespace Tests.Linq
 			}
 		}
 
+		[Test]
+		public void TestCorrectFilteringMembers([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords) = GenerateData();
+
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			{
+				var query1 = master.Select(e => new { e.Id1, e.Value, e.ByteValues });
+				var query2 = master.Select(e => new { e.Id1, Value = (string?)"Str", e.ByteValues });
+
+				var concated = query1.Concat(query2);
+
+				var query = concated.Select(e1 => new
+				{
+					e1.Id1,
+					e1.Value,
+					e1.ByteValues
+				});
+
+				var result = query.ToArray(); 
+
+				var equery1 = masterRecords.Select(e => new { e.Id1, e.Value, e.ByteValues });
+				var equery2 = masterRecords.Select(e => new { e.Id1, Value = (string?)"Str", e.ByteValues });
+
+				var econcated = equery1.Concat(equery2);
+
+				var equery = econcated.Select(e1 => new
+				{
+					e1.Id1,
+					e1.Value,
+					e1.ByteValues
+				});
+
+				var expected = equery.ToArray();
+
+				AreEqual(expected, result);
+			}
+		}
+
+		public static X InitData<X>(X entity) => entity; // for simplicity
+
+		[Test]
+		public void ProjectionWithExtension([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords) = GenerateData();
+
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			{
+				var result = master.LoadWith(x => x.Details).Select(x => InitData(x))
+					.ToArray();
+				var result2 = master.LoadWith(x => x.Details).Select(x => InitData(x)).Select(x => new { x = InitData(x)})
+					.ToArray();
+
+				Assert.That(result.Length, Is.EqualTo(result2.Length));
+			}
+		}
+
+
+		[Test]
+		public void ProjectionWithoutClass([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords) = GenerateData();
+
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			{
+				var query = master.Select(x => new
+					{
+						Details = x.Details.Select(d => d.DetailValue)
+					});
+
+				var result = query.Select(m => m.Details).ToList();
+
+				var expectedQuery = masterRecords.Select(x => new
+				{
+					Details = detailRecords.Where(d => d.MasterId == x.Id1).Select(d => d.DetailValue)
+				});
+
+				var expected = expectedQuery.Select(m => m.Details).ToList();
+
+				AreEqual(expected, result);
+			}
+		}
+
+		[Test]
+		public void FirstSingleWithFilter([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords) = GenerateData();
+
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			{
+				var query = master.Select(x => new
+				{
+					x.Id1,
+					Details = x.Details.Select(d => d.DetailValue)
+				});
+
+				FluentActions.Invoking(() => query.FirstOrDefault(x => x.Id1 == 1)).Should().NotThrow();
+				FluentActions.Invoking(() => query.First(x => x.Id1          == 1)).Should().NotThrow();
+				FluentActions.Invoking(() => query.Single(x => x.Id1         == 1)).Should().NotThrow();
+			}
+		}
+
+		[Test]
+		public async Task FirstSingleWithFilterAsync([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		{
+			var (masterRecords, detailRecords) = GenerateData();
+
+			using (var db = GetDataContext(context))
+			using (var master = db.CreateLocalTable(masterRecords))
+			using (var detail = db.CreateLocalTable(detailRecords))
+			{
+				var query = master.Select(x => new
+				{
+					x.Id1,
+					Details = x.Details.Select(d => d.DetailValue)
+				});
+
+				await FluentActions.Awaiting(() => query.FirstOrDefaultAsync(x => x.Id1 == 1)).Should().NotThrowAsync();
+				await FluentActions.Awaiting(() => query.FirstAsync(x => x.Id1          == 1)).Should().NotThrowAsync();
+				await FluentActions.Awaiting(() => query.SingleAsync(x => x.Id1         == 1)).Should().NotThrowAsync();
+			}
+		}
+
 		#region issue 1862
 		[Table]
 		public partial class Blog
@@ -626,7 +1090,7 @@ namespace Tests.Linq
 
 			public static readonly Blog[] Data = new[]
 			{
-				new Blog() { Id = 1, Title = "Another .NET Core Guy", Slogan = "Doing .NET Core Stuff", UserId = Guid.NewGuid().ToString("N") }
+				new Blog() { Id = 1, Title = "Another .NET Core Guy", Slogan = "Doing .NET Core Stuff", UserId = TestData.Guid1.ToString("N") }
 			};
 		}
 
@@ -696,7 +1160,6 @@ namespace Tests.Linq
 		[Test]
 		public void Issue1862TestProjections([IncludeDataSources(TestProvName.AllSqlServer)] string context)
 		{
-			using (new AllowMultipleQuery())
 			using (var db      = GetDataContext(context))
 			using (var blog    = db.CreateLocalTable(Blog.Data))
 			using (var post    = db.CreateLocalTable(Post.Data))
@@ -713,12 +1176,12 @@ namespace Tests.Linq
 						p.Id,
 						p.Title,
 						p.PostContent,
-						Tags = p.PostTags.Where(p => !p.IsDeleted).Select(t => new
+						Tags = p.PostTags.Where(pp => !pp.IsDeleted).Select(t => new
 						{
 							Id = t.TagId,
 							t.Tag.Name
 						}).OrderBy(t => t.Id).ToArray()
-					}).OrderBy(p => p.Id).ToArray()
+					}).OrderBy(op => op.Id).ToArray()
 				});
 
 				var result = new
@@ -760,6 +1223,270 @@ namespace Tests.Linq
 				Assert.AreEqual("SqlKata", result.Blog[0].Posts[3].Tags[0].Name);
 			}
 		}
+#endregion
+
+
+#region issue 2196
+		public class EventScheduleItemBase
+		{
+			public EventScheduleItemBase()
+			{
+			}
+
+			[PrimaryKey]
+			[Column] public int  Id                        { get; set; }
+			[Column] public int  EventId                   { get; set; }
+			[Column] public bool IsActive                  { get; set; } = true;
+			[Column] public int? ParentEventScheduleItemId { get; set; }
+		}
+
+		[Table]
+		public class EventScheduleItem : EventScheduleItemBase
+		{
+			public EventScheduleItem()
+			{
+				Persons = new List<EventScheduleItemPerson>();
+				ChildSchedules = new List<EventScheduleItem>();
+			}
+
+			[Association(ThisKey = nameof(ParentEventScheduleItemId), OtherKey = nameof(Id))]
+			public virtual EventScheduleItem? ParentSchedule { get; set; }
+			[Association(ThisKey = nameof(Id), OtherKey = nameof(ParentEventScheduleItemId))]
+			public virtual List<EventScheduleItem> ChildSchedules { get; set; } = null!;
+			[Association(ThisKey = nameof(Id), OtherKey = nameof(EventScheduleItemPerson.EventScheduleItemId))]
+			public virtual List<EventScheduleItemPerson> Persons { get; set; } = null!;
+
+			public static EventScheduleItem[] Items { get; } =
+				new[]
+				{
+					new EventScheduleItem() { Id = 1, EventId = 1, IsActive = true, ParentEventScheduleItemId = 1 },
+					new EventScheduleItem() { Id = 2, EventId = 2, IsActive = true, ParentEventScheduleItemId = 2 }
+				};
+		}
+
+		[Table]
+		public class EventScheduleItemPerson
+		{
+			[Column] public int Id                    { get; set; }
+			[Column] public int EventSchedulePersonId { get; set; }
+			[Column] public int EventScheduleItemId   { get; set; }
+
+			[Association(ThisKey = nameof(EventSchedulePersonId), OtherKey = nameof(EventSchedulePerson.Id))]
+			public virtual EventSchedulePerson Person { get; set; } = null!;
+			[Association(ThisKey = nameof(EventScheduleItemId), OtherKey = nameof(EventScheduleItem.Id))]
+			public virtual EventScheduleItem ScheduleItem { get; set; } = null!;
+
+			public static EventScheduleItemPerson[] Items { get; } =
+				new[]
+				{
+					new EventScheduleItemPerson() { Id = 1, EventSchedulePersonId = 1, EventScheduleItemId = 1 },
+					new EventScheduleItemPerson() { Id = 2, EventSchedulePersonId = 2, EventScheduleItemId = 2 }
+				};
+		}
+
+		[Table]
+		public class EventSchedulePerson
+		{
+			public EventSchedulePerson()
+			{
+				EventScheduleItemPersons = new List<EventScheduleItemPerson>();
+			}
+
+			[Column] public int  Id             { get; set; }
+			[Column] public int? TicketNumberId { get; set; }
+
+			[Association(ThisKey = nameof(Id), OtherKey = nameof(EventScheduleItemPerson.EventSchedulePersonId))]
+			public virtual ICollection<EventScheduleItemPerson> EventScheduleItemPersons { get; set; }
+
+			public static EventSchedulePerson[] Items { get; } =
+				new[]
+				{
+					new EventSchedulePerson() { Id = 1, TicketNumberId = 1 },
+					new EventSchedulePerson() { Id = 2, TicketNumberId = 2 }
+				};
+		}
+
+		public class EventScheduleListModel : EventScheduleItemBase
+		{
+			public List<EventScheduleListPersonModel> Persons { get; set; } = new List<EventScheduleListPersonModel>();
+		}
+
+		public class EventScheduleListPersonModel
+		{
+			public int  Id                    { get; set; }
+			public int  EventSchedulePersonId { get; set; }
+			public int? TicketNumberId        { get; set; }
+		}
+
+		[Test]
+		public void Issue2196([IncludeDataSources(TestProvName.AllSqlServer)] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (db.CreateLocalTable(EventScheduleItem.Items))
+			using (db.CreateLocalTable(EventScheduleItemPerson.Items))
+			using (db.CreateLocalTable(EventSchedulePerson.Items))
+			{
+				var eventId = 1;
+
+				var query = db.GetTable<EventScheduleItem>()
+					.Where(p => p.EventId == eventId && p.IsActive)
+					.Select(p => new EventScheduleListModel()
+					{
+						Id      = p.Id,
+						Persons = p.Persons.Select(pp => new EventScheduleListPersonModel()
+						{
+							EventSchedulePersonId = pp.EventSchedulePersonId,
+							Id                    = pp.Id,
+							TicketNumberId        = pp.Person.TicketNumberId
+						}).ToList()
+					});
+
+				var result = query.ToList();
+
+				Assert.That(result.Count, Is.EqualTo(1));
+				Assert.That(result[0].Persons.Count, Is.EqualTo(1));
+			}
+		}
+#endregion
+
+#region issue 2307
+		[Table]
+		class AttendanceSheet
+		{
+			[PrimaryKey]
+			[Column] public int Id;
+
+			public static AttendanceSheet[] Items { get; } =
+				new[]
+				{
+					new AttendanceSheet() { Id = 1 },
+					new AttendanceSheet() { Id = 2 }
+				};
+		}
+
+		[Table]
+		class AttendanceSheetRow
+		{
+			[Column] public int Id;
+			[Column] public int AttendanceSheetId;
+
+			public static AttendanceSheetRow[] Items { get; } =
+				new[]
+				{
+					new AttendanceSheetRow() { Id = 1, AttendanceSheetId = 1 },
+					new AttendanceSheetRow() { Id = 2, AttendanceSheetId = 2 },
+					new AttendanceSheetRow() { Id = 3, AttendanceSheetId = 1 },
+					new AttendanceSheetRow() { Id = 4, AttendanceSheetId = 2 },
+				};
+		}
+
+		class AttendanceSheetDTO
+		{
+			public List<AttendanceSheetRowListModel> Rows = null!;
+		}
+
+		class AttendanceSheetRowListModel
+		{
+			public AttendanceSheetRowListModel(AttendanceSheetRow row)
+			{
+				AttendanceSheetId = row.AttendanceSheetId;
+			}
+
+			public int AttendanceSheetId;
+		}
+
+		[Test]
+		public void Issue2307([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (var sheets = db.CreateLocalTable(AttendanceSheet.Items))
+			using (var sheetRows   = db.CreateLocalTable(AttendanceSheetRow.Items))
+			{
+				var query = from sheet in sheets
+							join row in sheetRows on sheet.Id equals row.AttendanceSheetId into rows
+							select new AttendanceSheetDTO()
+							{
+								Rows = rows.Select(x => new AttendanceSheetRowListModel(x)).ToList(),
+							};
+
+				query.ToList();
+			}
+		}
 		#endregion
+
+		#region issue 3128
+
+		[Table]
+		class UserIssue3128
+		{
+			[PrimaryKey]
+			public int Id { get; set; }
+
+			[Association(ThisKey = nameof(Id), OtherKey = nameof(UserDetailsIssue3128.UserId), CanBeNull = true)]
+			public UserDetailsIssue3128? Details { get; set; }
+		}
+
+		[Table]
+		class UserDetailsIssue3128
+		{
+			[PrimaryKey] public int UserId { get; set; }
+			[Column] public int Age { get; set; }
+		}
+
+		[Test]
+		public void TableExpressionAfterLoadWithTable([DataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (db.CreateLocalTable<UserIssue3128>())
+			using (db.CreateLocalTable<UserDetailsIssue3128>())
+			{
+				db.InsertWithIdentity(new UserIssue3128 { Id = 10 });
+				db.InsertWithIdentity(new UserDetailsIssue3128 { UserId = 10, Age = 18 });
+
+				var result = db.GetTable<UserIssue3128>()
+					.LoadWithAsTable( _ => _.Details)
+					.WithTableExpression($"{{0}} {{1}}")
+					.ToList();
+
+				Assert.AreEqual(result.Count, 1);
+			}
+		}
+
+		[Test]
+		public void TableExpressionFirst([DataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (db.CreateLocalTable<UserIssue3128>())
+			using (db.CreateLocalTable<UserDetailsIssue3128>())
+			{
+				db.InsertWithIdentity(new UserIssue3128 { Id = 10 });
+				db.InsertWithIdentity(new UserDetailsIssue3128 { UserId = 10, Age = 18 });
+
+				var result = db.GetTable<UserIssue3128>()
+					.WithTableExpression($"{{0}} {{1}}")
+					.LoadWithAsTable( _ => _.Details)
+					.ToList();
+
+				Assert.AreEqual(result.Count, 1);
+			}
+		}
+
+		[Test]
+		public void WithTableAttributeMethods([DataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			using (db.CreateLocalTable<UserIssue3128>())
+			using (db.CreateLocalTable<UserDetailsIssue3128>())
+			{
+				db.InsertWithIdentity(new UserIssue3128 { Id = 10 });
+				db.InsertWithIdentity(new UserDetailsIssue3128 { UserId = 10, Age = 18 });
+
+				db.Person.Where(p => db.GetTable<UserIssue3128>()
+					.LoadWithAsTable(_ => _.Details)
+					.SchemaName(null).Count() > 0).ToList();
+			}
+		}
+		#endregion
+
 	}
 }

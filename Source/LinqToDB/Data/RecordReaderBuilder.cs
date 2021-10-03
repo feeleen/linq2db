@@ -10,6 +10,7 @@ namespace LinqToDB.Data
 	using Expressions;
 	using Linq;
 	using Linq.Builder;
+	using LinqToDB.Common;
 	using Mapping;
 	using Reflection;
 
@@ -130,12 +131,12 @@ namespace LinqToDB.Data
 			(
 				from info in GetReadIndexes(entityDescriptor)
 				where info.Column.Storage != null ||
-				      !(info.Column.MemberAccessor.MemberInfo is PropertyInfo) ||
-				      ((PropertyInfo) info.Column.MemberAccessor.MemberInfo).GetSetMethod(true) != null
+				      info.Column.MemberAccessor.MemberInfo is not PropertyInfo pi ||
+				      pi.GetSetMethod(true) != null
 				select new
 				{
 					Column = info.Column,
-					Expr   = new ConvertFromDataReaderExpression(info.Column.StorageType, info.ReaderIndex, DataReaderLocal, DataContext)
+					Expr   = new ConvertFromDataReaderExpression(info.Column.StorageType, info.ReaderIndex, info.Column.ValueConverter, DataReaderLocal, DataContext)
 				}
 			).ToList();
 
@@ -258,7 +259,7 @@ namespace LinqToDB.Data
 					{
 						IsComplex  = info.Column.MemberAccessor.IsComplex,
 						Name       = info.Column.MemberName,
-						Expression = new ConvertFromDataReaderExpression(info.Column.MemberType, info.ReaderIndex, DataReaderLocal, DataContext)
+						Expression = new ConvertFromDataReaderExpression(info.Column.MemberType, info.ReaderIndex, info.Column.ValueConverter, DataReaderLocal, DataContext)
 					}
 				).ToList()).ToList();
 
@@ -294,14 +295,17 @@ namespace LinqToDB.Data
 
 			var lambda = Expression.Lambda<Func<IDataReader,T>>(BuildBlock(expr), DataReaderParam);
 
-			return lambda.Compile();
+			if (Common.Configuration.OptimizeForSequentialAccess)
+				lambda = (Expression<Func<IDataReader, T>>)SequentialAccessHelper.OptimizeMappingExpressionForSequentialAccess(lambda, Reader.FieldCount, reduce: true);
+
+			return lambda.CompileExpression();
 		}
 
 		private Expression BuildReaderExpression()
 		{
 			if (MappingSchema.IsScalarType(ObjectType))
 			{
-				return new ConvertFromDataReaderExpression(ObjectType, 0, DataReaderLocal, DataContext);
+				return new ConvertFromDataReaderExpression(ObjectType, 0, null, DataReaderLocal, DataContext);
 			}
 
 			var entityDescriptor   = MappingSchema.GetEntityDescriptor(ObjectType);
@@ -330,11 +334,10 @@ namespace LinqToDB.Data
 				if (dindex >= 0)
 				{
 					expr = Expression.Convert(
-						Expression.Call(null, exceptionMethod,
-							Expression.Call(
-								DataReaderLocal,
-								ReflectionHelper.DataReader.GetValue,
-								Expression.Constant(dindex)),
+						Expression.Call(
+							null,
+							exceptionMethod,
+							new ConvertFromDataReaderExpression(typeof(object), dindex, null, DataReaderLocal, DataContext),
 							Expression.Constant(ObjectType)),
 						ObjectType);
 				}
@@ -353,7 +356,7 @@ namespace LinqToDB.Data
 				if (dindex >= 0)
 				{
 					Expression testExpr;
-
+					
 					var isNullExpr = Expression.Call(
 						DataReaderLocal,
 						ReflectionHelper.DataReader.IsDBNull,
@@ -369,7 +372,7 @@ namespace LinqToDB.Data
 
 						testExpr = ExpressionBuilder.Equal(
 							MappingSchema,
-							new ConvertFromDataReaderExpression(codeType, dindex, DataReaderLocal, DataContext),
+							new ConvertFromDataReaderExpression(codeType, dindex, mapping.m.Discriminator.ValueConverter, DataReaderLocal, DataContext),
 							Expression.Constant(mapping.m.Code));
 
 						if (mapping.m.Discriminator.CanBeNull)

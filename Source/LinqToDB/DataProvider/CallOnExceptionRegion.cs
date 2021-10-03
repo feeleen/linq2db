@@ -20,7 +20,7 @@ namespace LinqToDB
 		{
 			// https://stackoverflow.com/questions/2830073/
 			if (
-#if NET45 || NET46
+#if NETFRAMEWORK || NETCOREAPP3_1
 				// API not exposed till netcoreapp3.0
 				// https://github.com/dotnet/corefx/pull/31169
 				Marshal.GetExceptionPointers() != IntPtr.Zero ||
