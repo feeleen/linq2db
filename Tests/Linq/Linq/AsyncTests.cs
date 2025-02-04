@@ -9,6 +9,8 @@ using NUnit.Framework;
 
 namespace Tests.Linq
 {
+	using LinqToDB.Async;
+
 	using Model;
 	using UserTests;
 
@@ -25,20 +27,26 @@ namespace Tests.Linq
 		{
 			Test1(context);
 
-			using (var db = GetDataContext(context + ".LinqService"))
+			if (TestConfiguration.DisableRemoteContext)
+				Assert.Inconclusive("Remote context disabled");
+
+			using (var db = GetDataContext(context + LinqServiceSuffix))
 			{
 				var list = await db.Parent.ToArrayAsync();
-				Assert.That(list.Length, Is.Not.EqualTo(0));
+				Assert.That(list, Is.Not.Empty);
 			}
 		}
 
 		[Test]
 		public void Test1([DataSources(false)] string context)
 		{
-			using (var db = GetDataContext(context + ".LinqService"))
+			if (TestConfiguration.DisableRemoteContext)
+				Assert.Inconclusive("Remote context disabled");
+
+			using (var db = GetDataContext(context + LinqServiceSuffix))
 			{
 				var list = db.Parent.ToArrayAsync().Result;
-				Assert.That(list.Length, Is.Not.EqualTo(0));
+				Assert.That(list, Is.Not.Empty);
 			}
 		}
 
@@ -50,13 +58,16 @@ namespace Tests.Linq
 
 		async Task TestForEachImpl(string context)
 		{
-			using (var db = GetDataContext(context + ".LinqService"))
+			if (TestConfiguration.DisableRemoteContext)
+				Assert.Inconclusive("Remote context disabled");
+
+			using (var db = GetDataContext(context + LinqServiceSuffix))
 			{
 				var list = new List<Parent>();
 
 				await db.Parent.ForEachAsync(list.Add);
 
-				Assert.That(list.Count, Is.Not.EqualTo(0));
+				Assert.That(list, Is.Not.Empty);
 			}
 		}
 
@@ -68,13 +79,15 @@ namespace Tests.Linq
 
 		async Task TestExecute1Impl(string context)
 		{
-			using (var conn = new TestDataConnection(context))
+			using (var conn = GetDataConnection(context))
 			{
 				conn.InlineParameters = true;
 
-				var sql = conn.Person.Where(p => p.ID == 1).Select(p => p.Name).Take(1).ToString()!;
-				sql = string.Join(Environment.NewLine, sql.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-					.Where(line => !line.StartsWith("--")));
+				var sql = conn.Person
+					.Where(p => p.ID == 1)
+					.Select(p => p.FirstName)
+					.Take(1)
+					.ToSqlQuery().Sql;
 
 				var res = await conn.SetCommand(sql).ExecuteAsync<string>();
 
@@ -85,13 +98,15 @@ namespace Tests.Linq
 		[Test]
 		public void TestExecute2([DataSources(false)] string context)
 		{
-			using (var conn = new TestDataConnection(context))
+			using (var conn = GetDataConnection(context))
 			{
 				conn.InlineParameters = true;
 
-				var sql = conn.Person.Where(p => p.ID == 1).Select(p => p.Name).Take(1).ToString()!;
-				sql = string.Join(Environment.NewLine, sql.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-					.Where(line => !line.StartsWith("--")));
+				var sql = conn.Person
+					.Where(p => p.ID == 1)
+					.Select(p => p.FirstName)
+					.Take(1)
+					.ToSqlQuery().Sql;
 
 				var res = conn.SetCommand(sql).ExecuteAsync<string>().Result;
 
@@ -107,13 +122,15 @@ namespace Tests.Linq
 
 		async Task TestQueryToArrayImpl(string context)
 		{
-			using (var conn = new TestDataConnection(context))
+			using (var conn = GetDataConnection(context))
 			{
 				conn.InlineParameters = true;
 
-				var sql = conn.Person.Where(p => p.ID == 1).Select(p => p.Name).Take(1).ToString()!;
-				sql = string.Join(Environment.NewLine, sql.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-					.Where(line => !line.StartsWith("--")));
+				var sql = conn.Person
+					.Where(p => p.ID == 1)
+					.Select(p => p.FirstName)
+					.Take(1)
+					.ToSqlQuery().Sql;
 
 				await using (var rd = await conn.SetCommand(sql).ExecuteReaderAsync())
 				{
@@ -121,6 +138,28 @@ namespace Tests.Linq
 
 					Assert.That(list[0], Is.EqualTo("John"));
 				}
+			}
+		}
+
+		[Test]
+		public async Task TestQueryToAsyncEnumerable([DataSources(false)] string context)
+		{
+			await TestQueryToAsyncEnumerableImpl(context);
+		}
+
+		async Task TestQueryToAsyncEnumerableImpl(string context)
+		{
+			using (var conn = GetDataConnection(context))
+			{
+				conn.InlineParameters = true;
+
+				var sql = conn.Person.Where(p => p.ID == 1).Select(p => p.Name).Take(1).ToSqlQuery().Sql;
+
+				var list = await conn.SetCommand(sql)
+					.QueryToAsyncEnumerable<string>()
+					.ToListAsync();
+
+				Assert.That(list[0], Is.EqualTo("John"));
 			}
 		}
 
@@ -225,20 +264,22 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void CancelableAsyncEnumerableTest([DataSources] string context)
+		public void CancellableAsyncEnumerableTest([DataSources] string context)
 		{
 			using var cts = new CancellationTokenSource();
 			var cancellationToken = cts.Token;
 			cts.Cancel();
+
 			using var db = GetDataContext(context);
+
 			var resultQuery = db.Parent.AsAsyncEnumerable().WithCancellation(cancellationToken);
-			var list = new List<Parent>();
+
 			Assert.ThrowsAsync<OperationCanceledException>(async () =>
 			{
 				try
 				{
 					await foreach (var row in resultQuery)
-						list.Add(row);
+					{ }
 				}
 				catch (OperationCanceledException)
 				{
@@ -247,7 +288,50 @@ namespace Tests.Linq
 					//   (needed for TaskCanceledException)
 					throw new OperationCanceledException();
 				}
+				catch (Exception ex) when (ex.Message.Contains("ORA-01013") && context.IsAnyOf(TestProvName.AllOracleManaged))
+				{
+					// ~Aliens~ Oracle
+					throw new OperationCanceledException();
+				}
 			});
+		}
+
+		[Test]
+		public async Task ToLookupAsyncTest([DataSources] string context)
+		{
+			await using var db = GetDataContext(context);
+
+			var q =
+				from c in db.Child
+				orderby c.ParentID, c.ChildID
+				select c;
+
+			var g1 = (await q.ToListAsync()).ToLookup(c => c.ParentID);
+			var g2 = await db.Child.ToLookupAsync(c => c.ParentID);
+
+			Assert.That(g1, Has.Count.EqualTo(g2.Count));
+
+			foreach (var g in g1)
+				AreEqual(g1[g.Key], g2[g.Key]);
+		}
+
+		[Test]
+		public async Task ToLookupElementAsyncTest([DataSources] string context)
+		{
+			await using var db = GetDataContext(context);
+
+			var q =
+				from c in db.Child
+				orderby c.ParentID, c.ChildID
+				select c;
+
+			var g1 = (await q.ToListAsync()).ToLookup(c => c.ParentID, c => c.ChildID);
+			var g2 = await db.Child.ToLookupAsync(c => c.ParentID, c => c.ChildID);
+
+			Assert.That(g1, Has.Count.EqualTo(g2.Count));
+
+			foreach (var g in g1)
+				AreEqual(g1[g.Key], g2[g.Key]);
 		}
 	}
 }

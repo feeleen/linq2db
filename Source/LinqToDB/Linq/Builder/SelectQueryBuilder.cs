@@ -1,34 +1,38 @@
 ﻿using System.Linq.Expressions;
-using LinqToDB.Expressions;
 
 namespace LinqToDB.Linq.Builder
 {
-	class SelectQueryBuilder : MethodCallBuilder
+	using LinqToDB.Expressions;
+
+	[BuildsMethodCall(nameof(DataExtensions.SelectQuery))]
+	sealed class SelectQueryBuilder : MethodCallBuilder
 	{
-		protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
-		{
-			return methodCall.IsSameGenericMethod(DataExtensions.SelectQueryMethodInfo);
-		}
+		public static bool CanBuildMethod(MethodCallExpression call, BuildInfo info, ExpressionBuilder builder)
+			=> call.IsSameGenericMethod(DataExtensions.SelectQueryMethodInfo);
 
-		protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
+		protected override BuildSequenceResult BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 		{
-			var sequence = new SelectContext(buildInfo.Parent, builder,
-				(LambdaExpression)methodCall.Arguments[1].Unwrap(),
-				buildInfo.SelectQuery);
+			var sequence = new SelectContext(
+				builder.GetTranslationModifier(),
+				buildInfo.Parent,
+				builder,
+				null,
+				methodCall.Arguments[1].UnwrapLambda().Body,
+				buildInfo.SelectQuery, 
+				buildInfo.IsSubQuery);
 
-			return sequence;
+			var subquery = new SubQueryContext(sequence);
+
+			var translated = builder.BuildSqlExpression(
+				subquery, 
+				new ContextRefExpression(subquery.ElementType, subquery));
+
+			return BuildSequenceResult.FromContext(subquery);
 		}
 
 		public override bool IsSequence(ExpressionBuilder builder, BuildInfo buildInfo)
 		{
 			return true;
 		}
-
-		protected override SequenceConvertInfo? Convert(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo,
-			ParameterExpression? param)
-		{
-			return null;
-		}
-
 	}
 }

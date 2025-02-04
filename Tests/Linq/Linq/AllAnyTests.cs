@@ -2,8 +2,12 @@
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+
 using FluentAssertions;
+
 using LinqToDB;
+using LinqToDB.Linq;
+
 using NUnit.Framework;
 
 namespace Tests.Linq
@@ -14,7 +18,7 @@ namespace Tests.Linq
 	public class AllAnyTests : TestBase
 	{
 		[Test]
-		public void Any1([DataSources] string context)
+		public void Any1([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -23,7 +27,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Any2([DataSources] string context)
+		public void Any2([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -32,7 +36,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Any3([DataSources] string context)
+		public void Any3([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -41,7 +45,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Any31([DataSources] string context)
+		public void Any31([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -61,7 +65,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Any32([DataSources] string context)
+		public void Any32([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -70,7 +74,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Any4([DataSources] string context)
+		public void Any4([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -79,7 +83,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Any5([DataSources] string context)
+		public void Any5([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -91,20 +95,19 @@ namespace Tests.Linq
 		public void Any6([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(
-					   Child.Any(c => c.ParentID > 3),
-					db.Child.Any(c => c.ParentID > 3));
+				Assert.That(
+					db.Child.Any(c => c.ParentID > 3), Is.EqualTo(Child.Any(c => c.ParentID > 3)));
 		}
 
 		[Test]
 		public void Any7([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(Child.Any(), db.Child.Any());
+				Assert.That(db.Child.Any(), Is.EqualTo(Child.Any()));
 		}
 
 		[Test]
-		public void Any8([DataSources] string context)
+		public void Any8([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -113,7 +116,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Any9([DataSources] string context)
+		public void Any9([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -134,7 +137,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Any10([DataSources] string context)
+		public void Any10([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -155,7 +158,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Any11([DataSources] string context)
+		public void Any11([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -178,7 +181,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void Any12([DataSources] string context)
+		public void Any12([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -187,7 +190,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void All1([DataSources] string context)
+		public void All1([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -196,7 +199,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void All2([DataSources] string context)
+		public void All2([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -205,7 +208,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void All3([DataSources] string context)
+		public void All3([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -217,19 +220,16 @@ namespace Tests.Linq
 		public void All4([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(
-					   Child.All(c => c.ParentID > 3),
-					db.Child.All(c => c.ParentID > 3));
-
+				Assert.That(
+					db.Child.All(c => c.ParentID > 3), Is.EqualTo(Child.All(c => c.ParentID > 3)));
 		}
 
 		[Test]
 		public async Task All4Async([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(
-					         Child.All     (c => c.ParentID > 3),
-					await db.Child.AllAsync(c => c.ParentID > 3));
+				Assert.That(
+					await db.Child.AllAsync(c => c.ParentID > 3), Is.EqualTo(Child.All     (c => c.ParentID > 3)));
 		}
 
 		[Test]
@@ -238,13 +238,12 @@ namespace Tests.Linq
 			int n = 3;
 
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(
-					   Child.All(c => c.ParentID > n),
-					db.Child.All(c => c.ParentID > n));
+				Assert.That(
+					db.Child.All(c => c.ParentID > n), Is.EqualTo(Child.All(c => c.ParentID > n)));
 		}
 
 		[Test]
-		public void SubQueryAllAny([DataSources] string context)
+		public void SubQueryAllAny([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -300,6 +299,52 @@ namespace Tests.Linq
 					.Select(_ => _.Patient)
 					.Any().Should().BeTrue();
 			}
+		}
+
+		sealed record Filter(string[]? NamesProp);
+
+		// Access: unsupported syntax for enumerable subquery
+		// ClickHouse: EXISTS with correlated scalar subquery used, we should generate IN instead
+		[ActiveIssue(Configurations = new[] { TestProvName.AllAccess, TestProvName.AllClickHouse })]
+		[Test]
+		public void TestIssue4261([DataSources] string context)
+		{
+			using var db = GetDataContext(context);
+
+			var filter = new Filter(new[] { "John", "Not John" });
+
+			var res = db.Person.Where(x => filter.NamesProp!.Any(y => y == x.FirstName)).ToArray();
+
+			Assert.That(res, Has.Length.EqualTo(1));
+			Assert.That(res[0].ID, Is.EqualTo(1));
+		}
+
+		[ThrowsForProvider(typeof(LinqToDBException), providers: [TestProvName.AllAccess, ProviderName.Firebird25, TestProvName.AllMySql57, TestProvName.AllSybase], ErrorMessage = ErrorHelper.Error_OUTER_Joins)]
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/2156")]
+		public void Issue2156Test([DataSources(TestProvName.AllClickHouse)] string context)
+		{
+			using var db = GetDataContext(context);
+
+			var query = from i in db.Person
+						join t in (db.Person.Where(x => x.FirstName != "Nameless One")) on i.ID equals t.ID into tj
+						from t in tj.DefaultIfEmpty()
+						join tg in db.Person on t.ID equals tg.ID into tgj
+						from tg in tgj.DefaultIfEmpty()
+						join u in db.Person on i.ID equals u.ID into uj
+						from u in uj.DefaultIfEmpty()
+						join p in db.Person on i.ID equals p.ID
+						join iSs in db.Person on i.ID equals iSs.ID
+						join e in db.Person on u.ID equals e.ID into ej
+						from e in ej.Take(1).DefaultIfEmpty()
+						where i.Patient!.Diagnosis != "Immortality"
+						select new { Issue = i, User = u, Project = p, Status = iSs, Email = e, IsHoliday = tgj.Any(x => x.FirstName == "John") };
+
+			var grouped = query
+				.Distinct()
+				.OrderBy(x => x.User)
+				.ToList()
+				.GroupBy(x => (x.User, x.Email))
+				.ToList();
 		}
 	}
 }

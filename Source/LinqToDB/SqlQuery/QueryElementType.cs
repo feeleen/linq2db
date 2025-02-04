@@ -1,20 +1,28 @@
 ﻿namespace LinqToDB.SqlQuery
 {
+	/// <summary>
+	/// SQL AST node types.
+	/// </summary>
 	public enum QueryElementType
 	{
 		SqlField,
 		SqlFunction,
 		SqlParameter,
 		SqlExpression,
+		SqlNullabilityExpression,
+		SqlAnchor,
 		SqlObjectExpression,
 		SqlBinaryExpression,
 		SqlValue,
 		SqlDataType,
 		SqlTable,
 		SqlAliasPlaceholder,
+		SqlRow,
 
+		NotPredicate,
+		TruePredicate, 
+		FalsePredicate,
 		ExprPredicate,
-		NotExprPredicate,
 		ExprExprPredicate,
 		LikePredicate,
 		SearchStringPredicate,
@@ -24,12 +32,11 @@
 		IsTruePredicate,
 		InSubQueryPredicate,
 		InListPredicate,
-		FuncLikePredicate,
+		ExistsPredicate,
 
 		SqlQuery,
 			Column,
 			SearchCondition,
-				Condition,
 			TableSource,
 				JoinedTable,
 
@@ -39,6 +46,7 @@
 				SetExpression,
 			FromClause,
 			WhereClause,
+			HavingClause,
 			GroupByClause,
 			OrderByClause,
 				OrderByItem,
@@ -70,6 +78,31 @@
 
 		GroupingSet,
 
-		Comment
+		Comment,
+
+		SqlExtension,
+
+		/// <summary>
+		/// ISqlExpression used in LINQ query directly
+		/// </summary>
+		SqlInlinedExpression,
+
+		/// <summary>
+		/// IToSqlConverter used in LINQ query directly
+		/// </summary>
+		SqlInlinedToSqlExpression,
+
+		/// <summary>
+		/// Custom query extensions, e.g. hints, applied to specific query fragment.
+		/// Implemented by <see cref="SqlQuery.SqlQueryExtension"/>.
+		/// </summary>
+		SqlQueryExtension,
+
+		SqlCast,
+		SqlCoalesce,
+		SqlCondition,
+		SqlCase,
+		SqlSimpleCase,
+		CompareTo,
 	}
 }

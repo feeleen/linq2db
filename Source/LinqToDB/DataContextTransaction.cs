@@ -10,7 +10,7 @@ namespace LinqToDB
 	/// Explicit data context <see cref="DataContext"/> transaction wrapper.
 	/// </summary>
 	[PublicAPI]
-	public class DataContextTransaction : IDisposable
+	public class DataContextTransaction : IDisposable, IAsyncDisposable
 	{
 		/// <summary>
 		/// Creates new transaction wrapper.
@@ -70,7 +70,7 @@ namespace LinqToDB
 		{
 			var db = DataContext.GetDataConnection();
 
-			await db.BeginTransactionAsync(cancellationToken).ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
+			await db.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
 			if (_transactionCounter == 0)
 				DataContext.LockDbManagerCounter++;
@@ -88,7 +88,7 @@ namespace LinqToDB
 		{
 			var db = DataContext.GetDataConnection();
 
-			await db.BeginTransactionAsync(level, cancellationToken).ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
+			await db.BeginTransactionAsync(level, cancellationToken).ConfigureAwait(false);
 
 			if (_transactionCounter == 0)
 				DataContext.LockDbManagerCounter++;
@@ -150,14 +150,14 @@ namespace LinqToDB
 			{
 				var db = DataContext.GetDataConnection();
 
-				await db.CommitTransactionAsync(cancellationToken).ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
+				await db.CommitTransactionAsync(cancellationToken).ConfigureAwait(false);
 
 				_transactionCounter--;
 
 				if (_transactionCounter == 0)
 				{
 					DataContext.LockDbManagerCounter--;
-					DataContext.ReleaseQuery();
+					await DataContext.ReleaseQueryAsync().ConfigureAwait(false);
 				}
 			}
 		}
@@ -174,14 +174,14 @@ namespace LinqToDB
 			{
 				var db = DataContext.GetDataConnection();
 
-				await db.RollbackTransactionAsync(cancellationToken).ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
+				await db.RollbackTransactionAsync(cancellationToken).ConfigureAwait(false);
 
 				_transactionCounter--;
 
 				if (_transactionCounter == 0)
 				{
 					DataContext.LockDbManagerCounter--;
-					DataContext.ReleaseQuery();
+					await DataContext.ReleaseQueryAsync().ConfigureAwait(false);
 				}
 			}
 		}
@@ -195,11 +195,28 @@ namespace LinqToDB
 			{
 				var db = DataContext.GetDataConnection();
 
-				db.RollbackTransaction();
+				db.DisposeTransaction();
 
 				_transactionCounter = 0;
 
 				DataContext.LockDbManagerCounter--;
+				DataContext.ReleaseQuery();
+			}
+		}
+
+		/// <inheritdoc cref="Dispose"/>
+		async ValueTask IAsyncDisposable.DisposeAsync()
+		{
+			if (_transactionCounter > 0)
+			{
+				var db = DataContext.GetDataConnection();
+
+				await db.DisposeTransactionAsync().ConfigureAwait(false);
+
+				_transactionCounter = 0;
+
+				DataContext.LockDbManagerCounter--;
+				await DataContext.ReleaseQueryAsync().ConfigureAwait(false);
 			}
 		}
 	}

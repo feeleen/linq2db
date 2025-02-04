@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 
 namespace LinqToDB.Expressions
 {
@@ -40,7 +42,7 @@ namespace LinqToDB.Expressions
 			return new VisitActionVisitor<TContext>(context, func);
 		}
 
-		void Visit<T>(IEnumerable<T> source, Action<T> func)
+		static void Visit<T>(IEnumerable<T> source, Action<T> func)
 		{
 			foreach (var item in source)
 				func(item);
@@ -53,7 +55,7 @@ namespace LinqToDB.Expressions
 				Visit(item);
 		}
 
-		public void Visit(Expression expr)
+		public void Visit(Expression? expr)
 		{
 			if (expr == null)
 				return;
@@ -248,8 +250,7 @@ namespace LinqToDB.Expressions
 
 				case ExpressionType.Extension:
 				{
-					if (expr.CanReduce)
-						Visit(expr.Reduce());
+					VisitXE(expr);
 
 					break;
 				}
@@ -295,6 +296,37 @@ namespace LinqToDB.Expressions
 		private void ElementInitVisit(ElementInit ei)
 		{
 			Visit(ei.Arguments);
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private void VisitXE(Expression expr)
+		{
+			if (expr is SqlGenericConstructorExpression generic)
+			{
+				Visit(generic.Assignments.Select(a => a.Expression));
+				Visit(generic.Parameters.Select(p => p.Expression));
+			}
+			else if (expr is SqlGenericParamAccessExpression paramAccess)
+			{
+				Visit(paramAccess.Constructor);
+			}
+			else if (expr is SqlReaderIsNullExpression isNullExpression)
+			{
+				Visit(isNullExpression.Placeholder);
+			}
+			else if (expr is SqlDefaultIfEmptyExpression defaultIfEmpty)
+			{
+				Visit(defaultIfEmpty.InnerExpression);
+				Visit(defaultIfEmpty.NotNullExpressions);
+			}
+			else if (expr is SqlAdjustTypeExpression adjustType)
+			{
+				Visit(adjustType.Expression);
+			}
+			else if (expr.CanReduce)
+			{
+				Visit(expr.Reduce());
+			}	
 		}
 	}
 }

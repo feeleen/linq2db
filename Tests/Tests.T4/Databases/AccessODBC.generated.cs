@@ -5,7 +5,7 @@
 // </auto-generated>
 //---------------------------------------------------------------------------------------------------
 
-#pragma warning disable 1591
+#pragma warning disable 1573, 1591
 #nullable enable
 
 using System;
@@ -22,6 +22,8 @@ namespace AccessODBCDataContext
 {
 	public partial class TestDataDB : LinqToDB.Data.DataConnection
 	{
+		#region Tables
+
 		public ITable<AllType>             AllTypes             { get { return this.GetTable<AllType>(); } }
 		public ITable<Child>               Children             { get { return this.GetTable<Child>(); } }
 		public ITable<DataTypeTest>        DataTypeTests        { get { return this.GetTable<DataTypeTest>(); } }
@@ -44,6 +46,10 @@ namespace AccessODBCDataContext
 		public ITable<TestMerge1>          TestMerge1           { get { return this.GetTable<TestMerge1>(); } }
 		public ITable<TestMerge2>          TestMerge2           { get { return this.GetTable<TestMerge2>(); } }
 
+		#endregion
+
+		#region .ctor
+
 		public TestDataDB()
 		{
 			InitDataContext();
@@ -57,15 +63,15 @@ namespace AccessODBCDataContext
 			InitMappingSchema();
 		}
 
-		public TestDataDB(LinqToDbConnectionOptions options)
+		public TestDataDB(DataOptions options)
 			: base(options)
 		{
 			InitDataContext();
 			InitMappingSchema();
 		}
 
-		public TestDataDB(LinqToDbConnectionOptions<TestDataDB> options)
-			: base(options)
+		public TestDataDB(DataOptions<TestDataDB> options)
+			: base(options.Options)
 		{
 			InitDataContext();
 			InitMappingSchema();
@@ -73,6 +79,8 @@ namespace AccessODBCDataContext
 
 		partial void InitDataContext  ();
 		partial void InitMappingSchema();
+
+		#endregion
 	}
 
 	[Table("AllTypes")]
@@ -324,9 +332,13 @@ namespace AccessODBCDataContext
 
 		public static IEnumerable<PatientSelectByNameResult> PatientSelectByName(this TestDataDB dataConnection, string? @firstName, string? @lastName)
 		{
-			return dataConnection.QueryProc<PatientSelectByNameResult>("[Patient_SelectByName]",
-				new DataParameter("@firstName", @firstName, LinqToDB.DataType.VarChar),
-				new DataParameter("@lastName",  @lastName,  LinqToDB.DataType.VarChar));
+			var parameters = new []
+			{
+				new DataParameter("@firstName", @firstName, LinqToDB.DataType.VarChar, 255),
+				new DataParameter("@lastName",  @lastName,  LinqToDB.DataType.VarChar, 255)
+			};
+
+			return dataConnection.QueryProc<PatientSelectByNameResult>("[Patient_SelectByName]", parameters);
 		}
 
 		public partial class PatientSelectByNameResult
@@ -345,8 +357,12 @@ namespace AccessODBCDataContext
 
 		public static int PersonDelete(this TestDataDB dataConnection, int? @PersonID)
 		{
-			return dataConnection.ExecuteProc("[Person_Delete]",
-				new DataParameter("@PersonID", @PersonID, LinqToDB.DataType.Int32));
+			var parameters = new []
+			{
+				new DataParameter("@PersonID", @PersonID, LinqToDB.DataType.Int32)
+			};
+
+			return dataConnection.ExecuteProc("[Person_Delete]", parameters);
 		}
 
 		#endregion
@@ -355,11 +371,15 @@ namespace AccessODBCDataContext
 
 		public static int PersonInsert(this TestDataDB dataConnection, string? @FirstName, string? @MiddleName, string? @LastName, string? @Gender)
 		{
-			return dataConnection.ExecuteProc("[Person_Insert]",
-				new DataParameter("@FirstName",  @FirstName,  LinqToDB.DataType.VarChar),
-				new DataParameter("@MiddleName", @MiddleName, LinqToDB.DataType.VarChar),
-				new DataParameter("@LastName",   @LastName,   LinqToDB.DataType.VarChar),
-				new DataParameter("@Gender",     @Gender,     LinqToDB.DataType.VarChar));
+			var parameters = new []
+			{
+				new DataParameter("@FirstName",  @FirstName,  LinqToDB.DataType.VarChar, 255),
+				new DataParameter("@MiddleName", @MiddleName, LinqToDB.DataType.VarChar, 255),
+				new DataParameter("@LastName",   @LastName,   LinqToDB.DataType.VarChar, 255),
+				new DataParameter("@Gender",     @Gender,     LinqToDB.DataType.VarChar, 255)
+			};
+
+			return dataConnection.ExecuteProc("[Person_Insert]", parameters);
 		}
 
 		#endregion
@@ -368,8 +388,12 @@ namespace AccessODBCDataContext
 
 		public static IEnumerable<PersonSelectByKeyResult> PersonSelectByKey(this TestDataDB dataConnection, int? @id)
 		{
-			return dataConnection.QueryProc<PersonSelectByKeyResult>("[Person_SelectByKey]",
-				new DataParameter("@id", @id, LinqToDB.DataType.Int32));
+			var parameters = new []
+			{
+				new DataParameter("@id", @id, LinqToDB.DataType.Int32)
+			};
+
+			return dataConnection.QueryProc<PersonSelectByKeyResult>("[Person_SelectByKey]", parameters);
 		}
 
 		public partial class PersonSelectByKeyResult
@@ -387,9 +411,13 @@ namespace AccessODBCDataContext
 
 		public static IEnumerable<PersonSelectByNameResult> PersonSelectByName(this TestDataDB dataConnection, string? @firstName, string? @lastName)
 		{
-			return dataConnection.QueryProc<PersonSelectByNameResult>("[Person_SelectByName]",
-				new DataParameter("@firstName", @firstName, LinqToDB.DataType.VarChar),
-				new DataParameter("@lastName",  @lastName,  LinqToDB.DataType.VarChar));
+			var parameters = new []
+			{
+				new DataParameter("@firstName", @firstName, LinqToDB.DataType.VarChar, 255),
+				new DataParameter("@lastName",  @lastName,  LinqToDB.DataType.VarChar, 255)
+			};
+
+			return dataConnection.QueryProc<PersonSelectByNameResult>("[Person_SelectByName]", parameters);
 		}
 
 		public partial class PersonSelectByNameResult
@@ -407,9 +435,13 @@ namespace AccessODBCDataContext
 
 		public static IEnumerable<PersonSelectListByNameResult> PersonSelectListByName(this TestDataDB dataConnection, string? @firstName, string? @lastName)
 		{
-			return dataConnection.QueryProc<PersonSelectListByNameResult>("[Person_SelectListByName]",
-				new DataParameter("@firstName", @firstName, LinqToDB.DataType.VarChar),
-				new DataParameter("@lastName",  @lastName,  LinqToDB.DataType.VarChar));
+			var parameters = new []
+			{
+				new DataParameter("@firstName", @firstName, LinqToDB.DataType.VarChar, 255),
+				new DataParameter("@lastName",  @lastName,  LinqToDB.DataType.VarChar, 255)
+			};
+
+			return dataConnection.QueryProc<PersonSelectListByNameResult>("[Person_SelectListByName]", parameters);
 		}
 
 		public partial class PersonSelectListByNameResult
@@ -427,17 +459,19 @@ namespace AccessODBCDataContext
 
 		public static int PersonUpdate(this TestDataDB dataConnection, int? @id, int? @PersonID, string? @FirstName, string? @MiddleName, string? @LastName, string? @Gender)
 		{
-			return dataConnection.ExecuteProc("[Person_Update]",
+			var parameters = new []
+			{
 				new DataParameter("@id",         @id,         LinqToDB.DataType.Int32),
 				new DataParameter("@PersonID",   @PersonID,   LinqToDB.DataType.Int32),
-				new DataParameter("@FirstName",  @FirstName,  LinqToDB.DataType.VarChar),
-				new DataParameter("@MiddleName", @MiddleName, LinqToDB.DataType.VarChar),
-				new DataParameter("@LastName",   @LastName,   LinqToDB.DataType.VarChar),
-				new DataParameter("@Gender",     @Gender,     LinqToDB.DataType.VarChar));
+				new DataParameter("@FirstName",  @FirstName,  LinqToDB.DataType.VarChar, 255),
+				new DataParameter("@MiddleName", @MiddleName, LinqToDB.DataType.VarChar, 255),
+				new DataParameter("@LastName",   @LastName,   LinqToDB.DataType.VarChar, 255),
+				new DataParameter("@Gender",     @Gender,     LinqToDB.DataType.VarChar, 255)
+			};
+
+			return dataConnection.ExecuteProc("[Person_Update]", parameters);
 		}
 
 		#endregion
 	}
 }
-
-#pragma warning restore 1591

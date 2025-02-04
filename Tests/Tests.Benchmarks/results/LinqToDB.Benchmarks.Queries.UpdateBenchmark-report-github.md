@@ -1,33 +1,39 @@
-``` ini
+```
 
-BenchmarkDotNet=v0.12.1.1533-nightly, OS=Windows 10.0.16299.125 (1709/FallCreatorsUpdate/Redstone3)
-Intel Core i7-3770K CPU 3.50GHz (Ivy Bridge), 1 CPU, 8 logical and 4 physical cores
-Frequency=3417995 Hz, Resolution=292.5692 ns, Timer=TSC
-  [Host]     : .NET Framework 4.8 (4.8.3928.0), X64 RyuJIT
-  Job-GUCTZK : .NET 5.0.5 (5.0.521.16609), X64 RyuJIT
-  Job-IOHEYN : .NET Core 3.1.14 (CoreCLR 4.700.21.16201, CoreFX 4.700.21.16208), X64 RyuJIT
-  Job-FWTWYQ : .NET Framework 4.8 (4.8.3928.0), X64 RyuJIT
+BenchmarkDotNet v0.14.0, Windows 10 (10.0.17763.6766/1809/October2018Update/Redstone5) (Hyper-V)
+AMD Ryzen 9 5950X, 2 CPU, 32 logical and 16 physical cores
+  [Host]     : .NET Framework 4.8 (4.8.4775.0), X64 RyuJIT VectorSize=256
+  Job-GEKMDY : .NET 6.0.36 (6.0.3624.51421), X64 RyuJIT AVX2
+  Job-WEIMGV : .NET 8.0.12 (8.0.1224.60305), X64 RyuJIT AVX2
+  Job-ARZZBJ : .NET 9.0.1 (9.0.124.61010), X64 RyuJIT AVX2
+  Job-HBTJES : .NET Framework 4.8 (4.8.4775.0), X64 RyuJIT VectorSize=256
 
 Jit=RyuJit  Platform=X64  
 
 ```
-|             Method |              Runtime |         Mean |       Median |  Ratio | Allocated |
-|------------------- |--------------------- |-------------:|-------------:|-------:|----------:|
-|            LinqSet |             .NET 5.0 | 231,587.1 ns | 230,480.0 ns | 395.38 |  61,116 B |
-|         LinqObject |             .NET 5.0 | 136,719.5 ns | 137,065.8 ns | 234.26 |  31,709 B |
-|             Object |             .NET 5.0 |  15,975.8 ns |  16,038.6 ns |  27.30 |   8,144 B |
-|    CompiledLinqSet |             .NET 5.0 |  63,993.1 ns |  57,197.3 ns | 106.48 |         - |
-| CompiledLinqObject |             .NET 5.0 |  70,366.0 ns |  64,218.9 ns | 108.58 |         - |
-|          RawAdoNet |             .NET 5.0 |     272.8 ns |     273.5 ns |   0.47 |     712 B |
-|            LinqSet |        .NET Core 3.1 | 274,151.4 ns | 279,201.1 ns | 466.57 |  62,669 B |
-|         LinqObject |        .NET Core 3.1 | 158,693.0 ns | 155,724.6 ns | 269.86 |  39,711 B |
-|             Object |        .NET Core 3.1 |  72,224.1 ns |  61,732.1 ns | 121.69 |   8,288 B |
-|    CompiledLinqSet |        .NET Core 3.1 |  16,190.6 ns |  15,864.9 ns |  27.57 |   7,792 B |
-| CompiledLinqObject |        .NET Core 3.1 |  16,582.0 ns |  16,266.6 ns |  27.93 |   7,792 B |
-|          RawAdoNet |        .NET Core 3.1 |     254.5 ns |     254.0 ns |   0.44 |     712 B |
-|            LinqSet | .NET Framework 4.7.2 | 508,303.2 ns | 508,485.2 ns | 879.29 |  81,920 B |
-|         LinqObject | .NET Framework 4.7.2 | 347,457.0 ns | 332,797.4 ns | 592.90 |  49,152 B |
-|             Object | .NET Framework 4.7.2 |  23,797.9 ns |  23,752.5 ns |  40.16 |   9,452 B |
-|    CompiledLinqSet | .NET Framework 4.7.2 |  48,964.9 ns |  43,739.1 ns |  84.05 |         - |
-| CompiledLinqObject | .NET Framework 4.7.2 |  50,589.3 ns |  48,859.1 ns |  90.21 |         - |
-|          RawAdoNet | .NET Framework 4.7.2 |     591.4 ns |     587.0 ns |   1.00 |     810 B |
+| Method             | Runtime              | Mean         | Allocated |
+|------------------- |--------------------- |-------------:|----------:|
+| LinqSet            | .NET 6.0             | 284,456.8 ns |   73392 B |
+| LinqObject         | .NET 6.0             | 197,194.8 ns |   47776 B |
+| Object             | .NET 6.0             |  25,446.4 ns |   22672 B |
+| CompiledLinqSet    | .NET 6.0             |  73,981.2 ns |   25504 B |
+| CompiledLinqObject | .NET 6.0             |  75,100.1 ns |   25504 B |
+| RawAdoNet          | .NET 6.0             |     244.1 ns |     712 B |
+| LinqSet            | .NET 8.0             | 156,078.4 ns |   54272 B |
+| LinqObject         | .NET 8.0             | 115,873.8 ns |   44368 B |
+| Object             | .NET 8.0             |  35,594.2 ns |   22672 B |
+| CompiledLinqSet    | .NET 8.0             |  46,778.4 ns |   25504 B |
+| CompiledLinqObject | .NET 8.0             |  45,759.3 ns |   25504 B |
+| RawAdoNet          | .NET 8.0             |     225.1 ns |     712 B |
+| LinqSet            | .NET 9.0             |  62,188.6 ns |   54257 B |
+| LinqObject         | .NET 9.0             | 101,757.7 ns |   44257 B |
+| Object             | .NET 9.0             |  14,179.4 ns |   22624 B |
+| CompiledLinqSet    | .NET 9.0             |  33,921.3 ns |   25456 B |
+| CompiledLinqObject | .NET 9.0             |  40,308.0 ns |   25456 B |
+| RawAdoNet          | .NET 9.0             |     193.0 ns |     712 B |
+| LinqSet            | .NET Framework 4.6.2 | 450,290.8 ns |   81889 B |
+| LinqObject         | .NET Framework 4.6.2 | 285,827.9 ns |   58653 B |
+| Object             | .NET Framework 4.6.2 |  80,014.5 ns |   23398 B |
+| CompiledLinqSet    | .NET Framework 4.6.2 |  98,837.6 ns |   25932 B |
+| CompiledLinqObject | .NET Framework 4.6.2 |  99,868.2 ns |   25932 B |
+| RawAdoNet          | .NET Framework 4.6.2 |     720.7 ns |     810 B |

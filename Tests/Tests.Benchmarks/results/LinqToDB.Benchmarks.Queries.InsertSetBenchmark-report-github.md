@@ -1,18 +1,19 @@
-``` ini
+```
 
-BenchmarkDotNet=v0.12.1.1533-nightly, OS=Windows 10.0.16299.125 (1709/FallCreatorsUpdate/Redstone3)
-Intel Core i7-3770K CPU 3.50GHz (Ivy Bridge), 1 CPU, 8 logical and 4 physical cores
-Frequency=3417995 Hz, Resolution=292.5692 ns, Timer=TSC
-  [Host]     : .NET Framework 4.8 (4.8.3928.0), X64 RyuJIT
-  Job-GUCTZK : .NET 5.0.5 (5.0.521.16609), X64 RyuJIT
-  Job-IOHEYN : .NET Core 3.1.14 (CoreCLR 4.700.21.16201, CoreFX 4.700.21.16208), X64 RyuJIT
-  Job-FWTWYQ : .NET Framework 4.8 (4.8.3928.0), X64 RyuJIT
+BenchmarkDotNet v0.14.0, Windows 10 (10.0.17763.6766/1809/October2018Update/Redstone5) (Hyper-V)
+AMD Ryzen 9 5950X, 2 CPU, 32 logical and 16 physical cores
+  [Host]     : .NET Framework 4.8 (4.8.4775.0), X64 RyuJIT VectorSize=256
+  Job-GEKMDY : .NET 6.0.36 (6.0.3624.51421), X64 RyuJIT AVX2
+  Job-WEIMGV : .NET 8.0.12 (8.0.1224.60305), X64 RyuJIT AVX2
+  Job-ARZZBJ : .NET 9.0.1 (9.0.124.61010), X64 RyuJIT AVX2
+  Job-HBTJES : .NET Framework 4.8 (4.8.4775.0), X64 RyuJIT VectorSize=256
 
 Jit=RyuJit  Platform=X64  
 
 ```
-| Method |              Runtime |     Mean |   Median | Ratio | Allocated |
-|------- |--------------------- |---------:|---------:|------:|----------:|
-|   Test |             .NET 5.0 | 1.624 ms | 1.599 ms |  0.54 |    262 KB |
-|   Test |        .NET Core 3.1 | 1.920 ms | 1.929 ms |  0.69 |    261 KB |
-|   Test | .NET Framework 4.7.2 | 2.794 ms | 2.812 ms |  1.00 |    827 KB |
+| Method | Runtime              | Mean     | Allocated  |
+|------- |--------------------- |---------:|-----------:|
+| Test   | .NET 6.0             | 1.467 ms |   835.9 KB |
+| Test   | .NET 8.0             | 1.391 ms |   821.1 KB |
+| Test   | .NET 9.0             | 1.270 ms |  737.23 KB |
+| Test   | .NET Framework 4.6.2 | 3.434 ms | 1141.96 KB |

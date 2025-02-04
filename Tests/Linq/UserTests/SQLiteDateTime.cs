@@ -14,14 +14,14 @@ namespace Tests.UserTests
 	public class SQLiteDateTime : TestBase
 	{
 		[Table]
-		class A
+		sealed class A
 		{
 			[PrimaryKey, Identity] public int       ID       { get; set; }
 			[Column,     NotNull ] public string    Value    { get; set; } = null!;
 			[Column,     NotNull ] public DateTime  DateTime { get; set; }
 		}
 
-		class B
+		sealed class B
 		{
 			public int     ID;
 			public string? Name;
@@ -45,13 +45,13 @@ namespace Tests.UserTests
 
 		string GetSql(string context)
 		{
-			using (var db = GetDataContext(context))
-			{
-				var matchSymbolIds = new List<int>();
+			using var db = GetDataContext(context);
+			using var tb = db.CreateLocalTable<A>();
 
-				var queryable = GenerateQuery(db, new DateTime(2010, 3, 5)).Where(x => matchSymbolIds.Contains(x.ID));
-				return queryable.ToString()!;
-			}
+			var matchSymbolIds = new List<int>();
+
+			var queryable = GenerateQuery(db, new DateTime(2010, 3, 5)).Where(x => matchSymbolIds.Contains(x.ID));
+			return queryable.ToSqlQuery().Sql;
 		}
 
 		[Test]
@@ -61,11 +61,7 @@ namespace Tests.UserTests
 			var query2 = GetSql(context);
 			var query3 = GetSql(context);
 
-			TestContext.WriteLine(query1);
-			TestContext.WriteLine(query2);
-			TestContext.WriteLine(query3);
-
-			Assert.AreEqual(query1, query2);
+			Assert.That(query2, Is.EqualTo(query1));
 		}
 	}
 }

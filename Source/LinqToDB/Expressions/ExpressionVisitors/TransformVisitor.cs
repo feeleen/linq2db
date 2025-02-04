@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
@@ -8,9 +10,9 @@ namespace LinqToDB.Expressions
 {
 	internal readonly struct TransformVisitor<TContext>
 	{
-		private readonly TContext?                               _context;
-		private readonly Func<TContext, Expression, Expression>? _func;
-		private readonly Func<Expression, Expression>?           _staticFunc;
+		private readonly TContext?                             _context;
+		private readonly Func<TContext,Expression,Expression>? _func;
+		private readonly Func<Expression,Expression>?          _staticFunc;
 
 		public TransformVisitor(TContext context, Func<TContext, Expression, Expression> func)
 		{
@@ -42,7 +44,7 @@ namespace LinqToDB.Expressions
 			return new TransformVisitor<TContext>(context, func);
 		}
 
-		[return: NotNullIfNotNull("expr")]
+		[return: NotNullIfNotNull(nameof(expr))]
 		public Expression? Transform(Expression? expr)
 		{
 			if (expr == null)
@@ -169,7 +171,7 @@ namespace LinqToDB.Expressions
 
 				case ExpressionType.Index:
 					return ((IndexExpression)expr).Update(
-						Transform(((IndexExpression)expr).Object),
+						Transform(((IndexExpression)expr).Object!),
 						Transform(((IndexExpression)expr).Arguments));
 
 				case ExpressionType.Label:
@@ -189,51 +191,106 @@ namespace LinqToDB.Expressions
 		}
 
 		// ReSharper disable once InconsistentNaming
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private Expression TransformXE(Expression expr) => expr;
+		Expression TransformXE(Expression expr)
+		{
+			if (expr is SqlGenericConstructorExpression generic)
+			{
+				var assignments = Transform(this, generic.Assignments, TransformAssignments);
+
+				generic = generic.ReplaceAssignments(assignments);
+
+				var parameters = Transform(this, generic.Parameters, TransformParameters);
+
+				generic = generic.ReplaceParameters(parameters);
+
+				return generic;
+			}
+
+			if (expr is SqlGenericParamAccessExpression paramAccess)
+			{
+				return paramAccess.Update(Transform(paramAccess.Constructor));
+			}
+
+			if (expr is SqlReaderIsNullExpression isNullExpression)
+			{
+				return isNullExpression.Update((SqlPlaceholderExpression)Transform(isNullExpression.Placeholder));
+			}
+
+			if (expr is SqlAdjustTypeExpression adjustType)
+			{
+				return adjustType.Update(Transform(adjustType.Expression));
+			}
+
+			if (expr is SqlPathExpression)
+			{
+				return expr;
+			}
+
+			if (expr is MarkerExpression placeholder)
+			{
+				return placeholder.Update(Transform(placeholder.InnerExpression));
+			}
+
+			if (expr is SqlDefaultIfEmptyExpression defaultIfEmptyExpression)
+			{
+				return defaultIfEmptyExpression.Update(
+					Transform(defaultIfEmptyExpression.InnerExpression),
+					Transform(defaultIfEmptyExpression.NotNullExpressions));
+			}
+
+			return expr;
+		}
+
+		private SqlGenericConstructorExpression.Assignment TransformAssignments(TransformVisitor<TContext> visitor, SqlGenericConstructorExpression.Assignment a)
+		{
+			return a.WithExpression(Transform(a.Expression));
+		}
+
+		private SqlGenericConstructorExpression.Parameter TransformParameters(TransformVisitor<TContext> visitor, SqlGenericConstructorExpression.Parameter p)
+		{
+			return p.WithExpression(Transform(p.Expression));
+		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private Expression TransformX(TryExpression e)
 		{
-			var b = Transform(e.Body);
-			var c = Transform(e.Handlers, TransformCatchBlock);
-			var f = Transform(e.Finally);
-			var t = Transform(e.Fault);
-
-			return e.Update(b, c, f, t);
+			return e.Update(
+				Transform(e.Body),
+				Transform(this, e.Handlers, TransformCatchBlock),
+				Transform(e.Finally),
+				Transform(e.Fault));
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private CatchBlock TransformCatchBlock(CatchBlock h)
+		private static CatchBlock TransformCatchBlock(TransformVisitor<TContext> visitor, CatchBlock h)
 		{
 			return h.Update(
-				(ParameterExpression?)Transform(h.Variable),
-				Transform(h.Filter),
-				Transform(h.Body));
+				(ParameterExpression?)visitor.Transform(h.Variable),
+				visitor.Transform(h.Filter),
+				visitor.Transform(h.Body));
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private Expression TransformX(SwitchExpression e)
 		{
-			var s = Transform(e.SwitchValue);
-			var c = Transform(e.Cases, TransformSwitchCase);
-			var d = Transform(e.DefaultBody);
-
-			return e.Update(s, c, d);
+			return e.Update(
+				Transform(e.SwitchValue),
+				Transform(this, e.Cases, TransformSwitchCase),
+				Transform(e.DefaultBody));
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private SwitchCase TransformSwitchCase(SwitchCase cs)
+		private static SwitchCase TransformSwitchCase(TransformVisitor<TContext> visitor, SwitchCase cs)
 		{
 			return cs.Update(
-				Transform(cs.TestValues),
-				Transform(cs.Body));
+				visitor.Transform(cs.TestValues),
+				visitor.Transform(cs.Body));
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private Expression TransformX(ChangeTypeExpression e)
 		{
-			var ex = Transform(e.Expression)!;
+			var ex = Transform(e.Expression);
 
 			if (ex == e.Expression)
 				return e;
@@ -249,7 +306,7 @@ namespace LinqToDB.Expressions
 		{
 			var ex = Transform(e.Expressions);
 
-			return ex != e.Expressions ? Expression.NewArrayInit(e.Type.GetElementType(), ex) : e;
+			return ex != e.Expressions ? Expression.NewArrayInit(e.Type.GetElementType()!, ex) : e;
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -264,8 +321,8 @@ namespace LinqToDB.Expressions
 		private Expression TransformX(MemberInitExpression e)
 		{
 			return e.Update(
-				(NewExpression)Transform(e.NewExpression)!,
-				Transform(e.Bindings, Modify));
+				(NewExpression)Transform(e.NewExpression),
+				Transform(this, e.Bindings, Modify));
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -279,17 +336,16 @@ namespace LinqToDB.Expressions
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private Expression TransformX(ListInitExpression e)
 		{
-			var n = Transform(e.NewExpression)!;
-			var i = Transform(e.Initializers, TransformElementInit);
+			var n = Transform(e.NewExpression);
+			var i = Transform(this, e.Initializers, TransformElementInit);
 
 			return n != e.NewExpression || i != e.Initializers ? Expression.ListInit((NewExpression)n, i) : e;
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private ElementInit TransformElementInit(ElementInit p)
+		private static ElementInit TransformElementInit(TransformVisitor<TContext> visitor, ElementInit p)
 		{
-			var args = Transform(p.Arguments);
-			return args != p.Arguments ? Expression.ElementInit(p.AddMethod, args) : p;
+			return p.Update(visitor.Transform(p.Arguments));
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -329,7 +385,7 @@ namespace LinqToDB.Expressions
 				: e;
 		}
 
-		IEnumerable<T> Transform<T>(IList<T> source, Func<T, T> func)
+		static ReadOnlyCollection<T> Transform<T>(TransformVisitor<TContext> visitor, ReadOnlyCollection<T> source, Func<TransformVisitor<TContext>, T, T> func)
 			where T : class
 		{
 			List<T>? list = null;
@@ -337,20 +393,19 @@ namespace LinqToDB.Expressions
 			for (var i = 0; i < source.Count; i++)
 			{
 				var item = source[i];
-				var e    = func(item);
+				var e    = func(visitor, item);
 
 				if (e != item)
 				{
-					if (list == null)
-						list = new List<T>(source);
+					list ??= new List<T>(source);
 					list[i] = e;
 				}
 			}
 
-			return list ?? source;
+			return list?.AsReadOnly() ?? source;
 		}
 
-		IEnumerable<T> Transform<T>(IList<T> source)
+		ReadOnlyCollection<T> Transform<T>(ReadOnlyCollection<T> source)
 			where T : Expression
 		{
 			List<T>? list = null;
@@ -358,49 +413,40 @@ namespace LinqToDB.Expressions
 			for (var i = 0; i < source.Count; i++)
 			{
 				var item = source[i];
-				var e    = (T)Transform(item)!;
+				var e    = (T)Transform(item);
 
 				if (e != item)
 				{
-					if (list == null)
-						list    = new List<T>(source);
+					list    ??= new List<T>(source);
 					list[i] = e;
 				}
 			}
 
-			return list ?? source;
+			return list?.AsReadOnly() ?? source;
 		}
 
-		MemberBinding Modify(MemberBinding b)
+		static MemberBinding Modify(TransformVisitor<TContext> visitor, MemberBinding b)
 		{
 			switch (b.BindingType)
 			{
 				case MemberBindingType.Assignment:
 				{
 					var ma = (MemberAssignment) b;
-					return ma.Update(Transform(ma.Expression));
+					return ma.Update(visitor.Transform(ma.Expression));
 				}
 
 				case MemberBindingType.ListBinding:
 				{
 					var ml = (MemberListBinding) b;
-					var i  = Transform(ml.Initializers, TransformElementInit);
 
-					if (i != ml.Initializers)
-						ml = Expression.ListBind(ml.Member, i);
-
-					return ml;
+					return ml.Update(Transform(visitor, ml.Initializers, TransformElementInit));
 				}
 
 				case MemberBindingType.MemberBinding:
 				{
 					var mm = (MemberMemberBinding) b;
-					var bs = Transform<MemberBinding>(mm.Bindings, Modify);
 
-					if (bs != mm.Bindings)
-						mm = Expression.MemberBind(mm.Member);
-
-					return mm;
+					return mm.Update(Transform(visitor, mm.Bindings, Modify));
 				}
 			}
 

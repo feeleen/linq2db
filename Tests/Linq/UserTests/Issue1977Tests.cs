@@ -18,14 +18,14 @@ namespace Tests.UserTests
 				{
 					new Issue1977Table()
 					{
-						firstField  = TestBase.TestData.Guid1,
-						secondField = TestBase.TestData.Guid2
+						firstField  = global::Tests.TestData.Guid1,
+						secondField = global::Tests.TestData.Guid2
 					}
 				};
 		}
 
 		[Test]
-		public void Test([IncludeDataSources(TestProvName.AllSqlServer)] string context)
+		public void Test([IncludeDataSources(TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			using (var db    = GetDataContext(context))
 			using (var table = db.CreateLocalTable(Issue1977Table.TestData))
@@ -52,7 +52,7 @@ namespace Tests.UserTests
 					}
 				);
 
-				Assert.True(itemsQuery.ToArray().All(r => r.equals));
+				Assert.That(itemsQuery.ToArray().All(r => r.equals), Is.True);
 			}
 		}
 	}

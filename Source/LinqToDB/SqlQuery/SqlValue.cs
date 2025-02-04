@@ -1,49 +1,38 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 
 namespace LinqToDB.SqlQuery
 {
 	using Common;
+	using Common.Internal;
 
-	public class SqlValue : ISqlExpression
+	public class SqlValue : SqlExpressionBase
 	{
 		public SqlValue(Type systemType, object? value)
 		{
-			_valueType  = new DbDataType(systemType);
-			_value     = value;
+			_valueType = new DbDataType(value != null && value is not DBNull ? systemType.UnwrapNullableType() : systemType);
+			Value      = value;
 		}
 
 		public SqlValue(DbDataType valueType, object? value)
 		{
 			_valueType = valueType;
-			_value     = value;
+			Value      = value;
 		}
 
 		public SqlValue(object value)
 		{
-			_value     = value ?? throw new ArgumentNullException(nameof(value), "Untyped null value");
-			_valueType = new DbDataType(value.GetType());
+			Value         = value ?? throw new ArgumentNullException(nameof(value), "Untyped null value");
+			_valueType    = new DbDataType(value.GetType());
 		}
 
-		object? _value;
-		
-		public object? Value
-		{
-			get => _value;
-			internal set
-			{
-				if (_value == value)
-					return;
-				
-				_value    = value;
-				_hashCode = null;
-			}
-		}
+		/// <summary>
+		/// Provider specific value
+		/// </summary>
+		public object? Value { get; }
 
 		DbDataType _valueType;
-		
+
 		public DbDataType ValueType
 		{
 			get => _valueType;
@@ -56,47 +45,51 @@ namespace LinqToDB.SqlQuery
 			}
 		}
 
-		Type ISqlExpression.SystemType => ValueType.SystemType;
-
 		#region Overrides
 
-#if OVERRIDETOSTRING
+		public override QueryElementType ElementType => QueryElementType.SqlValue;
 
-		public override string ToString()
+		public override QueryElementTextWriter ToString(QueryElementTextWriter writer)
 		{
-			return ((IQueryElement)this).ToString(new StringBuilder(), new Dictionary<IQueryElement,IQueryElement>()).ToString();
+			writer.DebugAppendUniqueId(this);
+
+			if (Value is null)
+			{
+				writer.Append("NULL");
+			}
+			else
+			{
+				if (Value is string strVal)
+				{
+					writer
+						.Append('\'')
+						.Append(strVal.Replace("\'", "''"))
+						.Append('\'');
+				}
+				else
+				{
+					writer.Append(Value);
+				}
+			}
+
+			return writer;
 		}
 
-#endif
+		public override int   Precedence => SqlQuery.Precedence.Primary;
+		public override Type? SystemType => ValueType.SystemType;
 
-		#endregion
+		public override bool CanBeNullable(NullabilityContext nullability) => CanBeNull;
 
-		#region ISqlExpression Members
-
-		public int Precedence => SqlQuery.Precedence.Primary;
-
-		#endregion
-
-		#region ISqlExpressionWalkable Members
-
-		ISqlExpression ISqlExpressionWalkable.Walk(WalkOptions options, Func<ISqlExpression,ISqlExpression> func)
-		{
-			return func(this);
-		}
-
-		#endregion
-
-		#region IEquatable<ISqlExpression> Members
-
-		bool IEquatable<ISqlExpression>.Equals(ISqlExpression? other)
+		public override bool Equals(ISqlExpression other, Func<ISqlExpression, ISqlExpression, bool> comparer)
 		{
 			if (this == other)
 				return true;
 
 			return
-				other is SqlValue value           &&
-				ValueType.Equals(value.ValueType) &&
-				(Value == null && value.Value == null || Value != null && Value.Equals(value.Value));
+				other is SqlValue value          
+				&& ValueType.Equals(value.ValueType)
+				&& (Value == null && value.Value == null || Value != null && Value.Equals(value.Value))
+				&& comparer(this, other);
 		}
 
 		int? _hashCode;
@@ -120,35 +113,11 @@ namespace LinqToDB.SqlQuery
 
 		#endregion
 
-		#region ISqlExpression Members
-
 		public bool CanBeNull => Value == null;
 
-		public bool Equals(ISqlExpression other, Func<ISqlExpression,ISqlExpression,bool> comparer)
+		public void Deconstruct(out object? value)
 		{
-			return ((ISqlExpression)this).Equals(other) && comparer(this, other);
+			value = Value;
 		}
-
-		#endregion
-
-		#region IQueryElement Members
-
-		public QueryElementType ElementType => QueryElementType.SqlValue;
-
-		StringBuilder IQueryElement.ToString(StringBuilder sb, Dictionary<IQueryElement,IQueryElement> dic)
-		{
-			return
-				Value == null ?
-					sb.Append("NULL") :
-				Value is string strVal ?
-					sb
-						.Append('\'')
-						.Append(strVal.Replace("\'", "''"))
-						.Append('\'')
-				:
-					sb.Append(Value);
-		}
-
-		#endregion
 	}
 }

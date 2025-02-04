@@ -1,18 +1,32 @@
-﻿using JetBrains.Annotations;
+﻿using System.Collections.Generic;
+
+using JetBrains.Annotations;
 
 namespace LinqToDB.DataProvider.Oracle
 {
-	using System.Collections.Generic;
-	using System.Linq;
 	using Configuration;
 
 	[UsedImplicitly]
-	class OracleFactory : IDataProviderFactory
+	sealed class OracleFactory : DataProviderFactoryBase
 	{
-		IDataProvider IDataProviderFactory.GetDataProvider(IEnumerable<NamedValue> attributes)
+		public override IDataProvider GetDataProvider(IEnumerable<NamedValue> attributes)
 		{
-			var assemblyName = attributes.FirstOrDefault(_ => _.Name == "assemblyName");
-			return OracleTools.GetDataProvider(null, assemblyName?.Value);
+			var dialect = GetVersion(attributes) switch
+			{
+				"11" => OracleVersion.v11,
+				"12" => OracleVersion.v12,
+				_    => OracleVersion.AutoDetect
+			};
+
+			var provider = GetAssemblyName(attributes) switch
+			{
+				OracleProviderAdapter.DevartAssemblyName  => OracleProvider.Devart,
+				OracleProviderAdapter.NativeAssemblyName  => OracleProvider.Native,
+				OracleProviderAdapter.ManagedAssemblyName => OracleProvider.Managed,
+				_                                         => OracleProvider.AutoDetect
+			};
+
+			return OracleTools.GetDataProvider(dialect, provider);
 		}
 	}
 }

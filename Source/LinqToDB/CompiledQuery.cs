@@ -2,14 +2,17 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+
 using JetBrains.Annotations;
 
 namespace LinqToDB
 {
+	using Common;
+	using Common.Internal;
 	using Expressions;
 	using Extensions;
 	using Linq;
-	using LinqToDB.Common;
+	using Linq.Builder;
 
 	/// <summary>
 	/// Provides API for compilation and caching of queries for reuse.
@@ -30,8 +33,7 @@ namespace LinqToDB
 		{
 			if (_compiledQuery == null)
 				lock (_sync)
-					if (_compiledQuery == null)
-						_compiledQuery = CompileQuery(_query);
+					_compiledQuery ??= CompileQuery(_query);
 
 			//TODO: pass preambles
 			return (TResult)_compiledQuery(args, null)!;
@@ -49,7 +51,7 @@ namespace LinqToDB
 			Expression CallTable(LambdaExpression query, Expression expr, ParameterExpression ps, ParameterExpression preambles, MethodType type);
 		}
 
-		class TableHelper<T> : ITableHelper
+		sealed class TableHelper<T> : ITableHelper
 			where T : notnull
 		{
 			public Expression CallTable(LambdaExpression query, Expression expr, ParameterExpression ps, ParameterExpression preambles, MethodType type)
@@ -69,7 +71,7 @@ namespace LinqToDB
 
 		static Func<object?[],object?[]?,object?> CompileQuery(LambdaExpression query)
 		{
-			var ps        = Expression.Parameter(typeof(object[]), "ps");
+			var ps        = ExpressionBuilder.ParametersParam;
 			var preambles = Expression.Parameter(typeof(object[]), "preambles");
 
 			var info = query.Body.Transform((query, ps, preambles), static (context, pi) =>
@@ -81,21 +83,29 @@ namespace LinqToDB
 							var idx = context.query.Parameters.IndexOf((ParameterExpression)pi);
 
 							if (idx >= 0)
-								return Expression.Convert(Expression.ArrayIndex(context.ps, Expression.Constant(idx)), pi.Type);
+								return Expression.Convert(Expression.ArrayIndex(context.ps, ExpressionInstances.Int32(idx)), pi.Type);
 
 							break;
 						}
+				}
 
+				return pi;
+			});
+
+			info = info.Transform((query, ps, preambles), static (context, pi) =>
+			{
+				switch (pi.NodeType)
+				{
 					case ExpressionType.Call :
 						{
 							var expr = (MethodCallExpression)pi;
 
 							if (expr.Method.DeclaringType == typeof(AsyncExtensions) &&
-								expr.Method.GetCustomAttributes(typeof(AsyncExtensions.ElementAsyncAttribute), true).Length != 0)
+								expr.Method.HasAttribute<AsyncExtensions.ElementAsyncAttribute>())
 							{
 								var type = expr.Type.GetGenericArguments()[0];
 
-								var helper = (ITableHelper)Activator.CreateInstance(typeof(TableHelper<>).MakeGenericType(type))!;
+								var helper = ActivatorExt.CreateInstance<ITableHelper>(typeof(TableHelper<>).MakeGenericType(type));
 
 								return helper.CallTable(context.query, expr, context.ps, context.preambles, MethodType.ElementAsync);
 							}
@@ -106,8 +116,8 @@ namespace LinqToDB
 										typeof(IEnumerable<>);
 
 								var qtype  = type.GetGenericType(expr.Type);
-								var helper = (ITableHelper)Activator.CreateInstance(
-									typeof(TableHelper<>).MakeGenericType(qtype == null ? expr.Type : qtype.GetGenericArguments()[0]))!;
+								var helper = ActivatorExt.CreateInstance<ITableHelper>(
+									typeof(TableHelper<>).MakeGenericType(qtype == null ? expr.Type : qtype.GetGenericArguments()[0]));
 
 								return helper.CallTable(context.query, expr, context.ps, context.preambles, qtype != null ? MethodType.Queryable : MethodType.Element);
 							}
@@ -121,9 +131,9 @@ namespace LinqToDB
 					case ExpressionType.MemberAccess :
 						if (typeof(ITable<>).IsSameOrParentOf(pi.Type))
 						{
-							var helper = (ITableHelper)Activator
-								.CreateInstance(typeof(TableHelper<>)
-								.MakeGenericType(pi.Type.GetGenericArguments()[0]))!;
+							var helper = ActivatorExt
+								.CreateInstance<ITableHelper>(typeof(TableHelper<>)
+								.MakeGenericType(pi.Type.GetGenericArguments()[0]));
 							return helper.CallTable(context.query, pi, context.ps, context.preambles, MethodType.Queryable);
 						}
 

@@ -1,8 +1,12 @@
-﻿using LinqToDB;
-using LinqToDB.Data;
-using NUnit.Framework;
+﻿using System;
 using System.Linq;
+
 using FluentAssertions;
+
+using LinqToDB;
+using LinqToDB.Data;
+
+using NUnit.Framework;
 
 namespace Tests.Linq
 {
@@ -23,7 +27,7 @@ namespace Tests.Linq
 
 		[Test]
 		public void Ints(
-			[DataSources]        string context, 
+			[DataSources]        string context,
 			[Values(2, 4, null)] int?   value)
 		{
 			using var db  = GetDataContext(context);
@@ -44,7 +48,7 @@ namespace Tests.Linq
 
 		[Test]
 		public void Strings(
-			[DataSources(TestProvName.AllAccess)] string context, 
+			[DataSources] string context,
 			[Values("abc", "xyz", null)] string? value)
 		{
 			using var db  = GetDataContext(context);
@@ -65,11 +69,11 @@ namespace Tests.Linq
 
 		[Test]
 		public void OptimizeConstants(
-			[DataSources(TestProvName.AllAccess, ProviderName.SqlCe)] string context, 
+			[DataSources(TestProvName.AllAccess, ProviderName.SqlCe)] string context,
 			[Values(5, 6, null)] int? value)
 		{
 			using var db = GetDataContext(context);
-			
+
 			var src = db.SelectQuery(() => new { ID = 1 });
 
 			int count = src.Count(s => 5.IsDistinctFrom(value));
@@ -83,11 +87,11 @@ namespace Tests.Linq
 				c2.LastQuery.Should().NotContainAny("5", "6");
 		}
 
-		class Src 
+		sealed class Src
 		{
-			public int Int { get; set; }
-			public int? NullableInt { get; set; }
-			public string String { get; set; } = null!;
+			public int     Int            { get; set; }
+			public int?    NullableInt    { get; set; }
+			public string  String         { get; set; } = null!;
 			public string? NullableString { get; set; }
 		}
 	}

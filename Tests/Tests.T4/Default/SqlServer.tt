@@ -1,0 +1,30 @@
+﻿<#@ template language="C#" debug="True" hostSpecific="True" compilerOptions="/langversion:6"   #>
+<#@ CleanupBehavior processor="T4VSHost" CleanupAfterProcessingtemplate="true"                 #>
+<#@ output extension=".generated.cs"                                                           #>
+<#@ include file="$(LinqToDBT4SqlServerTemplatesPath)LinqToDB.SqlServer.ttinclude" once="true" #>
+<#@ include file="..\Shared.ttinclude"                                             once="true" #>
+<#
+	NamespaceName = "Default.SqlServer"; // DataContext class namespace name
+
+	LoadSqlServerMetadata(GetConnectionString("SqlServer.2019"));
+
+	GetTable("Parent").TypeName                = "TheParent";
+	GetTable("Parent").DataContextPropertyName = "TheParents";
+
+	GetColumn("Parent", "ParentID").MemberName = "ID";
+	GetColumn("Parent", "_ID").     Type       = "DayOfWeek";
+	GetColumn("Parent", "ParentID").AliasName  = "IDParent";
+
+	foreach (var t in Tables.Values)
+	{
+		var pk = t.Columns.Values.FirstOrDefault(c => c.ColumnName == t.TableName + "ID" && c.Type == "int");
+
+		if (pk != null)
+		{
+			pk.MemberName = "ID";
+			t.Interfaces.Add("IIdentifiable");
+		}
+	}
+
+	GenerateModel();
+#>

@@ -1,10 +1,12 @@
-﻿using LinqToDB.Common;
-using System;
+﻿using System;
 using System.Linq.Expressions;
 using System.Reflection;
 
 namespace LinqToDB.Extensions
 {
+	using Common;
+	using Common.Internal;
+
 	static class MappingExpressionsExtensions
 	{
 		public static TExpression GetExpressionFromExpressionMember<TExpression>(this Type type, string memberName)
@@ -32,10 +34,7 @@ namespace LinqToDB.Extensions
 						if (method.GetParameters().Length > 0)
 							throw new LinqToDBException($"Method '{memberName}' for type '{type.Name}' should have no parameters");
 
-						if (method.Invoke(null, Array<object>.Empty) is TExpression expression)
-							return expression;
-
-						throw new LinqToDBException($"Method '{memberName}' for type '{type.Name}' should return expression");
+						return method.InvokeExt<TExpression>(null, []);
 					}
 				default:
 					throw new LinqToDBException(

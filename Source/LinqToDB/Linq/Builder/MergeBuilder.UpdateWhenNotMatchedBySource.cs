@@ -1,4 +1,5 @@
-﻿using System.Linq.Expressions;
+﻿using System.Collections.Generic;
+using System.Linq.Expressions;
 
 namespace LinqToDB.Linq.Builder
 {
@@ -9,14 +10,13 @@ namespace LinqToDB.Linq.Builder
 
 	internal partial class MergeBuilder
 	{
-		internal class UpdateWhenNotMatchedBySource : MethodCallBuilder
+		[BuildsMethodCall(nameof(LinqExtensions.UpdateWhenNotMatchedBySourceAnd))]
+		internal sealed class UpdateWhenNotMatchedBySource : MethodCallBuilder
 		{
-			protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
-			{
-				return methodCall.IsSameGenericMethod(UpdateWhenNotMatchedBySourceAndMethodInfo);
-			}
+			public static bool CanBuildMethod(MethodCallExpression call, BuildInfo info, ExpressionBuilder builder)
+				=> call.IsSameGenericMethod(UpdateWhenNotMatchedBySourceAndMethodInfo);
 
-			protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
+			protected override BuildSequenceResult BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 			{
 				// UpdateWhenNotMatchedBySourceAnd(merge, searchCondition, setter)
 				var mergeContext = (MergeContext)builder.BuildSequence(new BuildInfo(buildInfo, methodCall.Arguments[0]));
@@ -25,31 +25,34 @@ namespace LinqToDB.Linq.Builder
 				var operation = new SqlMergeOperationClause(MergeOperationType.UpdateBySource);
 				statement.Operations.Add(operation);
 
-				Expression predicate = methodCall.Arguments[1];
-				Expression setter = methodCall.Arguments[2];
+				var predicate = methodCall.Arguments[1];
+				var setterLambda = methodCall.Arguments[2].UnwrapLambda();
 
-				UpdateBuilder.BuildSetter(
-					builder,
-					buildInfo,
-					(LambdaExpression)setter.Unwrap(),
-					mergeContext,
-					operation.Items,
-					mergeContext);
+				var setterExpression = mergeContext.SourceContext.PrepareSelfTargetLambda(setterLambda);
 
-				if (!(predicate is ConstantExpression constPredicate) || constPredicate.Value != null)
+				var setterExpressions = new List<UpdateBuilder.SetExpressionEnvelope>();
+				UpdateBuilder.ParseSetter(builder,
+					mergeContext.SourceContext.TargetContextRef.WithType(setterExpression.Type), setterExpression,
+					setterExpressions);
+
+				UpdateBuilder.InitializeSetExpressions(builder, mergeContext.TargetContext, mergeContext.SourceContext, setterExpressions, operation.Items, false);
+
+				if (!predicate.IsNullValue())
 				{
-					var condition = (LambdaExpression)predicate.Unwrap();
+					var condition          = predicate.UnwrapLambda();
+					var conditionCorrected = mergeContext.SourceContext.PrepareSelfTargetLambda(condition);
 
-					operation.Where = BuildSearchCondition(builder, statement, mergeContext.TargetContext, null, condition);
+					operation.Where = new SqlSearchCondition();
+
+					var saveIsSourceOuter = mergeContext.SourceContext.IsSourceOuter;
+					mergeContext.SourceContext.IsSourceOuter = true;
+
+					builder.BuildSearchCondition(mergeContext.TargetContext, conditionCorrected, operation.Where);
+
+					mergeContext.SourceContext.IsSourceOuter = saveIsSourceOuter;
 				}
 
-				return mergeContext;
-			}
-
-			protected override SequenceConvertInfo? Convert(
-				ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo, ParameterExpression? param)
-			{
-				return null;
+				return BuildSequenceResult.FromContext(mergeContext);
 			}
 		}
 	}

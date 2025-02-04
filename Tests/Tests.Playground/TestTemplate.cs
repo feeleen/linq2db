@@ -1,8 +1,15 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
+
 using FluentAssertions;
 using LinqToDB.Mapping;
 
 using NUnit.Framework;
+using FluentAssertions.Equivalency;
 
 namespace Tests.Playground
 {
@@ -10,7 +17,7 @@ namespace Tests.Playground
 	public class TestTemplate : TestBase
 	{
 		[Table]
-		class SampleClass
+		sealed class SampleClass
 		{
 			[Column]              public int     Id    { get; set; }
 			[Column(Length = 50)] public string? Value { get; set; }

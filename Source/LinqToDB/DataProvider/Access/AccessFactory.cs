@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 using JetBrains.Annotations;
 
@@ -7,11 +8,25 @@ namespace LinqToDB.DataProvider.Access
 	using Configuration;
 
 	[UsedImplicitly]
-	class AccessFactory : IDataProviderFactory
+	sealed class AccessFactory : DataProviderFactoryBase
 	{
-		IDataProvider IDataProviderFactory.GetDataProvider(IEnumerable<NamedValue> attributes)
+		public override IDataProvider GetDataProvider(IEnumerable<NamedValue> attributes)
 		{
-			return AccessTools.GetDataProvider();
+			var provider = GetAssemblyName(attributes) switch
+			{
+				OleDbProviderAdapter.AssemblyName => AccessProvider.OleDb,
+				OdbcProviderAdapter.AssemblyName  => AccessProvider.ODBC,
+				_                                 => AccessProvider.AutoDetect
+			};
+
+			var version = GetVersion(attributes) switch
+			{
+				"JET" => AccessVersion.Jet,
+				"ACE" => AccessVersion.Ace,
+				_     => AccessVersion.AutoDetect
+			};
+
+			return AccessTools.GetDataProvider(version, provider);
 		}
 	}
 }

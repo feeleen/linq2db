@@ -5,7 +5,6 @@ using LinqToDB.Mapping;
 
 using NUnit.Framework;
 
-
 namespace Tests.Linq
 {
 	using Model;
@@ -19,7 +18,7 @@ namespace Tests.Linq
 		}
 
 		[Table("Parent")]
-		class TestParent
+		sealed class TestParent
 		{
 			[Column] public int       ParentID;
 			[Column] public TestValue Value1;

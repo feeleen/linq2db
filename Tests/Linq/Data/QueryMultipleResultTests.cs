@@ -12,8 +12,7 @@ namespace Tests.Data
 	[TestFixture]
 	public class QueryMultipleResultTests : TestBase
 	{
-
-		class MultipleResultExample
+		sealed class MultipleResultExample
 		{
 			[ResultSetIndex(0)] public IEnumerable<Person>  AllPersons   { get; set; } = null!;
 			[ResultSetIndex(1)] public IList<Doctor>        AllDoctors   { get; set; } = null!;
@@ -24,7 +23,7 @@ namespace Tests.Data
 		[Test]
 		public void TestQueryMulti([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = db.QueryMultiple<MultipleResultExample>(
 					"select * from Person;" +
@@ -32,19 +31,25 @@ namespace Tests.Data
 					 "select * from Patient;" +
 					 "select top 1 * from Patient;"
 				);
-				Assert.IsTrue(res.AllDoctors.Any());
-				Assert.IsTrue(res.AllPatients.Any());
-				Assert.IsTrue(res.AllPersons.Any());
-				Assert.IsTrue(res.FirstPatient != null);
-				Assert.AreEqual("Hallucination with Paranoid Bugs' Delirium of Persecution", res.FirstPatient!.Diagnosis);
-				Assert.AreEqual(2, res.FirstPatient.PersonID);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.AllDoctors.Any(), Is.True);
+					Assert.That(res.AllPatients.Any(), Is.True);
+					Assert.That(res.AllPersons.Any(), Is.True);
+					Assert.That(res.FirstPatient, Is.Not.EqualTo(null));
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.FirstPatient!.Diagnosis, Is.EqualTo("Hallucination with Paranoid Bugs' Delirium of Persecution"));
+					Assert.That(res.FirstPatient.PersonID, Is.EqualTo(2));
+				});
 			}
 		}
 
 		[Test]
 		public async Task TestQueryMultiAsync([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = await db.QueryMultipleAsync<MultipleResultExample>(
 					"select * from Person;" +
@@ -52,16 +57,22 @@ namespace Tests.Data
 					"select * from Patient;" +
 					"select top 1 * from Patient;"
 				);
-				Assert.IsTrue(res.AllDoctors.Any());
-				Assert.IsTrue(res.AllPatients.Any());
-				Assert.IsTrue(res.AllPersons.Any());
-				Assert.IsTrue(res.FirstPatient != null);
-				Assert.AreEqual("Hallucination with Paranoid Bugs' Delirium of Persecution", res.FirstPatient!.Diagnosis);
-				Assert.AreEqual(2, res.FirstPatient.PersonID);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.AllDoctors.Any(), Is.True);
+					Assert.That(res.AllPatients.Any(), Is.True);
+					Assert.That(res.AllPersons.Any(), Is.True);
+					Assert.That(res.FirstPatient, Is.Not.EqualTo(null));
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.FirstPatient!.Diagnosis, Is.EqualTo("Hallucination with Paranoid Bugs' Delirium of Persecution"));
+					Assert.That(res.FirstPatient.PersonID, Is.EqualTo(2));
+				});
 			}
 		}
 
-		class MultipleResultExampleWithoutAttributes
+		sealed class MultipleResultExampleWithoutAttributes
 		{
 			public IEnumerable<Person>  AllPersons   { get; set; } = null!;
 			public IList<Doctor>        AllDoctors   { get; set; } = null!;
@@ -72,7 +83,7 @@ namespace Tests.Data
 		[Test]
 		public void TestQueryMultiWithoutAttributes([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = db.QueryMultiple<MultipleResultExampleWithoutAttributes>(
 					"select * from Person;" +
@@ -80,19 +91,25 @@ namespace Tests.Data
 					 "select * from Patient;" +
 					 "select top 1 * from Patient;"
 				);
-				Assert.IsTrue(res.AllDoctors.Any());
-				Assert.IsTrue(res.AllPatients.Any());
-				Assert.IsTrue(res.AllPersons.Any());
-				Assert.IsTrue(res.FirstPatient != null);
-				Assert.AreEqual("Hallucination with Paranoid Bugs' Delirium of Persecution", res.FirstPatient!.Diagnosis);
-				Assert.AreEqual(2, res.FirstPatient.PersonID);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.AllDoctors.Any(), Is.True);
+					Assert.That(res.AllPatients.Any(), Is.True);
+					Assert.That(res.AllPersons.Any(), Is.True);
+					Assert.That(res.FirstPatient, Is.Not.EqualTo(null));
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.FirstPatient!.Diagnosis, Is.EqualTo("Hallucination with Paranoid Bugs' Delirium of Persecution"));
+					Assert.That(res.FirstPatient.PersonID, Is.EqualTo(2));
+				});
 			}
 		}
 
 		[Test]
 		public async Task TestQueryMultiWithoutAttributesAsync([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = await db.QueryMultipleAsync<MultipleResultExampleWithoutAttributes>(
 					"select * from Person;" +
@@ -100,18 +117,24 @@ namespace Tests.Data
 					"select * from Patient;" +
 					"select top 1 * from Patient;"
 				);
-				Assert.IsTrue(res.AllDoctors.Any());
-				Assert.IsTrue(res.AllPatients.Any());
-				Assert.IsTrue(res.AllPersons.Any());
-				Assert.IsTrue(res.FirstPatient != null);
-				Assert.AreEqual("Hallucination with Paranoid Bugs' Delirium of Persecution", res.FirstPatient!.Diagnosis);
-				Assert.AreEqual(2, res.FirstPatient.PersonID);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.AllDoctors.Any(), Is.True);
+					Assert.That(res.AllPatients.Any(), Is.True);
+					Assert.That(res.AllPersons.Any(), Is.True);
+					Assert.That(res.FirstPatient, Is.Not.EqualTo(null));
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.FirstPatient!.Diagnosis, Is.EqualTo("Hallucination with Paranoid Bugs' Delirium of Persecution"));
+					Assert.That(res.FirstPatient.PersonID, Is.EqualTo(2));
+				});
 			}
 		}
 
 
 		[Table]
-		class ProcedureMultipleResultExample
+		sealed class ProcedureMultipleResultExample
 		{
 			[ResultSetIndex(0)] public IList<int>           MatchingPersonIds { get; set; } = null!;
 			[ResultSetIndex(1)] public IEnumerable<Person>  MatchingPersons   { get; set; } = null!;
@@ -125,76 +148,94 @@ namespace Tests.Data
 		[Test]
 		public void TestSearchStoredProdecure([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = db.QueryProcMultiple<ProcedureMultipleResultExample>(
 					"PersonSearch",
 					new DataParameter("nameFilter", "Jane")
 				);
 
-				Assert.IsFalse(res.DoctorFound);
-				Assert.AreEqual(res.MatchingPersonIds.Count, 1);
-				Assert.AreEqual(res.MatchingPersons.Count(), 1);
-				Assert.AreEqual(res.MatchingPatients.Count(), 0);
-				Assert.AreEqual(res.MatchingPersons2.Length, 1);
-				Assert.AreEqual(res.MatchCount, 1);
-				Assert.NotNull(res.MatchingPerson);
-				Assert.AreEqual("Jane", res.MatchingPerson.FirstName);
-				Assert.AreEqual("Doe", res.MatchingPerson.LastName);
-				Assert.AreEqual(Gender.Female, res.MatchingPerson.Gender);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.DoctorFound, Is.False);
+					Assert.That(res.MatchingPersonIds, Has.Count.EqualTo(1));
+					Assert.That(res.MatchingPersons.Count(), Is.EqualTo(1));
+					Assert.That(res.MatchingPatients.Count(), Is.EqualTo(0));
+					Assert.That(res.MatchingPersons2, Has.Length.EqualTo(1));
+					Assert.That(res.MatchCount, Is.EqualTo(1));
+					Assert.That(res.MatchingPerson, Is.Not.Null);
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.MatchingPerson.FirstName, Is.EqualTo("Jane"));
+					Assert.That(res.MatchingPerson.LastName, Is.EqualTo("Doe"));
+					Assert.That(res.MatchingPerson.Gender, Is.EqualTo(Gender.Female));
+				});
 			}
 		}
 
 		[Test]
 		public void TestSearchStoredProdecureWithAnonymParameter([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = db.QueryProcMultiple<ProcedureMultipleResultExample>(
 					"PersonSearch",
 					new { nameFilter = "Jane" }
 				);
 
-				Assert.IsFalse(res.DoctorFound);
-				Assert.AreEqual(res.MatchingPersonIds.Count, 1);
-				Assert.AreEqual(res.MatchingPersons.Count(), 1);
-				Assert.AreEqual(res.MatchingPatients.Count(), 0);
-				Assert.AreEqual(res.MatchingPersons2.Length, 1);
-				Assert.AreEqual(res.MatchCount, 1);
-				Assert.NotNull(res.MatchingPerson);
-				Assert.AreEqual("Jane", res.MatchingPerson.FirstName);
-				Assert.AreEqual("Doe", res.MatchingPerson.LastName);
-				Assert.AreEqual(Gender.Female, res.MatchingPerson.Gender);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.DoctorFound, Is.False);
+					Assert.That(res.MatchingPersonIds, Has.Count.EqualTo(1));
+					Assert.That(res.MatchingPersons.Count(), Is.EqualTo(1));
+					Assert.That(res.MatchingPatients.Count(), Is.EqualTo(0));
+					Assert.That(res.MatchingPersons2, Has.Length.EqualTo(1));
+					Assert.That(res.MatchCount, Is.EqualTo(1));
+					Assert.That(res.MatchingPerson, Is.Not.Null);
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.MatchingPerson.FirstName, Is.EqualTo("Jane"));
+					Assert.That(res.MatchingPerson.LastName, Is.EqualTo("Doe"));
+					Assert.That(res.MatchingPerson.Gender, Is.EqualTo(Gender.Female));
+				});
 			}
 		}
 
 		[Test]
 		public async Task TestSearchStoredProdecureAsync([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = await db.QueryProcMultipleAsync<ProcedureMultipleResultExample>(
 					"PersonSearch",
 					new DataParameter("nameFilter", "Jane")
 				);
 
-				Assert.IsFalse(res.DoctorFound);
-				Assert.AreEqual(res.MatchingPersonIds.Count, 1);
-				Assert.AreEqual(res.MatchingPersons.Count(), 1);
-				Assert.AreEqual(res.MatchingPatients.Count(), 0);
-				Assert.AreEqual(res.MatchingPersons2.Length, 1);
-				Assert.AreEqual(res.MatchCount, 1);
-				Assert.NotNull(res.MatchingPerson);
-				Assert.AreEqual("Jane", res.MatchingPerson.FirstName);
-				Assert.AreEqual("Doe", res.MatchingPerson.LastName);
-				Assert.AreEqual(Gender.Female, res.MatchingPerson.Gender);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.DoctorFound, Is.False);
+					Assert.That(res.MatchingPersonIds, Has.Count.EqualTo(1));
+					Assert.That(res.MatchingPersons.Count(), Is.EqualTo(1));
+					Assert.That(res.MatchingPatients.Count(), Is.EqualTo(0));
+					Assert.That(res.MatchingPersons2, Has.Length.EqualTo(1));
+					Assert.That(res.MatchCount, Is.EqualTo(1));
+					Assert.That(res.MatchingPerson, Is.Not.Null);
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.MatchingPerson.FirstName, Is.EqualTo("Jane"));
+					Assert.That(res.MatchingPerson.LastName, Is.EqualTo("Doe"));
+					Assert.That(res.MatchingPerson.Gender, Is.EqualTo(Gender.Female));
+				});
 			}
 		}
 
 		[Test]
 		public async Task TestSearchStoredProdecureWithTokenAsync([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = await db.QueryProcMultipleAsync<ProcedureMultipleResultExample>(
 					"PersonSearch",
@@ -202,68 +243,86 @@ namespace Tests.Data
 					new { nameFilter = "Jane" }
 				);
 
-				Assert.IsFalse(res.DoctorFound);
-				Assert.AreEqual(res.MatchingPersonIds.Count, 1);
-				Assert.AreEqual(res.MatchingPersons.Count(), 1);
-				Assert.AreEqual(res.MatchingPatients.Count(), 0);
-				Assert.AreEqual(res.MatchingPersons2.Length, 1);
-				Assert.AreEqual(res.MatchCount, 1);
-				Assert.NotNull(res.MatchingPerson);
-				Assert.AreEqual("Jane", res.MatchingPerson.FirstName);
-				Assert.AreEqual("Doe", res.MatchingPerson.LastName);
-				Assert.AreEqual(Gender.Female, res.MatchingPerson.Gender);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.DoctorFound, Is.False);
+					Assert.That(res.MatchingPersonIds, Has.Count.EqualTo(1));
+					Assert.That(res.MatchingPersons.Count(), Is.EqualTo(1));
+					Assert.That(res.MatchingPatients.Count(), Is.EqualTo(0));
+					Assert.That(res.MatchingPersons2, Has.Length.EqualTo(1));
+					Assert.That(res.MatchCount, Is.EqualTo(1));
+					Assert.That(res.MatchingPerson, Is.Not.Null);
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.MatchingPerson.FirstName, Is.EqualTo("Jane"));
+					Assert.That(res.MatchingPerson.LastName, Is.EqualTo("Doe"));
+					Assert.That(res.MatchingPerson.Gender, Is.EqualTo(Gender.Female));
+				});
 			}
 		}
 
 		[Test]
 		public void TestSearchStoredProdecure2([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = db.QueryProcMultiple<ProcedureMultipleResultExample>(
 					"PersonSearch",
 					new DataParameter("nameFilter", "Pupkin")
 				);
 
-				Assert.IsTrue(res.DoctorFound);
-				Assert.AreEqual(res.MatchingPersonIds.Count, 1);
-				Assert.AreEqual(res.MatchingPersons.Count(), 1);
-				Assert.AreEqual(res.MatchingPatients.Count(), 0);
-				Assert.AreEqual(res.MatchingPersons2.Length, 1);
-				Assert.AreEqual(res.MatchCount, 1);
-				Assert.NotNull(res.MatchingPerson);
-				Assert.AreEqual("John", res.MatchingPerson.FirstName);
-				Assert.AreEqual("Pupkin", res.MatchingPerson.LastName);
-				Assert.AreEqual(Gender.Male, res.MatchingPerson.Gender);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.DoctorFound, Is.True);
+					Assert.That(res.MatchingPersonIds, Has.Count.EqualTo(1));
+					Assert.That(res.MatchingPersons.Count(), Is.EqualTo(1));
+					Assert.That(res.MatchingPatients.Count(), Is.EqualTo(0));
+					Assert.That(res.MatchingPersons2, Has.Length.EqualTo(1));
+					Assert.That(res.MatchCount, Is.EqualTo(1));
+					Assert.That(res.MatchingPerson, Is.Not.Null);
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.MatchingPerson.FirstName, Is.EqualTo("John"));
+					Assert.That(res.MatchingPerson.LastName, Is.EqualTo("Pupkin"));
+					Assert.That(res.MatchingPerson.Gender, Is.EqualTo(Gender.Male));
+				});
 			}
 		}
 
 		[Test]
 		public async Task TestSearchStoredProdecure2Async([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = await db.QueryProcMultipleAsync<ProcedureMultipleResultExample>(
 					"PersonSearch",
 					new DataParameter("nameFilter", "Pupkin")
 				);
 
-				Assert.IsTrue(res.DoctorFound);
-				Assert.AreEqual(res.MatchingPersonIds.Count, 1);
-				Assert.AreEqual(res.MatchingPersons.Count(), 1);
-				Assert.AreEqual(res.MatchingPatients.Count(), 0);
-				Assert.AreEqual(res.MatchingPersons2.Length, 1);
-				Assert.AreEqual(res.MatchCount, 1);
-				Assert.NotNull(res.MatchingPerson);
-				Assert.AreEqual("John", res.MatchingPerson.FirstName);
-				Assert.AreEqual("Pupkin", res.MatchingPerson.LastName);
-				Assert.AreEqual(Gender.Male, res.MatchingPerson.Gender);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.DoctorFound, Is.True);
+					Assert.That(res.MatchingPersonIds, Has.Count.EqualTo(1));
+					Assert.That(res.MatchingPersons.Count(), Is.EqualTo(1));
+					Assert.That(res.MatchingPatients.Count(), Is.EqualTo(0));
+					Assert.That(res.MatchingPersons2, Has.Length.EqualTo(1));
+					Assert.That(res.MatchCount, Is.EqualTo(1));
+					Assert.That(res.MatchingPerson, Is.Not.Null);
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.MatchingPerson.FirstName, Is.EqualTo("John"));
+					Assert.That(res.MatchingPerson.LastName, Is.EqualTo("Pupkin"));
+					Assert.That(res.MatchingPerson.Gender, Is.EqualTo(Gender.Male));
+				});
 			}
 		}
 
 
 		[Table]
-		class ProcedureMultipleResultExampleWithoutAttributes
+		sealed class ProcedureMultipleResultExampleWithoutAttributes
 		{
 			public IList<int>           MatchingPersonIds { get; set; } = null!;
 			public IEnumerable<Person>  MatchingPersons   { get; set; } = null!;
@@ -277,48 +336,99 @@ namespace Tests.Data
 		[Test]
 		public void TestSearchStoredProdecureWithoutAttributes([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = db.QueryProcMultiple<ProcedureMultipleResultExampleWithoutAttributes>(
 					"PersonSearch",
 					new DataParameter("nameFilter", "Jane")
 				);
 
-				Assert.IsFalse(res.DoctorFound);
-				Assert.AreEqual(res.MatchingPersonIds.Count, 1);
-				Assert.AreEqual(res.MatchingPersons.Count(), 1);
-				Assert.AreEqual(res.MatchingPatients.Count(), 0);
-				Assert.AreEqual(res.MatchingPersons2.Length, 1);
-				Assert.AreEqual(res.MatchCount, 1);
-				Assert.NotNull(res.MatchingPerson);
-				Assert.AreEqual("Jane", res.MatchingPerson.FirstName);
-				Assert.AreEqual("Doe", res.MatchingPerson.LastName);
-				Assert.AreEqual(Gender.Female, res.MatchingPerson.Gender);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.DoctorFound, Is.False);
+					Assert.That(res.MatchingPersonIds, Has.Count.EqualTo(1));
+					Assert.That(res.MatchingPersons.Count(), Is.EqualTo(1));
+					Assert.That(res.MatchingPatients.Count(), Is.EqualTo(0));
+					Assert.That(res.MatchingPersons2, Has.Length.EqualTo(1));
+					Assert.That(res.MatchCount, Is.EqualTo(1));
+					Assert.That(res.MatchingPerson, Is.Not.Null);
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.MatchingPerson.FirstName, Is.EqualTo("Jane"));
+					Assert.That(res.MatchingPerson.LastName, Is.EqualTo("Doe"));
+					Assert.That(res.MatchingPerson.Gender, Is.EqualTo(Gender.Female));
+				});
 			}
 		}
 
 		[Test]
 		public async Task TestSearchStoredProdecureWithoutAttributesAsync([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = new DataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var res = await db.QueryProcMultipleAsync<ProcedureMultipleResultExampleWithoutAttributes>(
 					"PersonSearch",
 					new DataParameter("nameFilter", "Jane")
 				);
 
-				Assert.IsFalse(res.DoctorFound);
-				Assert.AreEqual(res.MatchingPersonIds.Count, 1);
-				Assert.AreEqual(res.MatchingPersons.Count(), 1);
-				Assert.AreEqual(res.MatchingPatients.Count(), 0);
-				Assert.AreEqual(res.MatchingPersons2.Length, 1);
-				Assert.AreEqual(res.MatchCount, 1);
-				Assert.NotNull(res.MatchingPerson);
-				Assert.AreEqual("Jane", res.MatchingPerson.FirstName);
-				Assert.AreEqual("Doe", res.MatchingPerson.LastName);
-				Assert.AreEqual(Gender.Female, res.MatchingPerson.Gender);
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.DoctorFound, Is.False);
+					Assert.That(res.MatchingPersonIds, Has.Count.EqualTo(1));
+					Assert.That(res.MatchingPersons.Count(), Is.EqualTo(1));
+					Assert.That(res.MatchingPatients.Count(), Is.EqualTo(0));
+					Assert.That(res.MatchingPersons2, Has.Length.EqualTo(1));
+					Assert.That(res.MatchCount, Is.EqualTo(1));
+					Assert.That(res.MatchingPerson, Is.Not.Null);
+				});
+				Assert.Multiple(() =>
+				{
+					Assert.That(res.MatchingPerson.FirstName, Is.EqualTo("Jane"));
+					Assert.That(res.MatchingPerson.LastName, Is.EqualTo("Doe"));
+					Assert.That(res.MatchingPerson.Gender, Is.EqualTo(Gender.Female));
+				});
 			}
 		}
 
+		#region Issue 4728
+		class ToDeleteId
+		{
+			public int CaseLogId { get; set; }
+			public int CaseNbr { get; set; }
+		}
+
+		class NotDeletedId
+		{
+			public int CaseLogId { get; set; }
+			public int CaseNbr { get; set; }
+			public int CrimeCodesId { get; set; }
+		}
+
+		class DeletedId
+		{
+			public int CaseLogId { get; set; }
+			public int CaseNbr { get; set; }
+		}
+
+		class MultipleResultDeletion
+		{
+			// all 3 supported types
+			[ResultSetIndex(0)] public ToDeleteId[] ToDeleteId { get; set; } = null!;
+			[ResultSetIndex(1)] public List<NotDeletedId> NotDeletedId { get; set; } = null!;
+			[ResultSetIndex(2)] public DeletedId DeletedId { get; set; } = null!;
+		}
+
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/4728")]
+		public async Task Issue4728Test([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
+		{
+			using var db = GetDataConnection(context);
+
+			var dataset = await db.QueryMultipleAsync<MultipleResultDeletion>(@"
+select 1, 1 from INFORMATION_SCHEMA.TABLES where 1 = 0;
+select 1, 1, 1 from INFORMATION_SCHEMA.TABLES where 1 = 0;
+select 1, 1 from INFORMATION_SCHEMA.TABLES where 1 = 0;");
+		}
+		#endregion
 	}
 }

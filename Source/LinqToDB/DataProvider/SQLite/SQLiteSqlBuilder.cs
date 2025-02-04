@@ -4,18 +4,26 @@ using System.Text;
 
 namespace LinqToDB.DataProvider.SQLite
 {
-	using SqlQuery;
-	using SqlProvider;
+	using Common;
+	using Extensions;
 	using Mapping;
+	using SqlProvider;
+	using SqlQuery;
 
 	public class SQLiteSqlBuilder : BasicSqlBuilder
 	{
-		public SQLiteSqlBuilder(
-			MappingSchema    mappingSchema,
-			ISqlOptimizer    sqlOptimizer,
-			SqlProviderFlags sqlProviderFlags)
-			: base(mappingSchema, sqlOptimizer, sqlProviderFlags)
+		public SQLiteSqlBuilder(IDataProvider? provider, MappingSchema mappingSchema, DataOptions dataOptions, ISqlOptimizer sqlOptimizer, SqlProviderFlags sqlProviderFlags)
+			: base(provider, mappingSchema, dataOptions, sqlOptimizer, sqlProviderFlags)
 		{
+		}
+
+		SQLiteSqlBuilder(BasicSqlBuilder parentBuilder) : base(parentBuilder)
+		{
+		}
+
+		protected override ISqlBuilder CreateSqlBuilder()
+		{
+			return new SQLiteSqlBuilder(this);
 		}
 
 		protected override bool SupportsColumnAliasesInSource => false;
@@ -31,21 +39,13 @@ namespace LinqToDB.DataProvider.SQLite
 		{
 			if (statement is SqlTruncateTableStatement trun)
 			{
-				StringBuilder
-					.Append("UPDATE SQLITE_SEQUENCE SET SEQ=0 WHERE NAME='")
-					.Append(trun.Table!.PhysicalName)
-					.AppendLine("'")
-					;
+				StringBuilder.Append("UPDATE SQLITE_SEQUENCE SET SEQ=0 WHERE NAME=");
+				MappingSchema.ConvertToSqlValue(StringBuilder, null, DataOptions, trun.Table!.TableName.Name);
 			}
 			else
 			{
 				StringBuilder.AppendLine("SELECT last_insert_rowid()");
 			}
-		}
-
-		protected override ISqlBuilder CreateSqlBuilder()
-		{
-			return new SQLiteSqlBuilder(MappingSchema, SqlOptimizer, SqlProviderFlags);
 		}
 
 		protected override string LimitFormat(SelectQuery selectQuery)
@@ -58,7 +58,7 @@ namespace LinqToDB.DataProvider.SQLite
 			return "OFFSET {0}";
 		}
 
-		public override bool IsNestedJoinSupported => false;
+		public override bool IsNestedJoinParenthesisRequired => true;
 
 		public override StringBuilder Convert(StringBuilder sb, string value, ConvertType convertType)
 		{
@@ -77,9 +77,10 @@ namespace LinqToDB.DataProvider.SQLite
 
 					return sb.Append('[').Append(value).Append(']');
 
-				case ConvertType.NameToDatabase:
-				case ConvertType.NameToSchema:
+				case ConvertType.NameToDatabase  :
+				case ConvertType.NameToSchema    :
 				case ConvertType.NameToQueryTable:
+				case ConvertType.NameToProcedure :
 					if (value.Length > 0 && value[0] == '[')
 						return sb.Append(value);
 
@@ -97,12 +98,12 @@ namespace LinqToDB.DataProvider.SQLite
 			return sb.Append(value);
 		}
 
-		protected override void BuildDataTypeFromDataType(SqlDataType type, bool forCreateTable)
+		protected override void BuildDataTypeFromDataType(DbDataType type, bool forCreateTable, bool canBeNull)
 		{
-			switch (type.Type.DataType)
+			switch (type.DataType)
 			{
-				case DataType.Int32 : StringBuilder.Append("INTEGER");                      break;
-				default             : base.BuildDataTypeFromDataType(type, forCreateTable); break;
+				case DataType.Int32 : StringBuilder.Append("INTEGER");                                 break;
+				default             : base.BuildDataTypeFromDataType(type, forCreateTable, canBeNull); break;
 			}
 		}
 
@@ -121,21 +122,25 @@ namespace LinqToDB.DataProvider.SQLite
 			}
 			else
 			{
-				AppendIndent();
-				StringBuilder.Append("CONSTRAINT ").Append(pkName).Append(" PRIMARY KEY (");
-			StringBuilder.Append(string.Join(InlineComma, fieldNames));
-				StringBuilder.Append(')');
+				AppendIndent()
+					.Append("CONSTRAINT ").Append(pkName).Append(" PRIMARY KEY (")
+					.Append(string.Join(InlineComma, fieldNames))
+					.Append(')');
 			}
 		}
 
-		public override StringBuilder BuildTableName(StringBuilder sb, string? server, string? database, string? schema, string table, TableOptions tableOptions)
+		public override StringBuilder BuildObjectName(StringBuilder sb, SqlObjectName name, ConvertType objectType, bool escape, TableOptions tableOptions, bool withoutSuffix)
 		{
-			if (database != null && database.Length == 0) database = null;
+			// either "temp", "main" or attached db name supported
+			if (tableOptions.IsTemporaryOptionSet())
+				sb.Append("temp.");
+			else  if (name.Database != null)
+			{
+				(escape ? Convert(sb, name.Database, ConvertType.NameToDatabase) : sb.Append(name.Database))
+					.Append('.');
+			}
 
-			if (database != null)
-				sb.Append(database).Append('.');
-
-			return sb.Append(table);
+			return escape ? Convert(sb, name.Name, objectType) : sb.Append(name.Name);
 		}
 
 		protected override void BuildDropTableStatement(SqlDropTableStatement dropTable)
@@ -180,6 +185,12 @@ namespace LinqToDB.DataProvider.SQLite
 				StringBuilder.Append("IF NOT EXISTS ");
 		}
 
+		protected override void BuildInsertOrUpdateQuery(SqlInsertOrUpdateStatement insertOrUpdate)
+		{
+			BuildInsertOrUpdateQueryAsOnConflictUpdateOrNothing(insertOrUpdate);
+		}
+
+		// 3.39.0 adds standard DISTINCT FROM, but let's keep older implementation for now
 		protected override void BuildIsDistinctPredicate(SqlPredicate.IsDistinct expr)
 		{
 			BuildExpression(GetPrecedence(expr), expr.Expr1);
@@ -190,7 +201,7 @@ namespace LinqToDB.DataProvider.SQLite
 		protected override void BuildSqlValuesTable(SqlValuesTable valuesTable, string alias, out bool aliasBuilt)
 		{
 			valuesTable = ConvertElement(valuesTable);
-			var rows = valuesTable.BuildRows(OptimizationContext.Context);
+			var rows = valuesTable.BuildRows(OptimizationContext.EvaluationContext);
 
 			if (rows.Count == 0)
 			{
@@ -198,7 +209,7 @@ namespace LinqToDB.DataProvider.SQLite
 				BuildEmptyValues(valuesTable);
 				StringBuilder.Append(')');
 			}
-			else 
+			else
 			{
 				StringBuilder.Append(OpenParens);
 
@@ -211,7 +222,7 @@ namespace LinqToDB.DataProvider.SQLite
 
 				AppendIndent();
 
-				if (rows?.Count > 0)
+				if (rows.Count > 0)
 				{
 					StringBuilder.AppendLine("UNION ALL");
 					AppendIndent();
@@ -226,5 +237,35 @@ namespace LinqToDB.DataProvider.SQLite
 
 			aliasBuilt = false;
 		}
+
+		protected override void BuildTableExtensions(SqlTable table, string alias)
+		{
+			if (table.SqlQueryExtensions is not null)
+				BuildTableExtensions(StringBuilder, table, alias, " ", " ", null);
+		}
+
+		protected override void BuildUpdateTableName(SelectQuery selectQuery, SqlUpdateClause updateClause)
+		{
+			base.BuildUpdateTableName(selectQuery, updateClause);
+
+			if (updateClause.Table != null)
+				BuildTableExtensions(updateClause.Table, "");
+		}
+
+		protected override void BuildUpdateQuery(SqlStatement statement, SelectQuery selectQuery, SqlUpdateClause updateClause)
+		{
+			BuildStep = Step.Tag;             BuildTag(statement);
+			BuildStep = Step.WithClause;      BuildWithClause(statement.GetWithClause());
+			BuildStep = Step.UpdateClause;    BuildUpdateClause(Statement, selectQuery, updateClause);
+			BuildStep = Step.FromClause;      BuildFromClause(Statement, selectQuery);
+			BuildStep = Step.WhereClause;     BuildUpdateWhereClause(selectQuery);
+			BuildStep = Step.GroupByClause;   BuildGroupByClause(selectQuery);
+			BuildStep = Step.HavingClause;    BuildHavingClause(selectQuery);
+			BuildStep = Step.Output;          BuildOutputSubclause(statement.GetOutputClause());
+			BuildStep = Step.OrderByClause;   BuildOrderByClause(selectQuery);
+			BuildStep = Step.OffsetLimit;     BuildOffsetLimit(selectQuery);
+			BuildStep = Step.QueryExtensions; BuildSubQueryExtensions(statement);
+		}
+
 	}
 }

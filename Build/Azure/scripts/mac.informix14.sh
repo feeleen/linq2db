@@ -1,9 +1,5 @@
 #!/bin/bash
 
-cp -f ./IBM.Data.DB2.Core-osx/lib/netstandard2.1/IBM.Data.DB2.Core.dll ./IBM.Data.DB2.Core.dll
-rm -rf ./clidriver/
-cp -rf ./IBM.Data.DB2.Core-osx/buildTransitive/clidriver/ ./clidriver/
-
 docker run -d --name informix -e INIT_FILE=linq2db.sql -e LICENSE=ACCEPT -p 9089:9089 ibmcom/informix-developer-database:latest
 
 echo Generate CREATE DATABASE script
@@ -19,10 +15,10 @@ docker ps -a
 retries=0
 status="1"
 until docker logs informix | grep -q 'Informix container login Information'; do
-    sleep 5
+    sleep 10
     retries=`expr $retries + 1`
     echo waiting for informix to start
-    if [ $retries -gt 100 ]; then
+    if [ $retries -gt 1000 ]; then
         echo informix not started or takes too long to start
         exit 1
     fi;

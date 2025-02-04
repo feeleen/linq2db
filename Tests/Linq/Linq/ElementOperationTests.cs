@@ -1,6 +1,7 @@
 ﻿using System.Linq;
 
 using LinqToDB;
+using LinqToDB.Linq;
 
 using NUnit.Framework;
 
@@ -15,72 +16,70 @@ namespace Tests.Linq
 		public void First([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(
-					   Parent.OrderByDescending(p => p.ParentID).First().ParentID,
-					db.Parent.OrderByDescending(p => p.ParentID).First().ParentID);
+				Assert.That(
+					db.Parent.OrderByDescending(p => p.ParentID).First().ParentID, Is.EqualTo(Parent.OrderByDescending(p => p.ParentID).First().ParentID));
 		}
 
 		[Test]
 		public void FirstWhere([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(2, db.Parent.First(p => p.ParentID == 2).ParentID);
+				Assert.That(db.Parent.First(p => p.ParentID == 2).ParentID, Is.EqualTo(2));
 		}
 
 		[Test]
 		public void FirstOrDefault([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.IsNull((from p in db.Parent where p.ParentID == 100 select p).FirstOrDefault());
+				Assert.That((from p in db.Parent where p.ParentID == 100 select p).FirstOrDefault(), Is.Null);
 		}
 
 		[Test]
 		public void FirstOrDefaultWhere([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(2, db.Parent.FirstOrDefault(p => p.ParentID == 2)!.ParentID);
+				Assert.That(db.Parent.FirstOrDefault(p => p.ParentID == 2)!.ParentID, Is.EqualTo(2));
 		}
 
 		[Test]
 		public void Single([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(1, db.Parent.Where(p => p.ParentID == 1).Single().ParentID);
+				Assert.That(db.Parent.Where(p => p.ParentID == 1).Single().ParentID, Is.EqualTo(1));
 		}
 
 		[Test]
 		public void SingleWhere([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(2, db.Parent.Single(p => p.ParentID == 2).ParentID);
+				Assert.That(db.Parent.Single(p => p.ParentID == 2).ParentID, Is.EqualTo(2));
 		}
 
 		[Test]
 		public void SingleOrDefault([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.IsNull((from p in db.Parent where p.ParentID == 100 select p).SingleOrDefault());
+				Assert.That((from p in db.Parent where p.ParentID == 100 select p).SingleOrDefault(), Is.Null);
 		}
 
 		[Test]
 		public void SingleOrDefaultWhere([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(2, db.Parent.SingleOrDefault(p => p.ParentID == 2)!.ParentID);
+				Assert.That(db.Parent.SingleOrDefault(p => p.ParentID == 2)!.ParentID, Is.EqualTo(2));
 		}
 
 		[Test]
 		public void FirstOrDefaultScalar([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
-				Assert.AreEqual(
-					   Parent.OrderBy(p => p.ParentID).FirstOrDefault()!.ParentID,
-					db.Parent.OrderBy(p => p.ParentID).FirstOrDefault()!.ParentID);
+				Assert.That(
+					db.Parent.OrderBy(p => p.ParentID).FirstOrDefault()!.ParentID, Is.EqualTo(Parent.OrderBy(p => p.ParentID).FirstOrDefault()!.ParentID));
 		}
 
 		[Test]
 		public void NestedFirstOrDefaultScalar1([DataSources(
-			TestProvName.AllInformix, ProviderName.Sybase, ProviderName.SybaseManaged, TestProvName.AllSapHana)]
+			TestProvName.AllInformix, TestProvName.AllSybase, TestProvName.AllSapHana)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -91,8 +90,11 @@ namespace Tests.Linq
 
 		[Test]
 		public void NestedFirstOrDefaultScalar2([DataSources(
-			TestProvName.AllInformix, TestProvName.AllOracle,
-			ProviderName.Sybase, ProviderName.SybaseManaged, TestProvName.AllSapHana)]
+			TestProvName.AllAccess,
+			TestProvName.AllInformix,
+			TestProvName.AllOracle,
+			TestProvName.AllClickHouse,
+			TestProvName.AllSybase)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -126,6 +128,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
+		[ThrowsForProvider(typeof(LinqToDBException), TestProvName.AllSybase, ErrorMessage = ErrorHelper.Sybase.Error_JoinToDerivedTableWithTakeInvalid)]
 		public void NestedFirstOrDefault1([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
@@ -135,6 +138,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
+		[ThrowsForProvider(typeof(LinqToDBException), TestProvName.AllAccess, TestProvName.AllSybase, ErrorMessage = ErrorHelper.Error_OUTER_Joins)]
 		public void NestedFirstOrDefault2([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
@@ -144,7 +148,8 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void NestedFirstOrDefault3([DataSources(TestProvName.AllInformix, TestProvName.AllSapHana, TestProvName.AllOracle)]
+		[ThrowsForProvider(typeof(LinqToDBException), TestProvName.AllSybase, ErrorMessage = ErrorHelper.Error_OUTER_Joins)]
+		public void NestedFirstOrDefault3([DataSources(TestProvName.AllInformix, TestProvName.AllOracle, TestProvName.AllClickHouse)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -154,7 +159,9 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void NestedFirstOrDefault4([DataSources(TestProvName.AllInformix, TestProvName.AllPostgreSQLLess10)] string context)
+		[ThrowsForProvider(typeof(LinqToDBException), TestProvName.AllClickHouse, ErrorMessage = ErrorHelper.Error_Correlated_Subqueries)]
+		[ThrowsForProvider(typeof(LinqToDBException), TestProvName.AllSQLite, TestProvName.AllAccess, TestProvName.AllFirebirdLess4, TestProvName.AllMySql57, TestProvName.AllSybase, TestProvName.AllOracle11, TestProvName.AllMariaDB, TestProvName.AllDB2, ErrorMessage = ErrorHelper.Error_OUTER_Joins)]
+		public void NestedFirstOrDefault4([DataSources(TestProvName.AllInformix, TestProvName.AllPostgreSQL9)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
@@ -162,22 +169,23 @@ namespace Tests.Linq
 					from p in db.Parent select p.Children.Where(c => c.ParentID > 0).Distinct().OrderBy(_ => _.ChildID).FirstOrDefault());
 		}
 
-		//TODO: Access has nonstandard join, we have to improve it
 		[Test]
-		public void NestedFirstOrDefault5([DataSources(TestProvName.AllAccess)] string context)
+		[ThrowsForProvider(typeof(LinqToDBException), TestProvName.AllAccess, TestProvName.AllSybase, ErrorMessage = ErrorHelper.Error_OUTER_Joins)]
+		public void NestedFirstOrDefault5([DataSources] string context)
 		{
-			using (var db = GetDataContext(context))
-				AreEqual(
-					from p in GrandChild 
-					where p.ChildID > 0
-					select p.Child!.Parent!.Children.OrderBy(c => c.ChildID).FirstOrDefault(),
-					from p in db.GrandChild
-					where p.ChildID > 0
-					select p.Child!.Parent!.Children.OrderBy(c => c.ChildID).FirstOrDefault());
+			using var db = GetDataContext(context);
+
+			AreEqual(
+				from p in GrandChild
+				where p.ChildID > 0
+				select p.Child!.Parent!.Children.OrderBy(c => c.ChildID).FirstOrDefault(),
+				from p in db.GrandChild
+				where p.ChildID > 0
+				select p.Child!.Parent!.Children.OrderBy(c => c.ChildID).FirstOrDefault());
 		}
 
 		[Test]
-		public void NestedSingleOrDefault1([DataSources] string context)
+		public void NestedSingleOrDefault1([DataSources(TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(

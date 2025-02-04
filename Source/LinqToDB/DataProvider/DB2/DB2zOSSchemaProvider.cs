@@ -7,7 +7,7 @@ namespace LinqToDB.DataProvider.DB2
 	using Data;
 	using SchemaProvider;
 
-	class DB2zOSSchemaProvider : DB2LUWSchemaProvider
+	sealed class DB2zOSSchemaProvider : DB2LUWSchemaProvider
 	{
 		public DB2zOSSchemaProvider(DB2DataProvider provider) : base(provider)
 		{
@@ -118,20 +118,20 @@ namespace LinqToDB.DataProvider.DB2
 						Description = rd.ToString(9),
 					};
 
-					SetColumnParameters(ci, Converter.ChangeTypeTo<long?>(size), Converter.ChangeTypeTo<int?> (scale));
+					SetColumnParameters(ci, Converter.ChangeTypeTo<int?>(size), Converter.ChangeTypeTo<int?> (scale));
 
 					return ci;
 				},
 				sql).ToList();
 		}
 
-		static void SetColumnParameters(ColumnInfo ci, long? size, int? scale)
+		static void SetColumnParameters(ColumnInfo ci, int? size, int? scale)
 		{
 			switch (ci.DataType)
 			{
 				case "DECIMAL"                   :
 				case "DECFLOAT"                  :
-					if (size  > 0) ci.Precision = (int)size;
+					if (size  > 0) ci.Precision = size;
 					if (scale > 0) ci.Scale     = scale;
 					break;
 
@@ -189,7 +189,7 @@ namespace LinqToDB.DataProvider.DB2
 						A.CREATOR,
 						A.RELNAME,
 						B.COLSEQ")
-				let   otherColumn = _primaryKeys.Where(pk => pk.TableID == fk.otherTable).ElementAtOrDefault(fk.ordinal - 1)
+				let   otherColumn = _primaryKeys!.Where(pk => pk.TableID == fk.otherTable).ElementAtOrDefault(fk.ordinal - 1)
 				where otherColumn != null
 				select new ForeignKeyInfo
 				{
@@ -205,8 +205,6 @@ namespace LinqToDB.DataProvider.DB2
 
 		protected override List<ProcedureInfo>? GetProcedures(DataConnection dataConnection, GetSchemaOptions options)
 		{
-			LoadCurrentSchema(dataConnection);
-
 			return dataConnection
 				.Query(rd =>
 				{
@@ -232,7 +230,7 @@ namespace LinqToDB.DataProvider.DB2
 						SYSIBM.SYSROUTINES
 					WHERE
 						" + GetSchemaFilter("SCHEMA"))
-				.Where(p => IncludedSchemas.Count != 0 || ExcludedSchemas.Count != 0 || p.SchemaName == CurrentSchema)
+				.Where(p => IncludedSchemas.Count != 0 || ExcludedSchemas.Count != 0 || p.SchemaName == DefaultSchema)
 				.ToList();
 		}
 
@@ -248,7 +246,7 @@ namespace LinqToDB.DataProvider.DB2
 					var dataType = rd.ToString(3);
 					var mode     = ConvertTo<string>.From(rd[4]);
 					var ordinal  = rd[5];
-					var length   = ConvertTo<long?>. From(rd[6]);
+					var length   = ConvertTo<int?>.  From(rd[6]);
 					var scale    = ConvertTo<int?>.  From(rd[7]);
 
 					var ppi = new ProcedureParameterInfo

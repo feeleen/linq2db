@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace LinqToDB.SqlQuery
 {
@@ -21,58 +20,52 @@ namespace LinqToDB.SqlQuery
 
 		internal bool HasUpdate => _update != null;
 
-		public SqlUpdateStatement(SelectQuery selectQuery) : base(selectQuery)
+		public SqlUpdateStatement(SelectQuery? selectQuery) : base(selectQuery)
 		{
 		}
 
-		public override StringBuilder ToString(StringBuilder sb, Dictionary<IQueryElement, IQueryElement> dic)
+		public override QueryElementTextWriter ToString(QueryElementTextWriter writer)
 		{
-			sb.AppendLine("UPDATE");
+			writer
+				.AppendTag(Tag)
+				.AppendElement(With)
+				.AppendLine("UPDATE")
+				.AppendElement(Update)
+				.AppendLine()
+				.AppendElement(SelectQuery)
+				.AppendElement(Output);
 
-			((IQueryElement)Update).ToString(sb, dic);
-
-			sb.AppendLine();
-
-			SelectQuery.ToString(sb, dic);
-
-			return sb;
+			return writer;
 		}
 
-		public override ISqlExpression? Walk(WalkOptions options, Func<ISqlExpression, ISqlExpression> func)
-		{
-			With?.Walk(options, func);
-			((ISqlExpressionWalkable?)_update)?.Walk(options, func);
-			((ISqlExpressionWalkable?)Output)?.Walk(options, func);
-
-			SelectQuery = (SelectQuery)SelectQuery.Walk(options, func);
-
-			return null;
-		}
-
-		public override ISqlTableSource? GetTableSource(ISqlTableSource table)
+		public override ISqlTableSource? GetTableSource(ISqlTableSource table, out bool noAlias)
 		{
 			var result = SelectQuery.GetTableSource(table);
+			noAlias = false;
 
 			if (result != null)
 				return result;
 
-			if (table == _update?.Table)
-				return _update.Table;
+			if (ReferenceEquals(Update.TableSource?.Source, table))
+				return Update.TableSource;
 
-			if (Update != null)
+			if (ReferenceEquals(table, Update.Table))
 			{
-				foreach (var item in Update.Items)
+				noAlias = true;
+				return table;
+			}
+
+			foreach (var item in Update.Items)
+			{
+				if (item.Expression is SelectQuery q)
 				{
-					if (item.Expression is SelectQuery q)
-					{
-						result = q.GetTableSource(table);
-						if (result != null)
-							return result;
-					}
+					result = q.GetTableSource(table);
+					if (result != null)
+						return result;
 				}
 			}
 
-			return result;
+			return null;
 		}
 
 		public override bool IsDependedOn(SqlTable table)

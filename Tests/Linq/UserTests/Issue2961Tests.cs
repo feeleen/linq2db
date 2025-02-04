@@ -98,9 +98,7 @@ namespace Tests.UserTests
 
 				sqlCondos.Invoking(q => q.ToList()).Should().NotThrow();
 
-				var str = sqlCondos.ToString();
-
-				str.Should().ContainAll("CountCondoTags", "CountCondoCategories");
+				sqlCondos.ToSqlQuery().Sql.Should().Contain("COUNT(*)", AtLeast.Twice());
 			}
 		}
 	}

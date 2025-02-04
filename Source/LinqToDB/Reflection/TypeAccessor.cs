@@ -5,6 +5,8 @@ using System.Diagnostics;
 
 namespace LinqToDB.Reflection
 {
+	using Common.Internal;
+
 	[DebuggerDisplay("Type = {" + nameof(Type) + "}")]
 	public abstract class TypeAccessor
 	{
@@ -57,6 +59,11 @@ namespace LinqToDB.Reflection
 				return ma;
 			});
 
+		public MemberAccessor? GetMemberByName(string memberName)
+		{
+			return _membersByName.TryGetValue(memberName, out var accessor) ? accessor : null;
+		}
+
 		public MemberAccessor this[int index] => Members[index];
 
 		#endregion
@@ -74,7 +81,7 @@ namespace LinqToDB.Reflection
 
 			var accessorType = typeof(TypeAccessor<>).MakeGenericType(type);
 
-			accessor = (TypeAccessor)Activator.CreateInstance(accessorType, true)!;
+			accessor = ActivatorExt.CreateInstance<TypeAccessor>(accessorType, true);
 
 			_accessors[type] = accessor;
 

@@ -1,9 +1,11 @@
 ﻿using System;
-using System.Data;
-using LinqToDB.Expressions;
+using System.Data.Common;
+using System.Linq.Expressions;
 
 namespace LinqToDB.DataProvider
 {
+	using Expressions;
+
 	public class OdbcProviderAdapter : IDynamicProviderAdapter
 	{
 		private static readonly object _syncRoot = new object();
@@ -18,18 +20,25 @@ namespace LinqToDB.DataProvider
 			Type parameterType,
 			Type commandType,
 			Type transactionType,
-			Action<IDbDataParameter, OdbcType> dbTypeSetter,
-			Func  <IDbDataParameter, OdbcType> dbTypeGetter)
+			Func<string, DbConnection> connectionFactory,
+			Action<DbParameter, OdbcType> dbTypeSetter,
+			Func  <DbParameter, OdbcType> dbTypeGetter,
+			Func<DbConnection, OdbcConnection> connectionWrapper)
 		{
-			ConnectionType  = connectionType;
-			DataReaderType  = dataReaderType;
-			ParameterType   = parameterType;
-			CommandType     = commandType;
-			TransactionType = transactionType;
+			ConnectionType     = connectionType;
+			DataReaderType     = dataReaderType;
+			ParameterType      = parameterType;
+			CommandType        = commandType;
+			TransactionType    = transactionType;
+			_connectionFactory = connectionFactory;
 
 			SetDbType = dbTypeSetter;
 			GetDbType = dbTypeGetter;
+
+			ConnectionWrapper = connectionWrapper;
 		}
+
+#region IDynamicProviderAdapter
 
 		public Type ConnectionType  { get; }
 		public Type DataReaderType  { get; }
@@ -37,19 +46,29 @@ namespace LinqToDB.DataProvider
 		public Type CommandType     { get; }
 		public Type TransactionType { get; }
 
-		public Action<IDbDataParameter, OdbcType> SetDbType { get; }
-		public Func  <IDbDataParameter, OdbcType> GetDbType { get; }
+		readonly Func<string, DbConnection> _connectionFactory;
+		public DbConnection CreateConnection(string connectionString) => _connectionFactory(connectionString);
+
+#endregion
+
+		public Action<DbParameter, OdbcType> SetDbType { get; }
+		public Func  <DbParameter, OdbcType> GetDbType { get; }
+
+		internal Func<DbConnection, OdbcConnection> ConnectionWrapper { get; }
 
 		public static OdbcProviderAdapter GetInstance()
 		{
 			if (_instance == null)
+			{
 				lock (_syncRoot)
+#pragma warning disable CA1508 // Avoid dead conditional code
 					if (_instance == null)
+#pragma warning restore CA1508 // Avoid dead conditional code
 					{
 #if NETFRAMEWORK
 						var assembly = typeof(System.Data.Odbc.OdbcConnection).Assembly;
 #else
-						var assembly = LinqToDB.Common.Tools.TryLoadAssembly(AssemblyName, null);
+						var assembly = Common.Tools.TryLoadAssembly(AssemblyName, null);
 						if (assembly == null)
 							throw new InvalidOperationException($"Cannot load assembly {AssemblyName}");
 #endif
@@ -64,11 +83,14 @@ namespace LinqToDB.DataProvider
 						var typeMapper = new TypeMapper();
 						typeMapper.RegisterTypeWrapper<OdbcType>(dbType);
 						typeMapper.RegisterTypeWrapper<OdbcParameter>(parameterType);
+						typeMapper.RegisterTypeWrapper<OdbcConnection>(connectionType);
 						typeMapper.FinalizeMappings();
 
+						var connectionFactory = typeMapper.BuildTypedFactory<string, OdbcConnection, DbConnection>((string connectionString) => new OdbcConnection(connectionString));
+
 						var dbTypeBuilder = typeMapper.Type<OdbcParameter>().Member(p => p.OdbcType);
-						var typeSetter    = dbTypeBuilder.BuildSetter<IDbDataParameter>();
-						var typeGetter    = dbTypeBuilder.BuildGetter<IDbDataParameter>();
+						var typeSetter    = dbTypeBuilder.BuildSetter<DbParameter>();
+						var typeGetter    = dbTypeBuilder.BuildGetter<DbParameter>();
 
 						_instance = new OdbcProviderAdapter(
 							connectionType,
@@ -76,9 +98,12 @@ namespace LinqToDB.DataProvider
 							parameterType,
 							commandType,
 							transactionType,
+							connectionFactory,
 							typeSetter,
-							typeGetter);
+							typeGetter,
+							typeMapper.Wrap<OdbcConnection>);
 					}
+			}
 
 			return _instance;
 		}
@@ -86,7 +111,26 @@ namespace LinqToDB.DataProvider
 		#region Wrappers
 
 		[Wrapper]
-		private class OdbcParameter
+		internal sealed class OdbcConnection : TypeWrapper
+		{
+			private static LambdaExpression[] Wrappers { get; } =
+			{
+				// [0]: get Driver
+				(Expression<Func<OdbcConnection, string>>)((OdbcConnection this_) => this_.Driver),
+			};
+
+			public OdbcConnection(object instance, Delegate[] wrappers) : base(instance, wrappers)
+			{
+			}
+
+			public OdbcConnection(string connectionString) => throw new NotImplementedException();
+
+			// implementation returns string.Empty instead of null
+			public string Driver => ((Func<OdbcConnection, string>)CompiledWrappers[0])(this);
+		}
+
+		[Wrapper]
+		private sealed class OdbcParameter
 		{
 			public OdbcType OdbcType { get; set; }
 		}

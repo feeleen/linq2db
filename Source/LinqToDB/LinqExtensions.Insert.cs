@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
@@ -22,7 +23,16 @@ namespace LinqToDB
 		/// <param name="target">Target table.</param>
 		/// <param name="setter">Insert expression. Expression supports only target table record new expression with field initializers.</param>
 		/// <returns>Inserted record.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
 		public static TTarget InsertWithOutput<TTarget>(
 			                this ITable<TTarget>      target,
 			[InstantHandle] Expression<Func<TTarget>> setter)
@@ -31,15 +41,15 @@ namespace LinqToDB
 			if (target == null) throw new ArgumentNullException(nameof(target));
 			if (setter == null) throw new ArgumentNullException(nameof(setter));
 
-			IQueryable<TTarget> query = target;
+			var query = target.GetLinqToDBSource();
 
-			var items = query.Provider.CreateQuery<TTarget>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutput, target, setter),
-					query.Expression, Expression.Quote(setter)));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, target, setter),
+				query.Expression,
+				Expression.Quote(setter));
 
-			return items.AsEnumerable().First();
+			return query.CreateQuery<TTarget>(expr).AsEnumerable().First();
 		}
 
 		/// <summary>
@@ -50,7 +60,16 @@ namespace LinqToDB
 		/// <param name="setter">Insert expression. Expression supports only target table record new expression with field initializers.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Inserted record.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
 		public static Task<TTarget> InsertWithOutputAsync<TTarget>(
 			                this ITable<TTarget>      target,
 			[InstantHandle] Expression<Func<TTarget>> setter,
@@ -60,16 +79,17 @@ namespace LinqToDB
 			if (target == null) throw new ArgumentNullException(nameof(target));
 			if (setter == null) throw new ArgumentNullException(nameof(setter));
 
-			IQueryable<TTarget> query = target;
+			var query = target.GetLinqToDBSource();
 
-			var items = query.Provider.CreateQuery<TTarget>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutput, target, setter),
-					query.Expression, Expression.Quote(setter)));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, target, setter),
+				query.Expression,
+				Expression.Quote(setter));
 
-			return items.AsAsyncEnumerable().FirstAsync(token);
-
+			return query.CreateQuery<TTarget>(expr)
+				.AsAsyncEnumerable()
+				.FirstAsync(token);
 		}
 
 		/// <summary>
@@ -79,7 +99,16 @@ namespace LinqToDB
 		/// <param name="target">Target table.</param>
 		/// <param name="obj">Object with data to insert.</param>
 		/// <returns>Inserted record.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
 		public static TTarget InsertWithOutput<TTarget>(
 			                this ITable<TTarget> target,
 			[InstantHandle] TTarget              obj)
@@ -88,15 +117,15 @@ namespace LinqToDB
 			if (target == null) throw new ArgumentNullException(nameof(target));
 			if (obj    == null) throw new ArgumentNullException(nameof(obj));
 
-			IQueryable<TTarget> query = target;
+			var query = target.GetLinqToDBSource();
 
-			var items = query.Provider.CreateQuery<TTarget>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutput, target, obj),
-					query.Expression, Expression.Constant(obj)));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, target, obj),
+				query.Expression,
+				Expression.Constant(obj));
 
-			return items.AsEnumerable().First();
+			return query.CreateQuery<TTarget>(expr).AsEnumerable().First();
 		}
 
 		/// <summary>
@@ -107,7 +136,16 @@ namespace LinqToDB
 		/// <param name="obj">Object with data to insert.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Inserted record.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
 		public static Task<TTarget> InsertWithOutputAsync<TTarget>(
 			           this ITable<TTarget>   target,
 			[InstantHandle] TTarget           obj,
@@ -117,15 +155,17 @@ namespace LinqToDB
 			if (target == null) throw new ArgumentNullException(nameof(target));
 			if (obj    == null) throw new ArgumentNullException(nameof(obj));
 
-			IQueryable<TTarget> query = target;
+			var query = target.GetLinqToDBSource();
 
-			var items = query.Provider.CreateQuery<TTarget>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutput, target, obj),
-					query.Expression, Expression.Constant(obj)));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, target, obj),
+				query.Expression,
+				Expression.Constant(obj));
 
-			return items.AsAsyncEnumerable().FirstOrDefaultAsync(token);
+			return query.CreateQuery<TTarget>(expr)
+				.AsAsyncEnumerable()
+				.FirstAsync(token);
 		}
 
 		/// <summary>
@@ -138,7 +178,16 @@ namespace LinqToDB
 		/// <param name="outputExpression">Output record constructor expression.
 		/// Expression supports only record new expression with field initializers.</param>
 		/// <returns>Inserted record.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
 		public static TOutput InsertWithOutput<TTarget,TOutput>(
 			                this ITable<TTarget>              target,
 			[InstantHandle] Expression<Func<TTarget>>         setter,
@@ -149,15 +198,16 @@ namespace LinqToDB
 			if (setter           == null) throw new ArgumentNullException(nameof(setter));
 			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
 
-			IQueryable<TTarget> query = target;
+			var query = target.GetLinqToDBSource();
 
-			var items = query.Provider.CreateQuery<TOutput>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutput, target, setter, outputExpression),
-					query.Expression, Expression.Quote(setter), Expression.Quote(outputExpression)));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, target, setter, outputExpression),
+				query.Expression,
+				Expression.Quote(setter),
+				Expression.Quote(outputExpression));
 
-			return items.AsEnumerable().First();
+			return query.CreateQuery<TOutput>(expr).AsEnumerable().First();
 		}
 
 		/// <summary>
@@ -171,7 +221,16 @@ namespace LinqToDB
 		/// Expression supports only record new expression with field initializers.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Inserted record.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
 		public static Task<TOutput> InsertWithOutputAsync<TTarget,TOutput>(
 			                this ITable<TTarget>              target,
 			[InstantHandle] Expression<Func<TTarget>>         setter,
@@ -184,15 +243,18 @@ namespace LinqToDB
 			if (setter           == null) throw new ArgumentNullException(nameof(setter));
 			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
 
-			IQueryable<TTarget> query = target;
+			var query = target.GetLinqToDBSource();
 
-			var items = query.Provider.CreateQuery<TOutput>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutput, target, setter, outputExpression),
-					query.Expression, Expression.Quote(setter), Expression.Quote(outputExpression)));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, target, setter, outputExpression),
+				query.Expression,
+				Expression.Quote(setter),
+				Expression.Quote(outputExpression));
 
-			return items.AsAsyncEnumerable().FirstAsync(token);
+			return query.CreateQuery<TOutput>(expr)
+				.AsAsyncEnumerable()
+				.FirstAsync(token);
 		}
 
 		/// <summary>
@@ -203,7 +265,12 @@ namespace LinqToDB
 		/// <param name="setter">Insert expression. Expression supports only target table record new expression with field initializers.</param>
 		/// <param name="outputTable">Output table.</param>
 		/// <returns>Number of affected records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// </list>
+		/// </remarks>
 		public static int InsertWithOutputInto<TTarget>(
 			                this ITable<TTarget>      target,
 			[InstantHandle] Expression<Func<TTarget>> setter,
@@ -214,13 +281,16 @@ namespace LinqToDB
 			if (setter      == null) throw new ArgumentNullException(nameof(setter));
 			if (outputTable == null) throw new ArgumentNullException(nameof(outputTable));
 
-			IQueryable<TTarget> query = target;
+			var query = target.GetLinqToDBSource();
 
-			return query.Provider.Execute<int>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutputInto, target, setter, outputTable),
-					query.Expression, Expression.Quote(setter), ((IQueryable<TTarget>)outputTable).Expression));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutputInto, target, setter, outputTable),
+				query.Expression,
+				Expression.Quote(setter),
+				((IQueryable<TTarget>)outputTable).Expression);
+
+			return query.Execute<int>(expr);
 		}
 
 		/// <summary>
@@ -232,7 +302,12 @@ namespace LinqToDB
 		/// <param name="outputTable">Output table.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Number of affected records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// </list>
+		/// </remarks>
 		public static Task<int> InsertWithOutputIntoAsync<TTarget>(
 			                this ITable<TTarget>      target,
 			[InstantHandle] Expression<Func<TTarget>> setter,
@@ -244,18 +319,16 @@ namespace LinqToDB
 			if (setter      == null) throw new ArgumentNullException(nameof(setter));
 			if (outputTable == null) throw new ArgumentNullException(nameof(outputTable));
 
-			IQueryable<TTarget> query = target;
+			var query = target.GetLinqToDBSource();
 
-			var expr =
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutputInto, target, setter, outputTable),
-					query.Expression, Expression.Quote(setter), ((IQueryable<TTarget>)outputTable).Expression);
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutputInto, target, setter, outputTable),
+				query.Expression,
+				Expression.Quote(setter),
+				((IQueryable<TTarget>)outputTable).Expression);
 
-			if (query is IQueryProviderAsync queryAsync)
-				return queryAsync.ExecuteAsync<int>(expr, token);
-
-			return TaskEx.Run(() => query.Provider.Execute<int>(expr), token);
+			return query.ExecuteAsync<int>(expr, token);
 		}
 
 		/// <summary>
@@ -269,7 +342,12 @@ namespace LinqToDB
 		/// <param name="outputExpression">Output record constructor expression.
 		/// Expression supports only record new expression with field initializers.</param>
 		/// <returns>Number of affected records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// </list>
+		/// </remarks>
 		public static int InsertWithOutputInto<TTarget,TOutput>(
 			                this ITable<TTarget>              target,
 			[InstantHandle] Expression<Func<TTarget>>         setter,
@@ -283,14 +361,17 @@ namespace LinqToDB
 			if (outputTable      == null) throw new ArgumentNullException(nameof(outputTable));
 			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
 
-			IQueryable<TTarget> query = target;
+			var query = target.GetLinqToDBSource();
 
-			return query.Provider.Execute<int>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutputInto, target, setter, outputTable, outputExpression),
-					query.Expression, Expression.Quote(setter), ((IQueryable<TTarget>)outputTable).Expression,
-					Expression.Quote(outputExpression)));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutputInto, target, setter, outputTable, outputExpression),
+				query.Expression,
+				Expression.Quote(setter),
+				((IQueryable<TOutput>)outputTable).Expression,
+				Expression.Quote(outputExpression));
+
+			return query.Execute<int>(expr);
 		}
 
 		/// <summary>
@@ -305,7 +386,12 @@ namespace LinqToDB
 		/// Expression supports only record new expression with field initializers.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Number of affected records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// </list>
+		/// </remarks>
 		public static Task<int> InsertWithOutputIntoAsync<TTarget,TOutput>(
 			                this ITable<TTarget>              target,
 			[InstantHandle] Expression<Func<TTarget>>         setter,
@@ -320,21 +406,18 @@ namespace LinqToDB
 			if (outputTable      == null) throw new ArgumentNullException(nameof(outputTable));
 			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
 
-			IQueryable<TTarget> query = target;
+			var query = target.GetLinqToDBSource();
 
-			var expr =
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutputInto, target, setter, outputTable, outputExpression),
-					query.Expression, Expression.Quote(setter), ((IQueryable<TTarget>)outputTable).Expression,
-					Expression.Quote(outputExpression));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutputInto, target, setter, outputTable, outputExpression),
+				query.Expression,
+				Expression.Quote(setter),
+				((IQueryable<TOutput>)outputTable).Expression,
+				Expression.Quote(outputExpression));
 
-			if (query is IQueryProviderAsync queryAsync)
-				return queryAsync.ExecuteAsync<int>(expr, token);
-
-			return TaskEx.Run(() => query.Provider.Execute<int>(expr), token);
+			return query.ExecuteAsync<int>(expr, token);
 		}
-
 
 		#region Many records
 
@@ -348,7 +431,16 @@ namespace LinqToDB
 		/// <param name="setter">Inserted record constructor expression.
 		/// Expression supports only target table record new expression with field initializers.</param>
 		/// <returns>Enumeration of records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+ (prior version 5 returns only one record; database limitation)</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
 		public static IEnumerable<TTarget> InsertWithOutput<TSource,TTarget>(
 			                this IQueryable<TSource>          source,
 			                ITable<TTarget>                   target,
@@ -359,14 +451,58 @@ namespace LinqToDB
 			if (target           == null) throw new ArgumentNullException(nameof(target));
 			if (setter           == null) throw new ArgumentNullException(nameof(setter));
 
-			var currentSource = ProcessSourceQueryable?.Invoke(source) ?? source;
+			var currentSource = source.GetLinqToDBSource();
 
-			return currentSource.Provider.CreateQuery<TTarget>(
-					Expression.Call(
-						null,
-						MethodHelper.GetMethodInfo(InsertWithOutput, source, target, setter),
-						currentSource.Expression, ((IQueryable<TTarget>)target).Expression, Expression.Quote(setter)))
-				.AsEnumerable();
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, source, target, setter),
+				currentSource.Expression,
+				((IQueryable<TTarget>)target).Expression,
+				Expression.Quote(setter));
+
+			return currentSource.CreateQuery<TTarget>(expr).AsEnumerable();
+		}
+
+		/// <summary>
+		/// Inserts records from source query into target table asynchronously and returns newly created records.
+		/// </summary>
+		/// <typeparam name="TSource">Source query record type.</typeparam>
+		/// <typeparam name="TTarget">Target table record type.</typeparam>
+		/// <param name="source">Source query, that returns data for insert operation.</param>
+		/// <param name="target">Target table.</param>
+		/// <param name="setter">Inserted record constructor expression.
+		/// Expression supports only target table record new expression with field initializers.</param>
+		/// <returns>Async sequence of records returned by output.</returns>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+ (prior version 5 returns only one record; database limitation)</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
+		public static IAsyncEnumerable<TTarget> InsertWithOutputAsync<TSource, TTarget>(
+			                this IQueryable<TSource>           source,
+			                ITable<TTarget>                    target,
+			[InstantHandle] Expression<Func<TSource, TTarget>> setter)
+			where TTarget : notnull
+		{
+			if (source == null) throw new ArgumentNullException(nameof(source));
+			if (target == null) throw new ArgumentNullException(nameof(target));
+			if (setter == null) throw new ArgumentNullException(nameof(setter));
+
+			var currentSource = source.GetLinqToDBSource();
+
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, source, target, setter),
+				currentSource.Expression,
+				((IQueryable<TTarget>)target).Expression,
+				Expression.Quote(setter));
+
+			return currentSource.CreateQuery<TTarget>(expr).AsAsyncEnumerable();
 		}
 
 		/// <summary>
@@ -380,25 +516,26 @@ namespace LinqToDB
 		/// Expression supports only target table record new expression with field initializers.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Array of records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+ (doesn't support more than one record; database limitation)</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
+		// TODO: Remove in v7
+		[Obsolete("Use overload with IAsyncEnumerable return type. API will be removed in version 7"), EditorBrowsable(EditorBrowsableState.Never)]
 		public static Task<TTarget[]> InsertWithOutputAsync<TSource, TTarget>(
-			                this IQueryable<TSource>           source,
-			                ITable<TTarget>                    target,
+							IQueryable<TSource> source,
+							ITable<TTarget> target,
 			[InstantHandle] Expression<Func<TSource, TTarget>> setter,
-							CancellationToken                  token = default)
+							CancellationToken token)
 			where TTarget : notnull
 		{
-			if (source == null) throw new ArgumentNullException(nameof(source));
-			if (target == null) throw new ArgumentNullException(nameof(target));
-			if (setter == null) throw new ArgumentNullException(nameof(setter));
-
-			var currentSource = ProcessSourceQueryable?.Invoke(source) ?? source;
-
-			return currentSource.Provider.CreateQuery<TTarget>(
-					Expression.Call(
-						null,
-						MethodHelper.GetMethodInfo(InsertWithOutput, source, target, setter),
-						currentSource.Expression, ((IQueryable<TTarget>)target).Expression, Expression.Quote(setter)))
+			return InsertWithOutputAsync(source, target, setter)
 				.ToArrayAsync(token);
 		}
 
@@ -415,7 +552,16 @@ namespace LinqToDB
 		/// <param name="outputExpression">Output record constructor expression.
 		/// Expression supports only record new expression with field initializers.</param>
 		/// <returns>Enumeration of records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+ (prior version 5 returns only one record; database limitation)</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
 		[Pure]
 		public static IEnumerable<TOutput> InsertWithOutput<TSource,TTarget,TOutput>(
 			                this IQueryable<TSource>          source,
@@ -429,15 +575,65 @@ namespace LinqToDB
 			if (setter           == null) throw new ArgumentNullException(nameof(setter));
 			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
 
-			var currentSource = ProcessSourceQueryable?.Invoke(source) ?? source;
+			var currentSource = source.GetLinqToDBSource();
 
-			return currentSource.Provider.CreateQuery<TOutput>(
-					Expression.Call(
-						null,
-						MethodHelper.GetMethodInfo(InsertWithOutput, source, target, setter, outputExpression),
-						currentSource.Expression, ((IQueryable<TTarget>)target).Expression, Expression.Quote(setter),
-						Expression.Quote(outputExpression)))
-				.AsEnumerable();
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, source, target, setter, outputExpression),
+				currentSource.Expression,
+				((IQueryable<TTarget>)target).Expression,
+				Expression.Quote(setter),
+				Expression.Quote(outputExpression));
+
+			return currentSource.CreateQuery<TOutput>(expr).AsEnumerable();
+		}
+
+		/// <summary>
+		/// Inserts records from source query into target table asynchronously and returns newly created records.
+		/// </summary>
+		/// <typeparam name="TSource">Source query record type.</typeparam>
+		/// <typeparam name="TTarget">Target table record type.</typeparam>
+		/// <typeparam name="TOutput">Output table record type.</typeparam>
+		/// <param name="source">Source query, that returns data for insert operation.</param>
+		/// <param name="target">Target table.</param>
+		/// <param name="setter">Inserted record constructor expression.
+		/// Expression supports only target table record new expression with field initializers.</param>
+		/// <param name="outputExpression">Output record constructor expression.
+		/// Expression supports only record new expression with field initializers.</param>
+		/// <returns>Async sequence of records returned by output.</returns>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+ (prior version 5 returns only one record; database limitation)</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
+		public static IAsyncEnumerable<TOutput> InsertWithOutputAsync<TSource, TTarget, TOutput>(
+							this IQueryable<TSource> source,
+							ITable<TTarget> target,
+			[InstantHandle] Expression<Func<TSource, TTarget>> setter,
+							Expression<Func<TTarget, TOutput>> outputExpression)
+			where TTarget : notnull
+		{
+			if (source           == null) throw new ArgumentNullException(nameof(source));
+			if (target           == null) throw new ArgumentNullException(nameof(target));
+			if (setter           == null) throw new ArgumentNullException(nameof(setter));
+			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
+
+			var currentSource = source.GetLinqToDBSource();
+
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, source, target, setter, outputExpression),
+				currentSource.Expression,
+				((IQueryable<TTarget>)target).Expression,
+				Expression.Quote(setter),
+				Expression.Quote(outputExpression));
+
+			return currentSource.CreateQuery<TOutput>(expr).AsAsyncEnumerable();
 		}
 
 		/// <summary>
@@ -454,28 +650,27 @@ namespace LinqToDB
 		/// Expression supports only record new expression with field initializers.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Array of records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
-		public static Task<TOutput[]> InsertWithOutputAsync<TSource,TTarget,TOutput>(
-			                this IQueryable<TSource>          source,
-			                ITable<TTarget>                   target,
-			[InstantHandle] Expression<Func<TSource,TTarget>> setter,
-			                Expression<Func<TTarget,TOutput>> outputExpression,
-							CancellationToken                 token = default)
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+ (doesn't support more than one record; database limitation)</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
+		// TODO: Remove in v7
+		[Obsolete("Use overload with IAsyncEnumerable return type. API will be removed in version 7"), EditorBrowsable(EditorBrowsableState.Never)]
+		public static Task<TOutput[]> InsertWithOutputAsync<TSource, TTarget, TOutput>(
+							IQueryable<TSource> source,
+							ITable<TTarget> target,
+			[InstantHandle] Expression<Func<TSource, TTarget>> setter,
+							Expression<Func<TTarget, TOutput>> outputExpression,
+							CancellationToken token)
 			where TTarget : notnull
 		{
-			if (source           == null) throw new ArgumentNullException(nameof(source));
-			if (target           == null) throw new ArgumentNullException(nameof(target));
-			if (setter           == null) throw new ArgumentNullException(nameof(setter));
-			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
-
-			var currentSource = ProcessSourceQueryable?.Invoke(source) ?? source;
-
-			return currentSource.Provider.CreateQuery<TOutput>(
-					Expression.Call(
-						null,
-						MethodHelper.GetMethodInfo(InsertWithOutput, source, target, setter, outputExpression),
-						currentSource.Expression, ((IQueryable<TTarget>) target).Expression, Expression.Quote(setter),
-						Expression.Quote(outputExpression)))
+			return InsertWithOutputAsync(source, target, setter, outputExpression)
 				.ToArrayAsync(token);
 		}
 
@@ -490,7 +685,12 @@ namespace LinqToDB
 		/// Expression supports only target table record new expression with field initializers.</param>
 		/// <param name="outputTable">Output table.</param>
 		/// <returns>Number of affected records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// </list>
+		/// </remarks>
 		public static int InsertWithOutputInto<TSource,TTarget>(
 			                this IQueryable<TSource>          source,
 			                ITable<TTarget>                   target,
@@ -503,13 +703,17 @@ namespace LinqToDB
 			if (setter      == null) throw new ArgumentNullException(nameof(setter));
 			if (outputTable == null) throw new ArgumentNullException(nameof(outputTable));
 
-			var currentSource = ProcessSourceQueryable?.Invoke(source) ?? source;
+			var currentSource = source.GetLinqToDBSource();
 
-			return currentSource.Provider.Execute<int>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutputInto, source, target, setter, outputTable),
-					currentSource.Expression, ((IQueryable<TTarget>)target).Expression, Expression.Quote(setter), ((IQueryable<TTarget>)outputTable).Expression));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutputInto, source, target, setter, outputTable),
+				currentSource.Expression,
+				((IQueryable<TTarget>)target).Expression,
+				Expression.Quote(setter),
+				((IQueryable<TTarget>)outputTable).Expression);
+
+			return currentSource.Execute<int>(expr);
 		}
 
 		/// <summary>
@@ -524,7 +728,12 @@ namespace LinqToDB
 		/// <param name="outputTable">Output table.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Number of affected records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// </list>
+		/// </remarks>
 		public static Task<int> InsertWithOutputIntoAsync<TSource,TTarget>(
 			                this IQueryable<TSource>          source,
 			                ITable<TTarget>                   target,
@@ -538,18 +747,17 @@ namespace LinqToDB
 			if (setter      == null) throw new ArgumentNullException(nameof(setter));
 			if (outputTable == null) throw new ArgumentNullException(nameof(outputTable));
 
-			var currentSource = ProcessSourceQueryable?.Invoke(source) ?? source;
+			var currentSource = source.GetLinqToDBSource();
 
-			var expr =
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutputInto, source, target, setter, outputTable),
-					currentSource.Expression, ((IQueryable<TTarget>)target).Expression, Expression.Quote(setter), ((IQueryable<TTarget>)outputTable).Expression);
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutputInto, source, target, setter, outputTable),
+				currentSource.Expression,
+				((IQueryable<TTarget>)target).Expression,
+				Expression.Quote(setter),
+				((IQueryable<TTarget>)outputTable).Expression);
 
-			if (source is IQueryProviderAsync queryAsync)
-				return queryAsync.ExecuteAsync<int>(expr, token);
-
-			return TaskEx.Run(() => source.Provider.Execute<int>(expr), token);
+			return currentSource.ExecuteAsync<int>(expr, token);
 		}
 
 		/// <summary>
@@ -566,7 +774,12 @@ namespace LinqToDB
 		/// <param name="outputExpression">Output record constructor expression.
 		/// Expression supports only record new expression with field initializers.</param>
 		/// <returns>Number of affected records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// </list>
+		/// </remarks>
 		public static int InsertWithOutputInto<TSource,TTarget,TOutput>(
 			                this IQueryable<TSource>          source,
 			                ITable<TTarget>                   target,
@@ -582,14 +795,18 @@ namespace LinqToDB
 			if (outputTable      == null) throw new ArgumentNullException(nameof(outputTable));
 			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
 
-			var currentSource = ProcessSourceQueryable?.Invoke(source) ?? source;
+			var currentSource = source.GetLinqToDBSource();
 
-			return source.Provider.Execute<int>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutputInto, source, target, setter, outputTable, outputExpression),
-					currentSource.Expression, ((IQueryable<TTarget>)target).Expression, Expression.Quote(setter),
-					((IQueryable<TTarget>)outputTable).Expression, Expression.Quote(outputExpression)));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutputInto, source, target, setter, outputTable, outputExpression),
+				currentSource.Expression,
+				((IQueryable<TTarget>)target).Expression,
+				Expression.Quote(setter),
+				((IQueryable<TOutput>)outputTable).Expression,
+				Expression.Quote(outputExpression));
+
+			return currentSource.Execute<int>(expr);
 		}
 
 		/// <summary>
@@ -607,7 +824,12 @@ namespace LinqToDB
 		/// Expression supports only record new expression with field initializers.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Number of affected records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// </list>
+		/// </remarks>
 		public static Task<int> InsertWithOutputIntoAsync<TSource,TTarget,TOutput>(
 			                this IQueryable<TSource>          source,
 			                ITable<TTarget>                   target,
@@ -624,19 +846,18 @@ namespace LinqToDB
 			if (outputTable      == null) throw new ArgumentNullException(nameof(outputTable));
 			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
 
-			var currentSource = ProcessSourceQueryable?.Invoke(source) ?? source;
+			var currentSource = source.GetLinqToDBSource();
 
-			var expr =
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutputInto, source, target, setter, outputTable, outputExpression),
-					currentSource.Expression, ((IQueryable<TTarget>)target).Expression, Expression.Quote(setter),
-					((IQueryable<TTarget>)outputTable).Expression, Expression.Quote(outputExpression));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutputInto, source, target, setter, outputTable, outputExpression),
+				currentSource.Expression,
+				((IQueryable<TTarget>)target).Expression,
+				Expression.Quote(setter),
+				((IQueryable<TOutput>)outputTable).Expression,
+				Expression.Quote(outputExpression));
 
-			if (currentSource is IQueryProviderAsync queryAsync)
-				return queryAsync.ExecuteAsync<int>(expr, token);
-
-			return TaskEx.Run(() => currentSource.Provider.Execute<int>(expr), token);
+			return currentSource.ExecuteAsync<int>(expr, token);
 		}
 
 		/// <summary>
@@ -646,20 +867,28 @@ namespace LinqToDB
 		/// <typeparam name="TTarget">Target table record type.</typeparam>
 		/// <param name="source">Insert query.</param>
 		/// <returns>Inserted record.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+ (prior version 5 returns only one record; database limitation)</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
 		public static TTarget InsertWithOutput<TSource,TTarget>(this ISelectInsertable<TSource,TTarget> source)
 		{
 			if (source == null) throw new ArgumentNullException(nameof(source));
 
-			var query = ((SelectInsertable<TSource,TTarget>)source).Query;
+			var query = ((SelectInsertable<TSource,TTarget>)source).Query.GetLinqToDBSource();
 
-			var items = query.Provider.CreateQuery<TTarget>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutput, source),
-					query.Expression));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, source),
+				query.Expression);
 
-			return items.AsEnumerable().First();
+			return query.CreateQuery<TTarget>(expr).First();
 		}
 
 		/// <summary>
@@ -670,22 +899,32 @@ namespace LinqToDB
 		/// <param name="source">Insert query.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Inserted record.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+ (prior version 5 returns only one record; database limitation)</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
 		public static Task<TTarget> InsertWithOutputAsync<TSource,TTarget>(
 			this ISelectInsertable<TSource,TTarget> source,
 			     CancellationToken                  token = default)
 		{
 			if (source == null) throw new ArgumentNullException(nameof(source));
 
-			var query = ((SelectInsertable<TSource,TTarget>)source).Query;
+			var query = ((SelectInsertable<TSource,TTarget>)source).Query.GetLinqToDBSource();
 
-			var items = query.Provider.CreateQuery<TTarget>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutput, source),
-					query.Expression));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, source),
+				query.Expression);
 
-			return items.AsAsyncEnumerable().FirstAsync(token);
+			return query.CreateQuery<TTarget>(expr)
+				.AsAsyncEnumerable()
+				.FirstAsync(token);
 		}
 
 		/// <summary>
@@ -696,7 +935,12 @@ namespace LinqToDB
 		/// <param name="source">Insert query.</param>
 		/// <param name="outputTable">Output table.</param>
 		/// <returns>Number of affected records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// </list>
+		/// </remarks>
 		public static int InsertWithOutputInto<TSource,TTarget>(
 			this ISelectInsertable<TSource,TTarget> source,
 			     ITable<TTarget>                    outputTable)
@@ -705,13 +949,15 @@ namespace LinqToDB
 			if (source      == null) throw new ArgumentNullException(nameof(source));
 			if (outputTable == null) throw new ArgumentNullException(nameof(outputTable));
 
-			var query = ((SelectInsertable<TSource,TTarget>)source).Query;
+			var query = ((SelectInsertable<TSource,TTarget>)source).Query.GetLinqToDBSource();
 
-			return query.Provider.Execute<int>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutputInto, source, outputTable),
-					query.Expression, ((IQueryable<TTarget>)outputTable).Expression));
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutputInto, source, outputTable),
+				query.Expression,
+				((IQueryable<TTarget>)outputTable).Expression);
+
+			return query.Execute<int>(expr);
 		}
 
 		/// <summary>
@@ -723,7 +969,12 @@ namespace LinqToDB
 		/// <param name="outputTable">Output table.</param>
 		/// <param name="token">Optional asynchronous operation cancellation token.</param>
 		/// <returns>Number of affected records.</returns>
-		/// <remarks>Supported Providers: MS SQL</remarks>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// </list>
+		/// </remarks>
 		public static Task<int> InsertWithOutputIntoAsync<TSource,TTarget>(
 			this ISelectInsertable<TSource,TTarget> source,
 			     ITable<TTarget>                    outputTable,
@@ -734,20 +985,159 @@ namespace LinqToDB
 			if (source      == null) throw new ArgumentNullException(nameof(source));
 			if (outputTable == null) throw new ArgumentNullException(nameof(outputTable));
 
-			var query = ((SelectInsertable<TSource,TTarget>)source).Query;
+			var query = ((SelectInsertable<TSource,TTarget>)source).Query.GetLinqToDBSource();
 
-			var expr =
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(InsertWithOutputInto, source, outputTable),
-					query.Expression, ((IQueryable<TTarget>)outputTable).Expression);
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutputInto, source, outputTable),
+				query.Expression,
+				((IQueryable<TTarget>)outputTable).Expression);
 
-			if (query is IQueryProviderAsync queryAsync)
-				return queryAsync.ExecuteAsync<int>(expr, token);
-
-			return TaskEx.Run(() => query.Provider.Execute<int>(expr), token);
+			return query.ExecuteAsync<int>(expr, token);
 		}
 
+		#endregion
+
+		#region IValueInsertable
+		/// <summary>
+		/// Inserts single record into target table and returns inserted record.
+		/// </summary>
+		/// <typeparam name="T">Target table record type.</typeparam>
+		/// <param name="source">Insert query.</param>
+		/// <returns>Inserted record.</returns>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
+		public static T InsertWithOutput<T>(this IValueInsertable<T> source)
+		{
+			if (source == null) throw new ArgumentNullException(nameof(source));
+
+			var query         = ((ValueInsertable<T>)source).Query;
+			var currentSource = query.GetLinqToDBSource();
+
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, source),
+				currentSource.Expression);
+
+			return currentSource.CreateQuery<T>(expr).AsEnumerable().First();
+		}
+
+		/// <summary>
+		/// Inserts single record into target table asynchronously and returns inserted record.
+		/// </summary>
+		/// <typeparam name="T">Target table record type.</typeparam>
+		/// <param name="source">Insert query.</param>
+		/// <param name="token">Optional asynchronous operation cancellation token.</param>
+		/// <returns>Inserted record.</returns>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
+		public static Task<T> InsertWithOutputAsync<T>(this IValueInsertable<T> source, CancellationToken token = default)
+		{
+			if (source == null) throw new ArgumentNullException(nameof(source));
+
+			var query         = ((ValueInsertable<T>)source).Query;
+			var currentSource = query.GetLinqToDBSource();
+
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, source),
+				currentSource.Expression);
+
+			return currentSource.CreateQuery<T>(expr)
+				.AsAsyncEnumerable()
+				.FirstAsync(token);
+		}
+
+		/// <summary>
+		/// Inserts single record into target table and returns inserted record.
+		/// </summary>
+		/// <typeparam name="T">Target table record type.</typeparam>
+		/// <typeparam name="TOutput">Output table record type.</typeparam>
+		/// <param name="source">Insert query.</param>
+		/// <param name="outputExpression">Output record constructor expression.
+		/// Expression supports only record new expression with field initializers.</param>
+		/// <returns>Inserted record.</returns>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
+		public static TOutput InsertWithOutput<T, TOutput>(this IValueInsertable<T> source, Expression<Func<T, TOutput>> outputExpression)
+		{
+			if (source == null) throw new ArgumentNullException(nameof(source));
+			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
+
+			var query         = ((ValueInsertable<T>)source).Query;
+			var currentSource = query.GetLinqToDBSource();
+
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, source, outputExpression),
+				currentSource.Expression,
+				Expression.Quote(outputExpression));
+
+			return currentSource.CreateQuery<TOutput>(expr).AsEnumerable().First();
+		}
+
+		/// <summary>
+		/// Inserts single record into target table asynchronously and returns inserted record.
+		/// </summary>
+		/// <typeparam name="T">Target table record type.</typeparam>
+		/// <typeparam name="TOutput">Output table record type.</typeparam>
+		/// <param name="source">Insert query.</param>
+		/// <param name="outputExpression">Output record constructor expression.
+		/// Expression supports only record new expression with field initializers.</param>
+		/// <param name="token">Optional asynchronous operation cancellation token.</param>
+		/// <returns>Inserted record.</returns>
+		/// <remarks>
+		/// Database support:
+		/// <list type="bullet">
+		/// <item>SQL Server 2005+</item>
+		/// <item>Firebird 2.5+</item>
+		/// <item>PostgreSQL</item>
+		/// <item>SQLite 3.35+</item>
+		/// <item>MariaDB 10.5+</item>
+		/// </list>
+		/// </remarks>
+		public static Task<TOutput> InsertWithOutputAsync<T, TOutput>(this IValueInsertable<T> source, Expression<Func<T, TOutput>> outputExpression, CancellationToken token = default)
+		{
+			if (source == null) throw new ArgumentNullException(nameof(source));
+			if (outputExpression == null) throw new ArgumentNullException(nameof(outputExpression));
+
+			var query         = ((ValueInsertable<T>)source).Query;
+			var currentSource = query.GetLinqToDBSource();
+
+			var expr = Expression.Call(
+				null,
+				MethodHelper.GetMethodInfo(InsertWithOutput, source, outputExpression),
+				currentSource.Expression,
+				Expression.Quote(outputExpression));
+
+			return currentSource.CreateQuery<TOutput>(expr)
+				.AsAsyncEnumerable()
+				.FirstAsync(token);
+		}
 		#endregion
 	}
 }

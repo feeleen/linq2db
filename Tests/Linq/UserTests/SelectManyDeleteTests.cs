@@ -13,13 +13,13 @@ namespace Tests.UserTests
 	public class SelectManyDeleteTests : TestBase
 	{
 		[Table(Name = "GrandChild")]
-		new class GrandChild
+		new sealed class GrandChild
 		{
 			[Column] public int ChildID { get; set; }
 		}
 
 		[Table(Name = "Child")]
-		new class Child
+		new sealed class Child
 		{
 			[Column] public int ParentID { get; set; }
 			[Column] public int ChildID  { get; set; }
@@ -29,7 +29,7 @@ namespace Tests.UserTests
 		}
 
 		[Table(Name = "Parent")]
-		new class Parent
+		new sealed class Parent
 		{
 			[Identity, PrimaryKey(1)]
 			public int ParentID { get; set; }
@@ -38,16 +38,9 @@ namespace Tests.UserTests
 			public List<Child> Children { get; set; } = null!;
 		}
 
+		[ThrowsForProvider(typeof(LinqToDBException), TestProvName.AllClickHouse, ErrorMessage = ErrorHelper.ClickHouse.Error_CorrelatedDelete)]
 		[Test]
-		public void Test([DataSources(
-			ProviderName.Access,
-			ProviderName.DB2,
-			TestProvName.AllInformix,
-			TestProvName.AllOracle,
-			ProviderName.SqlCe,
-			TestProvName.AllSQLite,
-			TestProvName.AllSapHana)]
-			string context)
+		public void Test([DataSources] string context)
 		{
 			var harnessIds = new int[2];
 

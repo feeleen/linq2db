@@ -2,9 +2,12 @@
 using System.Linq;
 using System.Linq.Expressions;
 
+using FluentAssertions;
+
 using LinqToDB;
 using LinqToDB.Data;
 using LinqToDB.Linq.Builder;
+using LinqToDB.Linq.Internal;
 using LinqToDB.Mapping;
 using LinqToDB.SqlQuery;
 using LinqToDB.Tools.Comparers;
@@ -19,7 +22,7 @@ namespace Tests.Linq
 	public class FromSqlTests : TestBase
 	{
 		[Table(Name = "sample_class")]
-		class SampleClass
+		sealed class SampleClass
 		{
 			[Column("id")]
 			public int Id    { get; set; }
@@ -33,7 +36,7 @@ namespace Tests.Linq
 		}
 
 		[Table(Name = "sample_other_class")]
-		class SomeOtherClass
+		sealed class SomeOtherClass
 		{
 			[Column("id")]
 			public int Id       { get; set; }
@@ -50,7 +53,7 @@ namespace Tests.Linq
 			return Enumerable.Range(1, 20).Select(i => new SampleClass {Id = i, Value = "Str_" + i}).ToArray();
 		}
 
-		class ToTableName<T> : IToSqlConverter
+		sealed class ToTableName<T> : IToSqlConverter
 			where T : notnull
 		{
 			public ToTableName(ITable<T> table)
@@ -60,11 +63,11 @@ namespace Tests.Linq
 
 			readonly ITable<T> _table;
 
-			public ISqlExpression ToSql(Expression expression)
+			public ISqlExpression ToSql(object value)
 			{
-				return new SqlTable()
+				return new SqlTable(MappingSchema.Default.GetEntityDescriptor(typeof(T)))
 				{
-					PhysicalName = _table.TableName
+					TableName = new (_table.TableName)
 				};
 			}
 		}
@@ -75,7 +78,7 @@ namespace Tests.Linq
 			return new ToTableName<T>(table);
 		}
 
-		class ToColumnName : IToSqlConverter
+		sealed class ToColumnName : IToSqlConverter
 		{
 			public ToColumnName(string columnName)
 			{
@@ -84,7 +87,7 @@ namespace Tests.Linq
 
 			readonly string _columnName;
 
-			public ISqlExpression ToSql(Expression expression)
+			public ISqlExpression ToSql(object value)
 			{
 				return new SqlField(_columnName, _columnName);
 			}
@@ -107,15 +110,17 @@ namespace Tests.Linq
 				var projection = query
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
 				var expected = table
 					.Where(t => t.Id >= startId && t.Id < endId)
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
-				Assert.AreEqual(expected, projection);
+				Assert.That(projection, Is.EqualTo(expected));
 			}
 		}
 
@@ -132,15 +137,17 @@ namespace Tests.Linq
 				var projection = query
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
 				var expected = table
 					.Where(t => t.Id >= startId && t.Id < endId)
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
-				Assert.AreEqual(expected, projection);
+				Assert.That(projection, Is.EqualTo(expected));
 			}
 		}
 
@@ -158,15 +165,16 @@ namespace Tests.Linq
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id });
 
-				var projection = queryWithProjection.ToArray();
+				var projection = queryWithProjection.OrderBy(_ => _.Id).ToArray();
 
 				var expected = table
 					.Where(t => t.Id >= startId && t.Id < endId)
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
-				Assert.AreEqual(expected, projection);
+				Assert.That(projection, Is.EqualTo(expected));
 			}
 		}
 
@@ -186,15 +194,17 @@ namespace Tests.Linq
 				var projection = query
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
 				var expected = table
 					.Where(t => t.Id >= startId && t.Id < endId)
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
-				Assert.AreEqual(expected, projection);
+				Assert.That(projection, Is.EqualTo(expected));
 			}
 		}
 
@@ -214,20 +224,22 @@ namespace Tests.Linq
 				var projection = query
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
 				var expected = table
 					.Where(t => t.Id >= startId && t.Id < endId)
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
-				Assert.AreEqual(expected, projection);
+				Assert.That(projection, Is.EqualTo(expected));
 			}
 		}
 
 		[Test]
-		public void TestParameters([DataSources(ProviderName.DB2, TestProvName.AllSapHana)] string context, [Values(14, 15)] int endId)
+		public void TestParameters([DataSources(ProviderName.DB2, TestProvName.AllSapHana)] string context, [Values(1, 2)] int iteration, [Values(14, 15)] int endId)
 		{
 			using (var db = GetDataContext(context))
 			using (var table = db.CreateLocalTable(GenerateTestData()))
@@ -236,18 +248,28 @@ namespace Tests.Linq
 
 				var query = db.FromSql<SampleClass>("SELECT * FROM\n{0}\nwhere {3} >= {1} and {3} < {2}",
 					GetName(table), new DataParameter("startId", startId, DataType.Int64), endId, GetColumn("id"));
+
+				var save = Query<SampleClass>.CacheMissCount;
+
 				var projection = query
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
+
+				if (iteration > 1)
+				{
+					Query<SampleClass>.CacheMissCount.Should().Be(save);
+				}
 
 				var expected = table
 					.Where(t => t.Id >= startId && t.Id < endId)
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
-				Assert.AreEqual(expected, projection);
+				Assert.That(projection, Is.EqualTo(expected));
 			}
 		}
 
@@ -268,15 +290,17 @@ namespace Tests.Linq
 				var projection = query
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
 				var expected = table
 					.Where(t => t.Id >= startId && t.Id < endId)
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
-				Assert.AreEqual(expected, projection);
+				Assert.That(projection, Is.EqualTo(expected));
 			}
 		}
 
@@ -298,15 +322,17 @@ namespace Tests.Linq
 				var projection = query
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
 				var expected = table
 					.Where(t => t.Id >= startId && t.Id < endId)
 					.Where(c => c.Id > 10)
 					.Select(c => new { c.Value, c.Id })
+					.OrderBy(_ => _.Id)
 					.ToArray();
 
-				Assert.AreEqual(expected, projection);
+				Assert.That(projection, Is.EqualTo(expected));
 			}
 		}
 
@@ -314,7 +340,7 @@ namespace Tests.Linq
 
 		[Test]
 		public void TestAssociation(
-			[IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context, 
+			[IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context,
 			[Values(14, 15)] int startId
 		)
 		{
@@ -322,24 +348,57 @@ namespace Tests.Linq
 
 			var idFilter = 1;
 
-			ms.GetFluentMappingBuilder()
+			new FluentMappingBuilder(ms)
 				.Entity<SampleClass>()
 				.Association(x => x.AssociatedOne,
-					(x, db) => db.FromSql<SomeOtherClass>(someGeneratedSqlString, x.Id, idFilter));
+					(x, db) => db.FromSql<SomeOtherClass>(someGeneratedSqlString, x.Id, idFilter))
+				.Build();
 
-			using (var db = GetDataContext(context, ms))
-			using (var table = db.CreateLocalTable(GenerateTestData()))
-			using (var other = db.CreateLocalTable<SomeOtherClass>())
+			using var db    = GetDataContext(context, ms);
+			using var table = db.CreateLocalTable(GenerateTestData());
+			using var __    = db.CreateLocalTable<SomeOtherClass>();
+
+			var query =
+				from t in table
+				select new
+				{
+					t.Id,
+					t.AssociatedOne
+				};
+
+			_ = query.ToArray();
+		}
+
+		[Test]
+		public void FluentMappingTest([IncludeDataSources(true, TestProvName.AllSqlServer2008Plus)] string context)
+		{
+			Run();
+			Run();
+
+			void Run()
 			{
+				var ms = new MappingSchema();
 
-				var query = from t in table
+				var idFilter = 1;
+
+				new FluentMappingBuilder(ms)
+					.Entity<SampleClass>()
+						.Association(x => x.AssociatedOne, (x, db) => db.FromSql<SomeOtherClass>(someGeneratedSqlString, x.Id, idFilter))
+					.Build();
+
+				using var db    = GetDataContext(context, ms);
+				using var table = db.CreateLocalTable(GenerateTestData());
+				using var __    = db.CreateLocalTable<SomeOtherClass>();
+
+				var query =
+					from t in table
 					select new
 					{
 						t.Id,
 						t.AssociatedOne
 					};
 
-				var result = query.ToArray();
+				_ = query.ToArray();
 			}
 		}
 
@@ -455,7 +514,7 @@ namespace Tests.Linq
 
 		[Test]
 		public void TestInvaildAliasExprUsage(
-			[IncludeDataSources(TestProvName.AllPostgreSQL)]
+			[IncludeDataSources(TestProvName.AllPostgreSQL15Minus)]
 			string context)
 		{
 			using (var db = GetDataContext(context))
@@ -463,12 +522,13 @@ namespace Tests.Linq
 				var query =
 					from c in db.FromSql<int>($"select {1} {Sql.AliasExpr()}")
 					select c;
-				Assert.Throws<Npgsql.PostgresException>(() => query.ToArray());
+
+				Assert.Throws<InvalidOperationException>(() => query.ToArray());
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_Interpolated_DataParameter([IncludeDataSources(true, TestProvName.AllSQLite)] string context)
+		public void TestQueryCaching_Interpolated_DataParameter([IncludeDataSources(true, TestProvName.AllSQLite, TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (var table = db.CreateLocalTable(GenerateTestData()))
@@ -476,13 +536,13 @@ namespace Tests.Linq
 				var qry1 = GetQuery(1, 114);
 				var qry2 = GetQuery(1, 115);
 
-				var expr1 = qry1.Expression;
-				var expr2 = qry2.Expression;
+				var expr1 = (IQueryExpressions)new RuntimeExpressionsContainer(qry1.Expression);
+				var expr2 = (IQueryExpressions)new RuntimeExpressionsContainer(qry2.Expression);
 
 				var query1 = Query<SampleClass>.GetQuery(db, ref expr1, out _);
 				var query2 = Query<SampleClass>.GetQuery(db, ref expr2, out _);
 
-				Assert.True(ReferenceEquals(query1, query2));
+				Assert.That(ReferenceEquals(query1, query2), Is.True);
 
 				IQueryable<SampleClass> GetQuery(int startId, int endId)
 				{
@@ -494,7 +554,7 @@ namespace Tests.Linq
 
 		// TODO: right now we don't create parameter from endId, as expression compiler pass it by value
 		[Test]
-		public void TestQueryCaching_Interpolated_ValueParameter([IncludeDataSources(true, TestProvName.AllSQLite)] string context)
+		public void TestQueryCaching_Interpolated_ValueParameter([IncludeDataSources(true, TestProvName.AllSQLite, TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (var table = db.CreateLocalTable(GenerateTestData()))
@@ -502,13 +562,13 @@ namespace Tests.Linq
 				var qry1 = GetQuery(1, 114);
 				var qry2 = GetQuery(1, 115);
 
-				var expr1 = qry1.Expression;
-				var expr2 = qry2.Expression;
+				var expr1 = (IQueryExpressions)new RuntimeExpressionsContainer(qry1.Expression);
+				var expr2 = (IQueryExpressions)new RuntimeExpressionsContainer(qry2.Expression);
 
 				var query1 = Query<SampleClass>.GetQuery(db, ref expr1, out _);
 				var query2 = Query<SampleClass>.GetQuery(db, ref expr2, out _);
 
-				Assert.False(ReferenceEquals(query1, query2));
+				Assert.That(ReferenceEquals(query1, query2), Is.False);
 
 				IQueryable<SampleClass> GetQuery(int startId, int endId)
 				{
@@ -519,7 +579,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void TestQueryCaching_InterpolatedCache_BySqlExpressionParameter([IncludeDataSources(true, TestProvName.AllSQLite)] string context)
+		public void TestQueryCaching_InterpolatedCache_BySqlExpressionParameter([IncludeDataSources(true, TestProvName.AllSQLite, TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (var table1 = db.CreateLocalTable(GenerateTestData()))
@@ -528,13 +588,13 @@ namespace Tests.Linq
 				var qry1 = GetQuery(table1, 1, 114);
 				var qry2 = GetQuery(table2, 1, 115);
 
-				var expr1 = qry1.Expression;
-				var expr2 = qry2.Expression;
+				var expr1 = (IQueryExpressions)new RuntimeExpressionsContainer(qry1.Expression);
+				var expr2 = (IQueryExpressions)new RuntimeExpressionsContainer(qry2.Expression);
 
 				var query1 = Query<SampleClass>.GetQuery(db, ref expr1, out _);
 				var query2 = Query<SampleClass>.GetQuery(db, ref expr2, out _);
 
-				Assert.False(ReferenceEquals(query1, query2));
+				Assert.That(ReferenceEquals(query1, query2), Is.False);
 
 				IQueryable<SampleClass> GetQuery<T>(ITable<T> table, int startId, int endId)
 					where T : notnull
@@ -546,7 +606,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void TestQueryCaching_Format_DataParameter([IncludeDataSources(true, TestProvName.AllSQLite)] string context)
+		public void TestQueryCaching_Format_DataParameter([IncludeDataSources(true, TestProvName.AllSQLite, TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (var table = db.CreateLocalTable(GenerateTestData()))
@@ -554,13 +614,13 @@ namespace Tests.Linq
 				var qry1 = GetQuery(1, 114);
 				var qry2 = GetQuery(1, 115);
 
-				var expr1 = qry1.Expression;
-				var expr2 = qry2.Expression;
+				var expr1 = (IQueryExpressions)new RuntimeExpressionsContainer(qry1.Expression);
+				var expr2 = (IQueryExpressions)new RuntimeExpressionsContainer(qry2.Expression);
 
 				var query1 = Query<SampleClass>.GetQuery(db, ref expr1, out _);
 				var query2 = Query<SampleClass>.GetQuery(db, ref expr2, out _);
 
-				Assert.True(ReferenceEquals(query1, query2));
+				Assert.That(ReferenceEquals(query1, query2), Is.True);
 
 				IQueryable<SampleClass> GetQuery(int startId, int endId)
 				{
@@ -574,7 +634,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void TestQueryCaching_Format_ValueParameter([IncludeDataSources(true, TestProvName.AllSQLite)] string context)
+		public void TestQueryCaching_Format_ValueParameter([IncludeDataSources(true, TestProvName.AllSQLite, TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (var table = db.CreateLocalTable(GenerateTestData()))
@@ -582,13 +642,13 @@ namespace Tests.Linq
 				var qry1 = GetQuery(1, 114);
 				var qry2 = GetQuery(1, 115);
 
-				var expr1 = qry1.Expression;
-				var expr2 = qry2.Expression;
+				var expr1 = (IQueryExpressions)new RuntimeExpressionsContainer(qry1.Expression);
+				var expr2 = (IQueryExpressions)new RuntimeExpressionsContainer(qry2.Expression);
 
 				var query1 = Query<SampleClass>.GetQuery(db, ref expr1, out _);
 				var query2 = Query<SampleClass>.GetQuery(db, ref expr2, out _);
 
-				Assert.False(ReferenceEquals(query1, query2));
+				Assert.That(ReferenceEquals(query1, query2), Is.False);
 
 				IQueryable<SampleClass> GetQuery(int startId, int endId)
 				{
@@ -602,7 +662,7 @@ namespace Tests.Linq
 		}
 
 		[Test]
-		public void TestQueryCaching_Format_BySqlExpressionParameter([IncludeDataSources(true, TestProvName.AllSQLite)] string context)
+		public void TestQueryCaching_Format_BySqlExpressionParameter([IncludeDataSources(true, TestProvName.AllSQLite, TestProvName.AllClickHouse)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (var table1 = db.CreateLocalTable(GenerateTestData()))
@@ -611,13 +671,13 @@ namespace Tests.Linq
 				var qry1 = GetQuery(table1, 1, 114);
 				var qry2 = GetQuery(table2, 1, 115);
 
-				var expr1 = qry1.Expression;
-				var expr2 = qry2.Expression;
+				var expr1 = (IQueryExpressions)new RuntimeExpressionsContainer(qry1.Expression);
+				var expr2 = (IQueryExpressions)new RuntimeExpressionsContainer(qry2.Expression);
 
 				var query1 = Query<SampleClass>.GetQuery(db, ref expr1, out _);
 				var query2 = Query<SampleClass>.GetQuery(db, ref expr2, out _);
 
-				Assert.False(ReferenceEquals(query1, query2));
+				Assert.That(ReferenceEquals(query1, query2), Is.False);
 
 				IQueryable<SampleClass> GetQuery<T>(ITable<T> table, int startId, int endId)
 					where T : notnull
@@ -631,19 +691,19 @@ namespace Tests.Linq
 			}
 		}
 
-		class Scalar<T>
+		sealed class Scalar<T>
 		{
 			public T Value1 = default!;
 		}
 
-		class Values<T>
+		sealed class Values<T>
 		{
 			public T Value1 = default!;
 			public T Value2 = default!;
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Interpolation1([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Interpolation1([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -657,14 +717,14 @@ namespace Tests.Linq
 				void Test(int? value)
 				{
 					var res = db.FromSql<Scalar<int?>>($"SELECT {new DataParameter("value", value, DataType.Int32)} as Value1 /*TestQueryCaching_ByParameter_Interpolation1*/").ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value, res[0].Value1);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.That(res[0].Value1, Is.EqualTo(value));
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Formatted1([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Formatted1([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -678,14 +738,14 @@ namespace Tests.Linq
 				void Test(int? value)
 				{
 					var res = db.FromSql<Scalar<int?>>("SELECT {0} as Value1 /*TestQueryCaching_ByParameter_Formatted1*/", new DataParameter("value", value, DataType.Int32)).ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value, res[0].Value1);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.That(res[0].Value1, Is.EqualTo(value));
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Interpolation2([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Interpolation2([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -699,37 +759,49 @@ namespace Tests.Linq
 				void Test(int? value1, int? value2)
 				{
 					var res = db.FromSql<Values<int?>>($"SELECT {new DataParameter("value1", value1, DataType.Int32)} as Value1, {new DataParameter("value2", value2, DataType.Int32)} as Value2 /*TestQueryCaching_ByParameter_Interpolation2*/").ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value1, res[0].Value1);
-					Assert.AreEqual(value2, res[0].Value2);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.Multiple(() =>
+					{
+						Assert.That(res[0].Value1, Is.EqualTo(value1));
+						Assert.That(res[0].Value2, Is.EqualTo(value2));
+					});
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Formatted2([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Formatted2([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
 			{
 				Test(null, null);
+
+				var saveCount = Query<Values<int?>>.CacheMissCount;
+
 				Test(1, 2);
 				Test(null, 2);
 				Test(2, null);
 				Test(3, 3);
 
+
+				Query<Values<int?>>.CacheMissCount.Should().Be(saveCount);
+
 				void Test(int? value1, int? value2)
 				{
 					var res = db.FromSql<Values<int?>>("SELECT {0} as Value1, {1} as Value2 /*TestQueryCaching_ByParameter_Formatted2*/", new DataParameter("value1", value1, DataType.Int32), new DataParameter("value2", value2, DataType.Int32)).ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value1, res[0].Value1);
-					Assert.AreEqual(value2, res[0].Value2);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.Multiple(() =>
+					{
+						Assert.That(res[0].Value1, Is.EqualTo(value1));
+						Assert.That(res[0].Value2, Is.EqualTo(value2));
+					});
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Formatted21([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Formatted21([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -743,15 +815,18 @@ namespace Tests.Linq
 				void Test(int? value1, int? value2)
 				{
 					var res = db.FromSql<Values<int?>>("SELECT {0} as Value1, {1} as Value2 /*TestQueryCaching_ByParameter_Formatted21*/", new object?[] { new DataParameter("value1", value1, DataType.Int32), new DataParameter("value2", value2, DataType.Int32) }).ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value1, res[0].Value1);
-					Assert.AreEqual(value2, res[0].Value2);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.Multiple(() =>
+					{
+						Assert.That(res[0].Value1, Is.EqualTo(value1));
+						Assert.That(res[0].Value2, Is.EqualTo(value2));
+					});
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Interpolation3([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Interpolation3([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -766,14 +841,14 @@ namespace Tests.Linq
 				{
 					var p = new DataParameter("value", value, DataType.Int32);
 					var res = db.FromSql<Scalar<int?>>($"SELECT {p} as Value1 /*TestQueryCaching_ByParameter_Interpolation3*/").ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value, res[0].Value1);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.That(res[0].Value1, Is.EqualTo(value));
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Formatted3([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Formatted3([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -788,14 +863,14 @@ namespace Tests.Linq
 				{
 					var p = new DataParameter("value", value, DataType.Int32);
 					var res = db.FromSql<Scalar<int?>>("SELECT {0} as Value1 /*TestQueryCaching_ByParameter_Formatted3*/", p).ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value, res[0].Value1);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.That(res[0].Value1, Is.EqualTo(value));
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Interpolation4([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Interpolation4([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -810,14 +885,14 @@ namespace Tests.Linq
 				{
 					var p = new DataParameter("value", value, DataType.Int32);
 					var res = db.FromSql<Scalar<int?>>($"SELECT {null} as Value1 /*TestQueryCaching_ByParameter_Interpolation4*/").ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.IsNull(res[0].Value1);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.That(res[0].Value1, Is.Null);
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Formatted4([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Formatted4([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -832,14 +907,14 @@ namespace Tests.Linq
 				{
 					var p = new DataParameter("value", value, DataType.Int32);
 					var res = db.FromSql<Scalar<int?>>("SELECT {0} as Value1 /*TestQueryCaching_ByParameter_Formatted4*/", new object?[] { null }).ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.IsNull(res[0].Value1);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.That(res[0].Value1, Is.Null);
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Interpolation5([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Interpolation5([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -853,15 +928,18 @@ namespace Tests.Linq
 				void Test(int? value1, int? value2)
 				{
 					var res = db.FromSql<Values<int?>>($"SELECT {value1} as Value1, {value2} as Value2 /*TestQueryCaching_ByParameter_Interpolation5*/").ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value1, res[0].Value1);
-					Assert.AreEqual(value2, res[0].Value2);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.Multiple(() =>
+					{
+						Assert.That(res[0].Value1, Is.EqualTo(value1));
+						Assert.That(res[0].Value2, Is.EqualTo(value2));
+					});
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Formatted5([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Formatted5([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -875,15 +953,18 @@ namespace Tests.Linq
 				void Test(int? value1, int? value2)
 				{
 					var res = db.FromSql<Values<int?>>("SELECT {0} as Value1, {1} as Value2 /*TestQueryCaching_ByParameter_Formatted5*/", value1, value2).ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value1, res[0].Value1);
-					Assert.AreEqual(value2, res[0].Value2);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.Multiple(() =>
+					{
+						Assert.That(res[0].Value1, Is.EqualTo(value1));
+						Assert.That(res[0].Value2, Is.EqualTo(value2));
+					});
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Formatted51([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Formatted51([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			using (var db = GetDataContext(context))
@@ -897,15 +978,18 @@ namespace Tests.Linq
 				void Test(int? value1, int? value2)
 				{
 					var res = db.FromSql<Values<int?>>("SELECT {0} as Value1, {1} as Value2 /*TestQueryCaching_ByParameter_Formatted51*/", new object?[] { value1, value2 }).ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value1, res[0].Value1);
-					Assert.AreEqual(value2, res[0].Value2);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.Multiple(() =>
+					{
+						Assert.That(res[0].Value1, Is.EqualTo(value1));
+						Assert.That(res[0].Value2, Is.EqualTo(value2));
+					});
 				}
 			}
 		}
 
 		[Test]
-		public void TestQueryCaching_ByParameter_Formatted52([IncludeDataSources(true, TestProvName.AllSqlServer)] string context)
+		public void TestQueryCaching_ByParameter_Formatted52([IncludeDataSources(true, TestProvName.AllSqlServer, TestProvName.AllClickHouse)] string context)
 		{
 			// important: comment added to avoid use of cached query from other test
 			var sql = "SELECT {0} as Value1, {1} as Value2 /*TestQueryCaching_ByParameter_Formatted52*/";
@@ -921,11 +1005,91 @@ namespace Tests.Linq
 				void Test(int? value1, int? value2)
 				{
 					var res = db.FromSql<Values<int?>>(sql, new object?[] { value1, value2 }).ToArray();
-					Assert.AreEqual(1, res.Length);
-					Assert.AreEqual(value1, res[0].Value1);
-					Assert.AreEqual(value2, res[0].Value2);
+					Assert.That(res, Has.Length.EqualTo(1));
+					Assert.Multiple(() =>
+					{
+						Assert.That(res[0].Value1, Is.EqualTo(value1));
+						Assert.That(res[0].Value2, Is.EqualTo(value2));
+					});
 				}
 			}
+		}
+
+		const string MyTableNameStringConstant = "Person";
+
+		[ActiveIssue]
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/3782 / https://github.com/linq2db/linq2db/issues/2779")]
+		public void Issue3782Test1([IncludeDataSources(true, TestProvName.AllPostgreSQL)] string context, [Values] bool inline)
+		{
+			using var db = GetDataContext(context);
+			db.InlineParameters = inline;
+
+			FormattableString statement = $@"
+	SELECT CASE
+		WHEN EXISTS (
+			SELECT 1
+			FROM information_schema.tables
+			WHERE table_name = {MyTableNameStringConstant}
+		)
+		THEN true
+		ELSE false
+	END AS result";
+
+			var exists = db.FromSqlScalar<bool>(statement).First();
+
+			Assert.That(exists, Is.True);
+		}
+
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/3782 / https://github.com/linq2db/linq2db/issues/2779")]
+		public void Issue3782Test2([IncludeDataSources(true, TestProvName.AllPostgreSQL)] string context, [Values] bool inline)
+		{
+			using var db = GetDataContext(context);
+			db.InlineParameters = inline;
+
+			FormattableString statement = $@"
+	SELECT CASE
+		WHEN EXISTS (
+			SELECT 1
+			FROM information_schema.tables
+			WHERE table_name = {MyTableNameStringConstant}
+		)
+		THEN true
+		ELSE false
+	END AS result";
+
+			var query = from p in db.Person
+						where db.FromSqlScalar<bool>(statement).Any()
+						select p;
+
+			query.ToArray();
+		}
+
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/3782 / https://github.com/linq2db/linq2db/issues/2779")]
+		public void Issue3782Test3([IncludeDataSources(true, TestProvName.AllSqlServer2012Plus)] string context, [Values] bool inline)
+		{
+			using var db = GetDataContext(context);
+			db.InlineParameters = inline;
+
+			FormattableString statement = $"SELECT IIF(EXISTS(SELECT * FROM [INFORMATION_SCHEMA].[TABLES] [x] WHERE [x].[TABLE_NAME] = {MyTableNameStringConstant}),1,0) ttt";
+
+			var tableExists = db.FromSqlScalar<bool>(statement).Any();
+
+			Assert.That(tableExists, Is.True);
+		}
+
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/3782 / https://github.com/linq2db/linq2db/issues/2779")]
+		public void Issue3782Test4([IncludeDataSources(true, TestProvName.AllSqlServer2012Plus)] string context, [Values] bool inline)
+		{
+			using var db = GetDataContext(context);
+			db.InlineParameters = inline;
+
+			FormattableString statement = $"SELECT IIF(EXISTS(SELECT * FROM [INFORMATION_SCHEMA].[TABLES] [x] WHERE [x].[TABLE_NAME] = {MyTableNameStringConstant}),1,0) ttt";
+
+			var query = from p in db.Person
+						where db.FromSqlScalar<bool>(statement).Any()
+						select p;
+
+			query.ToArray();
 		}
 	}
 }

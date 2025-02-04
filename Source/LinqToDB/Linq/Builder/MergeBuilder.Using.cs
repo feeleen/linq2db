@@ -1,8 +1,4 @@
-﻿using LinqToDB.Extensions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using System.Reflection;
 
 namespace LinqToDB.Linq.Builder
@@ -14,31 +10,34 @@ namespace LinqToDB.Linq.Builder
 
 	internal partial class MergeBuilder
 	{
-		internal class Using : MethodCallBuilder
+		[BuildsMethodCall(nameof(LinqExtensions.Using))]
+		internal sealed class Using : MethodCallBuilder
 		{
-			static readonly MethodInfo[] _supportedMethods = {UsingMethodInfo1, UsingMethodInfo2};
+			static readonly MethodInfo[] _supportedMethods = { UsingMethodInfo1, UsingMethodInfo2 };
 
-			protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
-			{
-				return methodCall.IsSameGenericMethod(_supportedMethods);
-			}
+			public static bool CanBuildMethod(MethodCallExpression call, BuildInfo info, ExpressionBuilder builder)
+				=> call.IsSameGenericMethod(_supportedMethods);
 
-			protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
+			protected override BuildSequenceResult BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 			{
 				var mergeContext = (MergeContext)builder.BuildSequence(new BuildInfo(buildInfo, methodCall.Arguments[0]));
 
-				var sourceContext         = builder.BuildSequence(new BuildInfo(buildInfo, methodCall.Arguments[1], new SelectQuery()));
-				var source                = new TableLikeQueryContext(sourceContext);
-				mergeContext.Sequences    = new IBuildContext[] { mergeContext.Sequence, source };
+				var sourceContext =
+					builder.BuildSequence(new BuildInfo(buildInfo, methodCall.Arguments[1], new SelectQuery()));
+
+				var genericArgs = methodCall.Method.GetGenericArguments();
+				var sourceRef   = new ContextRefExpression(genericArgs[1], sourceContext, "source");
+				var allFields   = builder.BuildExtractExpression(sourceContext, sourceRef);
+
+				var source = new TableLikeQueryContext(
+					sourceContext.TranslationModifier,
+					new ContextRefExpression(genericArgs[0], mergeContext.TargetContext, "target"),
+					sourceRef);
+
+				mergeContext.Sequences    = new[] { mergeContext.Sequence, source };
 				mergeContext.Merge.Source = source.Source;
 
-				return mergeContext;
-			}
-
-			protected override SequenceConvertInfo? Convert(
-				ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo, ParameterExpression? param)
-			{
-				return null;
+				return BuildSequenceResult.FromContext(mergeContext);
 			}
 		}
 	}

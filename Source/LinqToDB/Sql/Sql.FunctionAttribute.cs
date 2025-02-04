@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 
 using JetBrains.Annotations;
@@ -9,7 +7,8 @@ using JetBrains.Annotations;
 
 namespace LinqToDB
 {
-	using Mapping;
+	using Expressions;
+	using Linq.Builder;
 	using SqlQuery;
 
 	partial class Sql
@@ -24,7 +23,7 @@ namespace LinqToDB
 		{
 			/// <summary>
 			/// Defines an SQL Function, which
-			/// shall be the same as the name as the function called. 
+			/// shall be the same as the name as the function called.
 			/// </summary>
 			public FunctionAttribute()
 				: base(null)
@@ -89,20 +88,34 @@ namespace LinqToDB
 				set => Expression = value;
 			}
 
-			public override ISqlExpression? GetExpression(IDataContext dataContext, SelectQuery query, Expression expression, Func<Expression, ColumnDescriptor?, ISqlExpression> converter)
+			public override Expression GetExpression<TContext>(
+				TContext              context,
+				IDataContext          dataContext,
+				IExpressionEvaluator  evaluator,
+				SelectQuery           query,
+				Expression            expression,
+				ConvertFunc<TContext> converter)
 			{
 				var expressionStr = Expression;
-				PrepareParameterValues(expression, ref expressionStr, true, out var knownExpressions, out var genericTypes);
+				PrepareParameterValues(context, dataContext.MappingSchema, expression, ref expressionStr, true, out var knownExpressions, IgnoreGenericParameters, InlineParameters, out var genericTypes, converter);
 
 				if (string.IsNullOrEmpty(expressionStr))
 					throw new LinqToDBException($"Cannot retrieve function name for expression '{expression}'.");
 
-				var parameters = PrepareArguments(expressionStr!, ArgIndices, addDefault: true, knownExpressions, genericTypes, converter);
+				var parameters = PrepareArguments(context, expressionStr!, ArgIndices, addDefault: true, knownExpressions, genericTypes, converter, InlineParameters, out var error);
 
-				return new SqlFunction(expression.Type, expressionStr!, IsAggregate, IsPure, parameters)
-				{
-					CanBeNull = GetCanBeNull(parameters)
-				};
+				if (error != null)
+					return SqlErrorExpression.EnsureError(error, expression.Type);
+
+				var function = new SqlFunction(expression.Type, expressionStr!, IsAggregate, IsPure, Precedence,
+					ToParametersNullabilityType(IsNullable), _canBeNull, parameters!);
+
+				return ExpressionBuilder.CreatePlaceholder(query, function, expression);
+			}
+
+			public override string GetObjectID()
+			{
+				return $"{base.GetObjectID()}.{Name}.";
 			}
 		}
 	}

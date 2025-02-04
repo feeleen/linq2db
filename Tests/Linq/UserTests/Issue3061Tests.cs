@@ -12,7 +12,7 @@ namespace Tests.UserTests
 	public class Issue3061Tests : TestBase
 	{
 		[Table]
-		class Properties
+		sealed class Properties
 		{
 			[PrimaryKey]
 			public int     Id    { get; set; }
@@ -24,7 +24,7 @@ namespace Tests.UserTests
 			public List<IncidentProperty> IncidentProperties { get; set; } = null!;
 		}
 
-		class CaseLog
+		sealed class CaseLog
 		{
 			[PrimaryKey]
 			public int  Id     { get; set; }
@@ -32,7 +32,7 @@ namespace Tests.UserTests
 			public int? Number { get; set; }
 		}
 
-		class Incident
+		sealed class Incident
 		{
 			[PrimaryKey]
 			public int Id { get; set; }
@@ -41,7 +41,7 @@ namespace Tests.UserTests
 			public int? EventNumber { get; set; }
 		}
 
-		class CaseLogProperty
+		sealed class CaseLogProperty
 		{
 			[Column(CanBeNull = true)]
 			public int? PropertyId { get; set; }
@@ -52,7 +52,7 @@ namespace Tests.UserTests
 			public CaseLog CaseLog { get; set; } = null!;
 		}
 
-		class IncidentProperty
+		sealed class IncidentProperty
 		{
 			[Column(CanBeNull = true)]
 			public int? PropertyId { get; set; }
@@ -66,9 +66,14 @@ namespace Tests.UserTests
 		[Test]
 		public void TestColumnsOptimization([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
 		{
-			using (var db = GetDataContext(context))
-			{
-				var query = db.GetTable<Properties>()
+			using var db = GetDataContext(context);
+			using var t1 = db.CreateLocalTable<Properties>();
+			using var t2 = db.CreateLocalTable<CaseLog>();
+			using var t3 = db.CreateLocalTable<CaseLogProperty>();
+			using var t4 = db.CreateLocalTable<Incident>();
+			using var t5 = db.CreateLocalTable<IncidentProperty>();
+
+			var query = db.GetTable<Properties>()
 					.Where(x => x.Id.In(1, 2))
 					.Select(x => new
 					{
@@ -76,10 +81,68 @@ namespace Tests.UserTests
 						IncidentNumber = x.IncidentProperties.FirstOrDefault()!.Incident.EventNumber
 					});
 
-				TestContext.WriteLine(query.ToString());
+			query.GetSelectQuery().Select.Columns.Should().HaveCount(2);
 
-				query.GetSelectQuery().Select.Columns.Should().HaveCount(4);
-			}
+			query.ToArray();
+		}
+
+		[Table]
+		sealed class Root
+		{
+			[Column] public int Id { get; set; }
+
+			[Association(ThisKey = nameof(Id), OtherKey = nameof(Draft1.RootId))]
+			public ICollection<Draft1> SomeDrafts { get; set; } = null!;
+
+			[Association(ThisKey = nameof(Id), OtherKey = nameof(Draft2.RootId))]
+			public ICollection<Draft2> OtherDrafts { get; set; } = null!;
+		}
+
+		[Table]
+		sealed class Draft1
+		{
+			[Column] public int     RootId { get; set; }
+			[Column] public string? Html   { get; set; }
+			[Column] public string? Plain  { get; set; }
+		}
+
+		[Table]
+		sealed class Draft2
+		{
+			[Column] public int     RootId { get; set; }
+			[Column] public string? Html   { get; set; }
+			[Column] public string? Plain  { get; set; }
+		}
+
+		[Test]
+		public void TestColumnsOptimization3487([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context)
+		{
+			using var db = GetDataContext(context);
+			using var t1 = db.CreateLocalTable<Root>();
+			using var t2 = db.CreateLocalTable<Draft1>();
+			using var t3 = db.CreateLocalTable<Draft2>();
+
+			var query = db.GetTable<Root>()
+					.Select(x => new
+					{
+						NarrativeDraft = x.SomeDrafts
+							.Select(y => new
+							{
+								Html   = y.Html,
+								Plain2 = y.Plain
+							})
+							.FirstOrDefault(),
+						SynopsisDraft = x.OtherDrafts
+							.Select(y => new
+							{
+								Html  = y.Html,
+								Plain = y.Plain
+							})
+							.FirstOrDefault()
+					});
+
+			query.GetSelectQuery().Select.Columns.Should().HaveCount(6);
+			query.ToArray();
 		}
 	}
 }

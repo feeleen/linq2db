@@ -1,18 +1,23 @@
 ﻿using System;
 using System.Linq.Expressions;
-using LinqToDB.Expressions;
 
 namespace LinqToDB.Linq.Builder
 {
-	class TagQueryBuilder : MethodCallBuilder
-	{
-		private static readonly char[] NewLine = new[] { '\r', '\n' };
+	using LinqToDB.Expressions;
 
-		protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
+	[BuildsMethodCall(nameof(LinqExtensions.TagQuery))]
+	sealed class TagQueryBuilder : MethodCallBuilder
+	{
+		public static bool CanBuildMethod(MethodCallExpression call, BuildInfo info, ExpressionBuilder builder)
+			=> call.IsQueryable();
+
+		private static readonly char[] NewLine = ['\r', '\n'];
+
+		protected override BuildSequenceResult BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 		{
 			var sequence = builder.BuildSequence(new BuildInfo(buildInfo, methodCall.Arguments[0]));
 
-			var tag = (string?)methodCall.Arguments[1].EvaluateExpression();
+			var tag = builder.EvaluateExpression<string>(methodCall.Arguments[1]);
 
 			if (!string.IsNullOrWhiteSpace(tag))
 			{
@@ -20,17 +25,7 @@ namespace LinqToDB.Linq.Builder
 				(builder.Tag ??= new ()).Lines.AddRange(tag!.Split(NewLine, StringSplitOptions.RemoveEmptyEntries));
 			}
 
-			return sequence;
-		}
-
-		protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
-		{
-			return methodCall.IsQueryable(nameof(LinqExtensions.TagQuery));
-		}
-
-		protected override SequenceConvertInfo? Convert(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo, ParameterExpression? param)
-		{
-			return null;
+			return BuildSequenceResult.FromContext(sequence);
 		}
 	}
 }

@@ -2,16 +2,22 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+
 using FluentAssertions;
+
 using LinqToDB;
 using LinqToDB.Data;
 using LinqToDB.DataProvider.Informix;
+using LinqToDB.DataProvider.Oracle;
+using LinqToDB.Interceptors;
 using LinqToDB.Mapping;
+
 using NUnit.Framework;
 
 namespace Tests.xUpdate
 {
 	using Model;
+	using Tests.DataProvider;
 
 	[TestFixture]
 	[Order(10000)]
@@ -24,7 +30,8 @@ namespace Tests.xUpdate
 		[Table("AllTypes")]
 		public class TestTable1
 		{
-			[Identity]
+			[Column(Configuration = ProviderName.ClickHouse)]
+			[Column(IsIdentity = true)]
 			public int ID { get; set; }
 
 			[Column("intDataType")]
@@ -38,7 +45,8 @@ namespace Tests.xUpdate
 		[Table("AllTypes")]
 		public class TestTable2
 		{
-			[Identity, Column(SkipOnInsert = true)]
+			[Column(SkipOnInsert = true, Configuration = ProviderName.ClickHouse)]
+			[Column(SkipOnInsert = true, IsIdentity = true)]
 			public int ID { get; set; }
 
 			[Column("intDataType")]
@@ -47,21 +55,23 @@ namespace Tests.xUpdate
 			public int Value { get; set; }
 		}
 
-		[ActiveIssue("Sybase: Bulk insert failed. Null value is not allowed in not null column.", Configuration = ProviderName.Sybase)]
 		[Test]
 		public async Task KeepIdentity_SkipOnInsertTrue(
-			[DataSources(false)]string context,
-			[Values(null, true, false)]bool? keepIdentity,
-			[Values] BulkCopyType copyType,
-			[Values(0, 1, 2)] int asyncMode) // 0 == sync, 1 == async, 2 == async with IAsyncEnumerable
+			[DataSources(false, TestProvName.AllClickHouse)] string context,
+			[Values                                        ] bool? keepIdentity,
+			[Values                                        ] BulkCopyType copyType,
+			[Values(0, 1, 2)                               ] int asyncMode) // 0 == sync, 1 == async, 2 == async with IAsyncEnumerable
 		{
+			if ((context == ProviderName.Sybase) && copyType == BulkCopyType.ProviderSpecific && keepIdentity != true)
+				Assert.Inconclusive("Sybase native bulk copy doesn't support identity insert (despite documentation)");
+
 			ResetAllTypesIdentity(context);
 
-			if ((context == ProviderName.OracleNative || context == TestProvName.Oracle11Native) && copyType == BulkCopyType.ProviderSpecific)
+			if (context.IsAnyOf(TestProvName.AllOracleNative) && copyType == BulkCopyType.ProviderSpecific)
 				Assert.Inconclusive("Oracle BulkCopy doesn't support identity triggers");
 
 			// don't use transactions as some providers will fallback to non-provider-specific implementation then
-			using (var db = new TestDataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var lastId = db.InsertWithInt32Identity(new TestTable2());
 				try
@@ -77,16 +87,19 @@ namespace Tests.xUpdate
 
 					var data = db.GetTable<TestTable2>().Where(_ => _.ID > lastId).OrderBy(_ => _.ID).ToArray();
 
-					Assert.AreEqual(2, data.Length);
+					Assert.That(data, Has.Length.EqualTo(2));
 
 					// oracle supports identity insert only starting from version 12c, which is not used yet for tests
 					var useGenerated = keepIdentity != true
-						|| context.Contains("Oracle");
+						|| context.IsAnyOf(TestProvName.AllOracle);
 
-					Assert.AreEqual(lastId + (!useGenerated ? 10 : 1), data[0].ID);
-					Assert.AreEqual(200, data[0].Value);
-					Assert.AreEqual(lastId + (!useGenerated ? 20 : 2), data[1].ID);
-					Assert.AreEqual(300, data[1].Value);
+					Assert.Multiple(() =>
+					{
+						Assert.That(data[0].ID, Is.EqualTo(lastId + (!useGenerated ? 10 : 1)));
+						Assert.That(data[0].Value, Is.EqualTo(200));
+						Assert.That(data[1].ID, Is.EqualTo(lastId + (!useGenerated ? 20 : 2)));
+						Assert.That(data[1].Value, Is.EqualTo(300));
+					});
 
 					async Task perform()
 					{
@@ -103,12 +116,12 @@ namespace Tests.xUpdate
 									Value = 300
 								}
 							};
-						if (asyncMode == 0) // synchronous 
+						if (asyncMode == 0) // synchronous
 						{
 							db.BulkCopy(
 								options,
 								values);
-						} 
+						}
 						else if (asyncMode == 1) // asynchronous
 						{
 							await db.BulkCopyAsync(
@@ -131,18 +144,21 @@ namespace Tests.xUpdate
 			}
 		}
 
-		[ActiveIssue("Unsupported column datatype for BulkCopyType.ProviderSpecific", Configurations = new[] { TestProvName.AllOracleNative , ProviderName.Sybase } )]
 		[Test]
 		public async Task KeepIdentity_SkipOnInsertFalse(
-			[DataSources(false)]        string       context,
-			[Values(null, true, false)] bool?        keepIdentity,
-			[Values]                    BulkCopyType copyType,
-			[Values(0, 1, 2)]           int          asyncMode) // 0 == sync, 1 == async, 2 == async with IAsyncEnumerable
+			[DataSources(false, TestProvName.AllClickHouse)]
+		                      string       context,
+			[Values] bool?    keepIdentity,
+			[Values]          BulkCopyType copyType,
+			[Values(0, 1, 2)] int          asyncMode) // 0 == sync, 1 == async, 2 == async with IAsyncEnumerable
 		{
+			if ((context == ProviderName.Sybase) && copyType == BulkCopyType.ProviderSpecific && keepIdentity != true)
+				Assert.Inconclusive("Sybase native bulk copy doesn't support identity insert (despite documentation)");
+
 			ResetAllTypesIdentity(context);
 
 			// don't use transactions as some providers will fallback to non-provider-specific implementation then
-			using (var db = new TestDataConnection(context))
+			using (var db = GetDataConnection(context))
 			{
 				var lastId = db.InsertWithInt32Identity(new TestTable1());
 				try
@@ -158,16 +174,19 @@ namespace Tests.xUpdate
 
 					var data = db.GetTable<TestTable1>().Where(_ => _.ID > lastId).OrderBy(_ => _.ID).ToArray();
 
-					Assert.AreEqual(2, data.Length);
+					Assert.That(data, Has.Length.EqualTo(2));
 
 					// oracle supports identity insert only starting from version 12c, which is not used yet for tests
 					var useGenerated = keepIdentity != true
-						|| context.Contains("Oracle");
+						|| context.IsAnyOf(TestProvName.AllOracle);
 
-					Assert.AreEqual(lastId + (!useGenerated ? 10 : 1), data[0].ID);
-					Assert.AreEqual(200, data[0].Value);
-					Assert.AreEqual(lastId + (!useGenerated ? 20 : 2), data[1].ID);
-					Assert.AreEqual(300, data[1].Value);
+					Assert.Multiple(() =>
+					{
+						Assert.That(data[0].ID, Is.EqualTo(lastId + (!useGenerated ? 10 : 1)));
+						Assert.That(data[0].Value, Is.EqualTo(200));
+						Assert.That(data[1].ID, Is.EqualTo(lastId + (!useGenerated ? 20 : 2)));
+						Assert.That(data[1].Value, Is.EqualTo(300));
+					});
 
 					async Task perform()
 					{
@@ -225,20 +244,20 @@ namespace Tests.xUpdate
 
 		private async Task<bool> ExecuteAsync(DataConnection db, string context, Func<Task> perform, bool? keepIdentity, BulkCopyType copyType)
 		{
-			if (context.Contains("Firebird")
+			if (context.IsAnyOf(TestProvName.AllFirebird)
 				&& keepIdentity == true
 				&& (copyType    == BulkCopyType.Default
 					|| copyType == BulkCopyType.MultipleRows
 					|| copyType == BulkCopyType.ProviderSpecific))
 			{
 				var ex = Assert.CatchAsync(async () => await perform())!;
-				Assert.IsInstanceOf<LinqToDBException>(ex);
-				Assert.AreEqual("BulkCopyOptions.KeepIdentity = true is not supported by Firebird provider. If you use generators with triggers, you should disable triggers during BulkCopy execution manually.", ex.Message);
+				Assert.That(ex, Is.InstanceOf<LinqToDBException>());
+				Assert.That(ex.Message, Is.EqualTo("BulkCopyOptions.KeepIdentity = true is not supported by Firebird provider. If you use generators with triggers, you should disable triggers during BulkCopy execution manually."));
 				return false;
 			}
 
 			bool notSupported = false;
-			if (context.Contains(ProviderName.Informix))
+			if (context.IsAnyOf(TestProvName.AllInformix))
 			{
 				notSupported = !((InformixDataProvider)db.DataProvider).Adapter.IsIDSProvider
 					|| copyType == BulkCopyType.MultipleRows;
@@ -246,17 +265,16 @@ namespace Tests.xUpdate
 
 			// RowByRow right now uses DataConnection.Insert which doesn't support identity insert
 			if ((copyType       == BulkCopyType.RowByRow
-					|| context  == ProviderName.Access
-					|| context  == ProviderName.AccessOdbc
+					|| context.IsAnyOf(TestProvName.AllAccess)
 					|| notSupported
-					|| (context.StartsWith(ProviderName.SapHana)
+					|| (context.IsAnyOf(TestProvName.AllSapHana)
 						&& (copyType == BulkCopyType.MultipleRows || copyType == BulkCopyType.Default))
-					|| (context == ProviderName.SapHanaOdbc && copyType == BulkCopyType.ProviderSpecific))
+					|| (context.IsAnyOf(ProviderName.SapHanaOdbc) && copyType == BulkCopyType.ProviderSpecific))
 				&& keepIdentity == true)
 			{
 				var ex = Assert.CatchAsync(async () => await perform())!;
-				Assert.IsInstanceOf<LinqToDBException>(ex);
-				Assert.AreEqual("BulkCopyOptions.KeepIdentity = true is not supported by BulkCopyType.RowByRow mode", ex.Message);
+				Assert.That(ex, Is.InstanceOf<LinqToDBException>());
+				Assert.That(ex.Message, Is.EqualTo("BulkCopyOptions.KeepIdentity = true is not supported by BulkCopyType.RowByRow mode"));
 				return false;
 			}
 
@@ -264,44 +282,58 @@ namespace Tests.xUpdate
 			return true;
 		}
 
-		// DB2: 
+		// DB2:
 		[Test]
 		public void ReuseOptionTest([DataSources(false, ProviderName.DB2)] string context)
 		{
-			using (var db = new TestDataConnection(context))
+			using (var db = GetDataConnection(context))
+			using (new RestoreBaseTables(db))
 			using (db.BeginTransaction())
 			{
-				var options = new BulkCopyOptions();
+				var options = GetDefaultBulkCopyOptions(context);
 
 				db.Parent.BulkCopy(options, new[] { new Parent { ParentID = 111001 } });
-				db.Child. BulkCopy(options, new[] { new Child  { ParentID = 111001 } });
+				db.Child .BulkCopy(options, new[] { new Child { ParentID = 111001 } });
 			}
 		}
-		
+
+		// ClickHouse: parameters support not implemented (yet?)
 		[Test]
-		public void UseParametersTest([DataSources(false)] string context)
+		public void UseParametersTest([DataSources(false, TestProvName.AllClickHouse)] string context)
 		{
-			using (var db = new TestDataConnection(context))
-			using (db.BeginTransaction())
-			{
-				var options = new BulkCopyOptions(){ UseParameters = true, MaxBatchSize = 50, BulkCopyType = BulkCopyType.MultipleRows };
-				var start   = 111001;
+			using var db = new TestDataConnection(context);
+			using var _ = new RestoreBaseTables(db);
+			using var tr = db.BeginTransaction();
+			var options = new BulkCopyOptions(){ UseParameters = true, MaxBatchSize = 50, BulkCopyType = BulkCopyType.MultipleRows };
+			var start   = 111001;
 
-				var rowsToInsert = Enumerable.Range(start, 149)
-					.Select(r => new Parent() {ParentID = r, Value1 = r-start}).ToList();
+			var rowsToInsert = Enumerable.Range(start, 149)
+				.Select(r => new Parent() {ParentID = r, Value1 = r-start}).ToList();
 
-				db.Parent.BulkCopy(options, rowsToInsert);
+			db.Parent.BulkCopy(options, rowsToInsert);
 
-				Assert.AreEqual(rowsToInsert.Count,
-					db.Parent.Where(r =>
-						r.ParentID >= rowsToInsert[0].ParentID && r.ParentID <= rowsToInsert.Last().ParentID).Count());
-			}
+			Assert.That(db.Parent.Where(r =>
+					r.ParentID >= rowsToInsert[0].ParentID && r.ParentID <= rowsToInsert.Last().ParentID).Count(), Is.EqualTo(rowsToInsert.Count));
 		}
 
 		[Table]
 		public class SimpleBulkCopyTable
 		{
 			[Column] public int Id { get; set; }
+		}
+
+#if NET6_0_OR_GREATER
+		[Table]
+		public class DateOnlyTable
+		{
+			[Column] public DateOnly Date { get; set; }
+		}
+#endif		
+
+		[Table]
+		public class IdentitySimpleBulkCopyTable
+		{
+			[Column, Identity] public int Id { get; set; }
 		}
 
 		[Test]
@@ -312,7 +344,8 @@ namespace Tests.xUpdate
 			using (var db = new DataContext(context))
 			using (var table = db.CreateLocalTable<SimpleBulkCopyTable>())
 			{
-				db.DataProvider.BulkCopy(table, new BulkCopyOptions() { BulkCopyType = copyType }, new[] { new SimpleBulkCopyTable() { Id = 1 } });
+				var options = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+				db.DataProvider.BulkCopy(db.Options.WithOptions(options), table, new[] { new SimpleBulkCopyTable() { Id = 1 } });
 			}
 		}
 
@@ -324,8 +357,11 @@ namespace Tests.xUpdate
 			using (var db = new DataContext(context))
 			using (var table = db.CreateLocalTable<SimpleBulkCopyTable>())
 			{
-				await db.DataProvider.BulkCopyAsync(table, new BulkCopyOptions() { BulkCopyType = copyType }, new[] { new SimpleBulkCopyTable() { Id = 1 } }, default);
-				await db.DataProvider.BulkCopyAsync(table, new BulkCopyOptions() { BulkCopyType = copyType }, AsyncEnumerableData(2, 1), default);
+				var options = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+				await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, new[] { new SimpleBulkCopyTable() { Id = 1 } }, default);
+
+				options = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+				await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, AsyncEnumerableData(2, 1), default);
 			}
 		}
 
@@ -337,9 +373,14 @@ namespace Tests.xUpdate
 			using (var db = new DataContext(context))
 			using (var table = db.CreateLocalTable<SimpleBulkCopyTable>())
 			{
-				table.BulkCopy(new[] { new SimpleBulkCopyTable() { Id = 1 } });
-				table.BulkCopy(5, new[] { new SimpleBulkCopyTable() { Id = 2 } });
-				table.BulkCopy(new BulkCopyOptions() { BulkCopyType = copyType }, new[] { new SimpleBulkCopyTable() { Id = 3 } });
+				var options = GetDefaultBulkCopyOptions(context);
+				table.BulkCopy(options, new[] { new SimpleBulkCopyTable() { Id = 1 } });
+
+				options = GetDefaultBulkCopyOptions(context) with { MaxBatchSize = 5 };
+				table.BulkCopy(options, new[] { new SimpleBulkCopyTable() { Id = 2 } });
+
+				options = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+				table.BulkCopy(options, new[] { new SimpleBulkCopyTable() { Id = 3 } });
 			}
 		}
 
@@ -351,15 +392,62 @@ namespace Tests.xUpdate
 			using (var db = new DataContext(context))
 			using (var table = db.CreateLocalTable<SimpleBulkCopyTable>())
 			{
-				await table.BulkCopyAsync(new[] { new SimpleBulkCopyTable() { Id = 1 } });
-				await table.BulkCopyAsync(5, new[] { new SimpleBulkCopyTable() { Id = 2 } });
-				await table.BulkCopyAsync(new BulkCopyOptions() { BulkCopyType = copyType }, new[] { new SimpleBulkCopyTable() { Id = 3 } });
+				var options = GetDefaultBulkCopyOptions(context);
+				await table.BulkCopyAsync(options, new[] { new SimpleBulkCopyTable() { Id = 1 } });
 
-				await table.BulkCopyAsync(AsyncEnumerableData(10, 1));
-				await table.BulkCopyAsync(5, AsyncEnumerableData(20, 1));
-				await table.BulkCopyAsync(new BulkCopyOptions() { BulkCopyType = copyType }, AsyncEnumerableData(30, 1));
+				options = GetDefaultBulkCopyOptions(context) with { MaxBatchSize = 5 };
+				await table.BulkCopyAsync(options, new[] { new SimpleBulkCopyTable() { Id = 2 } });
+
+				options = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+				await table.BulkCopyAsync(options, new[] { new SimpleBulkCopyTable() { Id = 3 } });
+
+				options = GetDefaultBulkCopyOptions(context);
+				await table.BulkCopyAsync(options, AsyncEnumerableData(10, 1));
+
+				options = GetDefaultBulkCopyOptions(context) with { MaxBatchSize = 5 };
+				await table.BulkCopyAsync(options, AsyncEnumerableData(20, 1));
+
+				options = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+				await table.BulkCopyAsync(options, AsyncEnumerableData(30, 1));
 			}
 		}
+
+#if NET6_0_OR_GREATER
+		[Test]
+		public void BulkCopyDateOnly(
+			[DataSources(false)] string context,
+			[Values(BulkCopyType.RowByRow, BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			using var db    = new DataConnection(context);
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+			using var table = db.CreateLocalTable<DateOnlyTable>();
+			
+			db.DataProvider.BulkCopy(
+				db.Options.WithOptions(options), 
+				table, 
+				new[] { new DateOnlyTable() { Date = new DateOnly(2021, 1, 1) } });
+			
+			Assert.That(table.Single().Date, Is.EqualTo(new DateOnly(2021, 1, 1)));
+		}
+
+		[Test]
+		public void BulkCopyDateOnlyArrayBound(
+			[IncludeDataSources(TestProvName.AllOracle)] string context
+		)
+		{
+			// This makes use of array-bound parameters, which is a unique code-path in OracleBulkCopy (issue #4385)
+			using var db    = new DataConnection(context, o => o.UseOracle(o => o with { AlternativeBulkCopy = AlternativeBulkCopy.InsertInto }));
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = BulkCopyType.MultipleRows };
+			using var table = db.CreateLocalTable<DateOnlyTable>();
+			
+			db.DataProvider.BulkCopy(
+				db.Options.WithOptions(options), 
+				table, 
+				new[] { new DateOnlyTable() { Date = new DateOnly(2021, 1, 1) } });
+			
+			Assert.That(table.Single().Date, Is.EqualTo(new DateOnly(2021, 1, 1)));
+		}
+#endif
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
 		private async IAsyncEnumerable<SimpleBulkCopyTable> AsyncEnumerableData(int start, int count)
@@ -368,6 +456,553 @@ namespace Tests.xUpdate
 			for (var i = 0; i < count; i++)
 				yield return new SimpleBulkCopyTable() { Id = start + i };
 		}
+
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+		private async IAsyncEnumerable<IdentitySimpleBulkCopyTable> IdentityAsyncEnumerableData(int start, int count)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+		{
+			for (var i = 0; i < count; i++)
+				yield return new IdentitySimpleBulkCopyTable() { Id = start + i };
+		}
+
+		#region CloseAfterUse
+		private sealed class TestDataContextInterceptor : DataContextInterceptor
+		{
+			public int Closed      { get; private set; }
+			public int ClosedAsync { get; private set; }
+			public int ClosedCtx      { get; private set; }
+			public int ClosedAsyncCtx { get; private set; }
+
+			public override void OnClosed(DataContextEventData eventData)
+			{
+				if (eventData.Context is DataConnection)
+					Closed++;
+				else
+					ClosedCtx++;
+			}
+
+			public override Task OnClosedAsync(DataContextEventData eventData)
+			{
+				if (eventData.Context is DataConnection)
+					ClosedAsync++;
+				else
+					ClosedAsyncCtx++;
+
+				return Task.CompletedTask;
+			}
+		}
+
+		[Test]
+		public void BulkCopyWithCloseAfterUseDataContext(
+			[DataSources(false)] string context,
+			[Values(BulkCopyType.RowByRow, BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataContext(context);
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+
+			((IDataContext)db).Close();
+			MySqlTestUtils.EnableNativeBulk(db.GetDataConnection(), context);
+			db.CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+			db.DataProvider.BulkCopy(db.Options.WithOptions(options), table, new[] { new SimpleBulkCopyTable() { Id = 1 } });
+
+			if (context.IsAnyOf(ProviderName.ClickHouseClient) && copyType is BulkCopyType.ProviderSpecific)
+			{
+				Assert.Multiple(() =>
+				{
+					// provider-specific bulk copy doesn't support sync API
+					Assert.That(interceptor.Closed, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+					Assert.That(interceptor.ClosedCtx, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(1).Or.EqualTo(0));
+				});
+			}
+			else
+			{
+				Assert.Multiple(() =>
+				{
+					Assert.That(interceptor.Closed, Is.EqualTo(1));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedCtx, Is.EqualTo(1).Or.EqualTo(0));
+					Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(0));
+				});
+			}
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncWithCloseAfterUseDataContext(
+			[DataSources(false)] string context,
+			[Values(BulkCopyType.RowByRow, BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataContext(context);
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+
+			((IDataContext)db).Close();
+			MySqlTestUtils.EnableNativeBulk(db.GetDataConnection(), context);
+			db.CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, new[] { new SimpleBulkCopyTable() { Id = 1 } }, default);
+
+			if (context.IsAnyOf(TestProvName.AllInformix, ProviderName.DB2, ProviderName.Sybase, TestProvName.AllOracle)
+				&& copyType is BulkCopyType.ProviderSpecific)
+			{
+				Assert.Multiple(() =>
+				{
+					// provider-specific bulk copy doesn't support async API
+					Assert.That(interceptor.Closed, Is.EqualTo(1));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedCtx, Is.EqualTo(1).Or.EqualTo(0));
+					Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(0));
+				});
+			}
+			else
+			{
+				Assert.Multiple(() =>
+				{
+					Assert.That(interceptor.Closed, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+					Assert.That(interceptor.ClosedCtx, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(1).Or.EqualTo(0));
+				});
+			}
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncEnumerableWithCloseAfterUseDataContext(
+			[DataSources(false)] string context,
+			[Values(BulkCopyType.RowByRow, BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataContext(context);
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+
+			((IDataContext)db).Close();
+			MySqlTestUtils.EnableNativeBulk(db.GetDataConnection(), context);
+			db.CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, AsyncEnumerableData(2, 1), default);
+
+			if (context.IsAnyOf(TestProvName.AllInformix, ProviderName.DB2, ProviderName.Sybase, TestProvName.AllOracle)
+				&& copyType is BulkCopyType.ProviderSpecific)
+			{
+				Assert.Multiple(() =>
+				{
+					// provider-specific bulk copy doesn't support async API
+					Assert.That(interceptor.Closed, Is.EqualTo(1));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedCtx, Is.EqualTo(1).Or.EqualTo(0));
+					Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(0));
+				});
+			}
+			else
+			{
+				Assert.Multiple(() =>
+				{
+					Assert.That(interceptor.Closed, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+					Assert.That(interceptor.ClosedCtx, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(1).Or.EqualTo(0));
+				});
+			}
+		}
+
+		[Test]
+		public void BulkCopyWithCloseAfterUseDataConnection(
+			[DataSources(false)] string context,
+			[Values(BulkCopyType.RowByRow, BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataConnection(context);
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+
+			((IDataContext)db).Close();
+			MySqlTestUtils.EnableNativeBulk(db, context);
+			((IDataContext)db).CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+
+			db.DataProvider.BulkCopy(db.Options.WithOptions(options), table, new[] { new SimpleBulkCopyTable() { Id = 1 } });
+
+			if (context.IsAnyOf(ProviderName.ClickHouseClient) && copyType is BulkCopyType.ProviderSpecific)
+			{
+				Assert.Multiple(() =>
+				{
+					// provider-specific bulk copy doesn't support sync API
+					Assert.That(interceptor.Closed, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+				});
+			}
+			else
+			{
+				Assert.Multiple(() =>
+				{
+					Assert.That(interceptor.Closed, Is.EqualTo(1));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(0));
+				});
+			}
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncWithCloseAfterUseDataConnection(
+			[DataSources(false)] string context,
+			[Values(BulkCopyType.RowByRow, BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataConnection(context);
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+
+			((IDataContext)db).Close();
+			MySqlTestUtils.EnableNativeBulk(db, context);
+			((IDataContext)db).CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, new[] { new SimpleBulkCopyTable() { Id = 1 } }, default);
+
+			if (context.IsAnyOf(TestProvName.AllInformix, ProviderName.DB2, ProviderName.Sybase, TestProvName.AllOracle)
+				&& copyType is BulkCopyType.ProviderSpecific)
+			{
+				Assert.Multiple(() =>
+				{
+					// provider-specific bulk copy doesn't support async API
+					Assert.That(interceptor.Closed, Is.EqualTo(1));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(0));
+				});
+			}
+			else
+			{
+				Assert.Multiple(() =>
+				{
+					Assert.That(interceptor.Closed, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+				});
+			}
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncEnumerableWithCloseAfterUseDataConnection(
+			[DataSources(false)] string context,
+			[Values(BulkCopyType.RowByRow, BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataConnection(context);
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+
+			((IDataContext)db).Close();
+			MySqlTestUtils.EnableNativeBulk(db, context);
+			((IDataContext)db).CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, AsyncEnumerableData(2, 1), default);
+
+			if (context.IsAnyOf(TestProvName.AllInformix, ProviderName.DB2, ProviderName.Sybase, TestProvName.AllOracle)
+				&& copyType is BulkCopyType.ProviderSpecific)
+			{
+				Assert.Multiple(() =>
+				{
+					// provider-specific bulk copy doesn't support async API
+					Assert.That(interceptor.Closed, Is.EqualTo(1));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(0));
+				});
+			}
+			else
+			{
+				Assert.Multiple(() =>
+				{
+					Assert.That(interceptor.Closed, Is.EqualTo(0));
+					Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+				});
+			}
+		}
+
+		[Test]
+		public void BulkCopyWithCloseAfterUseDataContextKeepIdentity(
+			[IncludeDataSources(TestProvName.AllSqlServer, ProviderName.SqlCe)] string context,
+			[Values(BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataContext(context);
+			using var table = db.CreateLocalTable<IdentitySimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType, KeepIdentity = true };
+
+			((IDataContext)db).Close();
+			db.CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+			db.DataProvider.BulkCopy(db.Options.WithOptions(options), table, new[] { new IdentitySimpleBulkCopyTable() { Id = 1 } });
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(1));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedCtx, Is.EqualTo(1).Or.EqualTo(0));
+				Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(0));
+			});
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncWithCloseAfterUseDataContextKeepIdentity(
+			[IncludeDataSources(TestProvName.AllSqlServer, ProviderName.SqlCe)] string context,
+			[Values(BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataContext(context);
+			using var table = db.CreateLocalTable<IdentitySimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType, KeepIdentity = true };
+
+			((IDataContext)db).Close();
+			db.CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, new[] { new IdentitySimpleBulkCopyTable() { Id = 1 } }, default);
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+				Assert.That(interceptor.ClosedCtx, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(1).Or.EqualTo(0));
+			});
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncEnumerableWithCloseAfterUseDataContextKeepIdentity(
+			[IncludeDataSources(TestProvName.AllSqlServer, ProviderName.SqlCe)] string context,
+			[Values(BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataContext(context);
+			using var table = db.CreateLocalTable<IdentitySimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType, KeepIdentity = true };
+
+			((IDataContext)db).Close();
+			db.CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, IdentityAsyncEnumerableData(2, 1), default);
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+				Assert.That(interceptor.ClosedCtx, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(1).Or.EqualTo(0));
+			});
+		}
+
+		[Test]
+		public void BulkCopyWithCloseAfterUseDataConnectionKeepIdentity(
+			[IncludeDataSources(TestProvName.AllSqlServer, ProviderName.SqlCe)] string context,
+			[Values(BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataConnection(context);
+			using var table = db.CreateLocalTable<IdentitySimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType, KeepIdentity = true };
+
+			((IDataContext)db).Close();
+			((IDataContext)db).CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+
+			db.DataProvider.BulkCopy(db.Options.WithOptions(options), table, new[] { new IdentitySimpleBulkCopyTable() { Id = 1 } });
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(1));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(0));
+			});
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncWithCloseAfterUseDataConnectionKeepIdentity(
+			[IncludeDataSources(TestProvName.AllSqlServer, ProviderName.SqlCe)] string context,
+			[Values(BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataConnection(context);
+			using var table = db.CreateLocalTable<IdentitySimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType, KeepIdentity = true };
+
+			((IDataContext)db).Close();
+			((IDataContext)db).CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, new[] { new IdentitySimpleBulkCopyTable() { Id = 1 } }, default);
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+			});
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncEnumerableWithCloseAfterUseDataConnectionKeepIdentity(
+			[IncludeDataSources(TestProvName.AllSqlServer, ProviderName.SqlCe)] string context,
+			[Values(BulkCopyType.MultipleRows, BulkCopyType.ProviderSpecific)] BulkCopyType copyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataConnection(context);
+			using var table = db.CreateLocalTable<IdentitySimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType, KeepIdentity = true };
+
+			((IDataContext)db).Close();
+			((IDataContext)db).CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, IdentityAsyncEnumerableData(2, 1), default);
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+			});
+		}
+
+		[Test]
+		public void BulkCopyWithCloseAfterUseDataContextOracleAlternative(
+			[IncludeDataSources(TestProvName.AllOracle)] string context,
+			[Values(AlternativeBulkCopy.InsertDual, AlternativeBulkCopy.InsertInto)] AlternativeBulkCopy alternateCopyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataContext(new DataOptions().UseConfiguration(context).UseOracle(o => o with { AlternativeBulkCopy = alternateCopyType }));
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = BulkCopyType.MultipleRows };
+
+			((IDataContext)db).Close();
+			db.CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+			db.DataProvider.BulkCopy(db.Options.WithOptions(options), table, new[] { new SimpleBulkCopyTable() { Id = 1 } });
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(1));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedCtx, Is.EqualTo(1).Or.EqualTo(0));
+				Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(0));
+			});
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncWithCloseAfterUseDataContextOracleAlternative(
+			[IncludeDataSources(TestProvName.AllOracle)] string context,
+			[Values(AlternativeBulkCopy.InsertDual, AlternativeBulkCopy.InsertInto)] AlternativeBulkCopy alternateCopyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataContext(new DataOptions().UseConfiguration(context).UseOracle(o => o with { AlternativeBulkCopy = alternateCopyType }));
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = BulkCopyType.MultipleRows };
+
+			((IDataContext)db).Close();
+			db.CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, new[] { new SimpleBulkCopyTable() { Id = 1 } }, default);
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+				Assert.That(interceptor.ClosedCtx, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(1).Or.EqualTo(0));
+			});
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncEnumerableWithCloseAfterUseDataContextOracleAlternative(
+			[IncludeDataSources(TestProvName.AllOracle)] string context,
+			[Values(AlternativeBulkCopy.InsertDual, AlternativeBulkCopy.InsertInto)] AlternativeBulkCopy alternateCopyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataContext(new DataOptions().UseConfiguration(context).UseOracle(o => o with { AlternativeBulkCopy = alternateCopyType }));
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = BulkCopyType.MultipleRows };
+
+			((IDataContext)db).Close();
+			db.CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, AsyncEnumerableData(2, 1), default);
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+				Assert.That(interceptor.ClosedCtx, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsyncCtx, Is.EqualTo(1).Or.EqualTo(0));
+			});
+		}
+
+		[Test]
+		public void BulkCopyWithCloseAfterUseDataConnectionOracleAlternative(
+			[IncludeDataSources(TestProvName.AllOracle)] string context,
+			[Values(AlternativeBulkCopy.InsertDual, AlternativeBulkCopy.InsertInto)] AlternativeBulkCopy alternateCopyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataConnection(context, o => o.UseOracle(o => o with { AlternativeBulkCopy = alternateCopyType }));
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = BulkCopyType.MultipleRows };
+
+			((IDataContext)db).Close();
+			((IDataContext)db).CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+
+			db.DataProvider.BulkCopy(db.Options.WithOptions(options), table, new[] { new SimpleBulkCopyTable() { Id = 1 } });
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(1));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(0));
+			});
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncWithCloseAfterUseDataConnectionOracleAlternative(
+			[IncludeDataSources(TestProvName.AllOracle)] string context,
+			[Values(AlternativeBulkCopy.InsertDual, AlternativeBulkCopy.InsertInto)] AlternativeBulkCopy alternateCopyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = new DataConnection(context, o => o.UseOracle(o => o with { AlternativeBulkCopy = alternateCopyType }));
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = BulkCopyType.MultipleRows };
+
+			((IDataContext)db).Close();
+			((IDataContext)db).CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, new[] { new SimpleBulkCopyTable() { Id = 1 } }, default);
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+			});
+		}
+
+		[Test]
+		public async Task BulkCopyAsyncEnumerableWithCloseAfterUseDataConnectionOracleAlternative(
+			[IncludeDataSources(TestProvName.AllOracle)] string context,
+			[Values(AlternativeBulkCopy.InsertDual, AlternativeBulkCopy.InsertInto)] AlternativeBulkCopy alternateCopyType)
+		{
+			var interceptor = new TestDataContextInterceptor();
+			using var db    = GetDataConnection(context, o => o.UseOracle(o => o with { AlternativeBulkCopy = alternateCopyType }));
+			using var table = db.CreateLocalTable<SimpleBulkCopyTable>();
+			var options     = GetDefaultBulkCopyOptions(context) with { BulkCopyType = BulkCopyType.MultipleRows };
+
+			((IDataContext)db).Close();
+			((IDataContext)db).CloseAfterUse = true;
+			db.AddInterceptor(interceptor);
+
+			await db.DataProvider.BulkCopyAsync(db.Options.WithOptions(options), table, AsyncEnumerableData(2, 1), default);
+
+			Assert.Multiple(() =>
+			{
+				Assert.That(interceptor.Closed, Is.EqualTo(0));
+				Assert.That(interceptor.ClosedAsync, Is.EqualTo(1));
+			});
+		}
+		#endregion
 
 		[Table("TPHTable")]
 		[InheritanceMapping(Code = 1, Type = typeof(Inherited1))]
@@ -382,23 +1017,23 @@ namespace Tests.xUpdate
 			public abstract int Discriminator { get; }
 		}
 
-		class Inherited1 : BaseClass
+		sealed class Inherited1 : BaseClass
 		{
 			public override int Discriminator => 1;
 
 			[Column(Length = 50)]
 			public string? Value1 { get; set; }
-		}		
-		
-		class Inherited2 : BaseClass
+		}
+
+		sealed class Inherited2 : BaseClass
 		{
 			public override int Discriminator => 2;
 
 			[Column(Length = 50)]
 			public string? Value2 { get; set; }
-		}		
-		
-		class Inherited3 : BaseClass
+		}
+
+		sealed class Inherited3 : BaseClass
 		{
 			public override int Discriminator => 3;
 
@@ -409,18 +1044,19 @@ namespace Tests.xUpdate
 		}
 
 		[Test]
-		public void BulcopyTPH(
+		public void BulkCopyTPH(
 			[DataSources(false)] string context,
 			[Values] BulkCopyType copyType)
 		{
 			var ms = new MappingSchema();
 
-			ms.GetFluentMappingBuilder()
+			new FluentMappingBuilder(ms)
 				.Entity<Inherited3>()
 				.Property(e => e.NullableBool)
 				.HasDataType(DataType.VarChar)
 				.HasLength(1)
-				.HasConversion(b => b.HasValue ? b.Value ? "Y" : "N" : null, s => s != null ? s == "Y" : null, true);
+				.HasConversion(b => b.HasValue ? b.Value ? "Y" : "N" : null, s => s != null ? s == "Y" : null, true)
+				.Build();
 
 			var data = new BaseClass[]
 			{
@@ -432,9 +1068,10 @@ namespace Tests.xUpdate
 			using (var db = new DataConnection(context, ms))
 			using (var table = db.CreateLocalTable<BaseClass>())
 			{
-				table.BulkCopy(new BulkCopyOptions { BulkCopyType = copyType }, data);
+				var options = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+				table.BulkCopy(options, data);
 
-				var items = table.ToArray();
+				var items = table.OrderBy(_ => _.Id).ToArray();
 
 				items[0].Id.Should().Be(1);
 				items[0].Discriminator.Should().Be(1);
@@ -448,14 +1085,13 @@ namespace Tests.xUpdate
 				items[2].Discriminator.Should().Be(3);
 				((Inherited3)items[2]).Value3.Should().Be("Str3");
 
-				table.Single(x => x is Inherited1).Should().BeOfType(typeof(Inherited1));
-				table.Single(x => x is Inherited2).Should().BeOfType(typeof(Inherited2));
-				table.Single(x => x is Inherited3).Should().BeOfType(typeof(Inherited3));
+				table.Single(x => x is Inherited1).Should().BeOfType<Inherited1>();
+				table.Single(x => x is Inherited2).Should().BeOfType<Inherited2>();
+				table.Single(x => x is Inherited3).Should().BeOfType<Inherited3>();
 
-				table.Single(x => ((Inherited1)x).Value1 == "Str1").Should().BeOfType(typeof(Inherited1));
-				table.Single(x => ((Inherited2)x).Value2 == "Str2").Should().BeOfType(typeof(Inherited2));
-				table.Single(x => ((Inherited3)x).Value3 == "Str3").Should().BeOfType(typeof(Inherited3));
-
+				table.Single(x => ((Inherited1)x).Value1 == "Str1").Should().BeOfType<Inherited1>();
+				table.Single(x => ((Inherited2)x).Value2 == "Str2").Should().BeOfType<Inherited2>();
+				table.Single(x => ((Inherited3)x).Value3 == "Str3").Should().BeOfType<Inherited3>();
 			}
 		}
 
@@ -472,27 +1108,27 @@ namespace Tests.xUpdate
 			public int Discriminator { get; set; }
 		}
 
-		class InheritedDefault1 : BaseDefaultDiscriminator
+		sealed class InheritedDefault1 : BaseDefaultDiscriminator
 		{
 			[Column(Length = 50)]
 			public string? Value1 { get; set; }
-		}		
-		
-		class InheritedDefault2 : BaseDefaultDiscriminator
+		}
+
+		sealed class InheritedDefault2 : BaseDefaultDiscriminator
 		{
 			[Column(Length = 50)]
 			public string? Value2 { get; set; }
-		}		
-		
-		class InheritedDefault3 : BaseDefaultDiscriminator
+		}
+
+		sealed class InheritedDefault3 : BaseDefaultDiscriminator
 		{
 			[Column(Length = 50)]
 			public string? Value3 { get; set; }
 		}
 
 		[Test]
-		public void BulcopyTPHDefault(
-			[IncludeDataSources(false, TestProvName.AllSQLite)] string context,
+		public void BulkCopyTPHDefault(
+			[IncludeDataSources(false, TestProvName.AllSQLite, TestProvName.AllClickHouse)] string context,
 			[Values] BulkCopyType copyType)
 		{
 			var data = new BaseDefaultDiscriminator[]
@@ -505,9 +1141,10 @@ namespace Tests.xUpdate
 			using (var db = new DataConnection(context))
 			using (var table = db.CreateLocalTable<BaseDefaultDiscriminator>())
 			{
-				table.BulkCopy(new BulkCopyOptions { BulkCopyType = copyType }, data);
+				var options = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+				table.BulkCopy(options, data);
 
-				var items = table.ToArray();
+				var items = table.OrderBy(_ => _.Id).ToArray();
 
 				items[0].Id.Should().Be(1);
 				items[0].Discriminator.Should().Be(1);
@@ -521,16 +1158,66 @@ namespace Tests.xUpdate
 				items[2].Discriminator.Should().Be(3);
 				((InheritedDefault3)items[2]).Value3.Should().Be("Str3");
 
-				table.Single(x => x is InheritedDefault1).Should().BeOfType(typeof(InheritedDefault1));
-				table.Single(x => x is InheritedDefault2).Should().BeOfType(typeof(InheritedDefault2));
-				table.Single(x => x is InheritedDefault3).Should().BeOfType(typeof(InheritedDefault3));
+				table.Single(x => x is InheritedDefault1).Should().BeOfType<InheritedDefault1>();
+				table.Single(x => x is InheritedDefault2).Should().BeOfType<InheritedDefault2>();
+				table.Single(x => x is InheritedDefault3).Should().BeOfType<InheritedDefault3>();
 
-				table.Single(x => ((InheritedDefault1)x).Value1 == "Str1").Should().BeOfType(typeof(InheritedDefault1));
-				table.Single(x => ((InheritedDefault2)x).Value2 == "Str2").Should().BeOfType(typeof(InheritedDefault2));
-				table.Single(x => ((InheritedDefault3)x).Value3 == "Str3").Should().BeOfType(typeof(InheritedDefault3));
+				table.Single(x => ((InheritedDefault1)x).Value1 == "Str1").Should().BeOfType<InheritedDefault1>();
+				table.Single(x => ((InheritedDefault2)x).Value2 == "Str2").Should().BeOfType<InheritedDefault2>();
+				table.Single(x => ((InheritedDefault3)x).Value3 == "Str3").Should().BeOfType<InheritedDefault3>();
 			}
 		}
 
+		[Table]
+		sealed class IdentityOnlyField
+		{
+			[Identity] public int Id { get; set; }
+		}
 
+		[Table]
+		sealed class SkipOnlyField
+		{
+			[Column(SkipOnInsert = true)] public int? Id { get; set; }
+		}
+
+		[ActiveIssue(Configurations = [TestProvName.AllClickHouse, TestProvName.AllDB2, TestProvName.AllFirebird, TestProvName.AllInformix, TestProvName.AllMySql, TestProvName.AllOracle, TestProvName.AllPostgreSQL, TestProvName.AllSapHana, ProviderName.SqlCe, TestProvName.AllSQLite, TestProvName.AllSqlServer, TestProvName.AllSybase])]
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/4615")]
+		public void BulkCopyAutoOnly([DataSources(false)] string context, [Values] BulkCopyType copyType)
+		{
+			var data = new IdentityOnlyField[]
+			{
+				new IdentityOnlyField()
+			};
+
+			using var db = new DataConnection(context);
+			using var table = db.CreateLocalTable<IdentityOnlyField>();
+
+			var options = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+			table.BulkCopy(options, data);
+
+			var item = table.Single();
+
+			Assert.That(item.Id, Is.EqualTo(1));
+		}
+
+		[ActiveIssue(Configurations = [TestProvName.AllClickHouse, TestProvName.AllDB2, TestProvName.AllFirebird, TestProvName.AllInformix, TestProvName.AllMySql, TestProvName.AllOracle, TestProvName.AllPostgreSQL, TestProvName.AllSapHana, ProviderName.SqlCe, TestProvName.AllSQLite, TestProvName.AllSqlServer, TestProvName.AllSybase])]
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/4615")]
+		public void BulkCopySkipOnly([DataSources(false)] string context, [Values] BulkCopyType copyType)
+		{
+			var data = new SkipOnlyField[]
+			{
+				new SkipOnlyField()
+			};
+
+			using var db = new DataConnection(context);
+			using var table = db.CreateLocalTable<SkipOnlyField>();
+
+			var options = GetDefaultBulkCopyOptions(context) with { BulkCopyType = copyType };
+			table.BulkCopy(options, data);
+
+			var item = table.Single();
+
+			Assert.That(item.Id, Is.Null);
+		}
 	}
 }

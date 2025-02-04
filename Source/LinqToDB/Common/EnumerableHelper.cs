@@ -2,25 +2,25 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using LinqToDB.Async;
 
 namespace LinqToDB.Common
 {
-	internal class EnumerableHelper
+	using Async;
+
+	public static class EnumerableHelper
 	{
-#if NATIVE_ASYNC
-		public static IEnumerable<T> AsyncToSyncEnumerable<T>(IAsyncEnumerator<T> enumerator)
+		internal static IEnumerable<T> AsyncToSyncEnumerable<T>(IAsyncEnumerator<T> enumerator)
 		{
-			var result = SafeAwaiter.Run(() => enumerator.MoveNextAsync());
+			var result = SafeAwaiter.Run(enumerator.MoveNextAsync);
 			while (result)
 			{
 				yield return enumerator.Current;
-				result = SafeAwaiter.Run(() => enumerator.MoveNextAsync());
+				result = SafeAwaiter.Run(enumerator.MoveNextAsync);
 			}
 		}
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-		public static async IAsyncEnumerable<T> SyncToAsyncEnumerable<T>(IEnumerable<T> enumerable)
+		internal static async IAsyncEnumerable<T> SyncToAsyncEnumerable<T>(IEnumerable<T> enumerable)
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
 		{
 			foreach (var item in enumerable)
@@ -28,7 +28,6 @@ namespace LinqToDB.Common
 				yield return item;
 			}
 		}
-#endif
 
 		/// <summary>
 		/// Split enumerable source into batches of specified size.
@@ -48,7 +47,7 @@ namespace LinqToDB.Common
 				yield return batcher.Current;
 		}
 
-		private class Batcher<T>
+		private sealed class Batcher<T>
 		{
 			private readonly int _batchSize;
 			private readonly IEnumerator<T> _enumerator;
@@ -82,7 +81,7 @@ namespace LinqToDB.Common
 
 						if (_enumerator.MoveNext())
 							yield return _enumerator.Current;
-						else 
+						else
 						{
 							_sourceDepleted = true;
 							break;
@@ -117,7 +116,6 @@ namespace LinqToDB.Common
 			}
 		}
 
-#if NATIVE_ASYNC
 		/// <summary>
 		/// Split enumerable source into batches of specified size.
 		/// Limitation: each batch should be enumerated only once or exception will be generated.
@@ -140,7 +138,7 @@ namespace LinqToDB.Common
 			yield return source;
 		}
 
-		private class AsyncBatchEnumerable<T> : IAsyncEnumerable<IAsyncEnumerable<T>>
+		private sealed class AsyncBatchEnumerable<T> : IAsyncEnumerable<IAsyncEnumerable<T>>
 		{
 			IAsyncEnumerable<T> _source;
 			int _batchSize;
@@ -155,7 +153,7 @@ namespace LinqToDB.Common
 				=> new AsyncBatchEnumerator<T>(_source, _batchSize, cancellationToken);
 		}
 
-		private class AsyncBatchEnumerator<T> : IAsyncEnumerator<IAsyncEnumerable<T>>, IAsyncEnumerable<T>
+		private sealed class AsyncBatchEnumerator<T> : IAsyncEnumerator<IAsyncEnumerable<T>>, IAsyncEnumerable<T>
 		{
 			readonly IAsyncEnumerator<T> _source;
 			readonly int                 _batchSize;
@@ -187,7 +185,7 @@ namespace LinqToDB.Common
 			{
 				if (_finished) return false;
 
-				_isCurrent = await _source.MoveNextAsync().ConfigureAwait(Configuration.ContinueOnCapturedContext);
+				_isCurrent = await _source.MoveNextAsync().ConfigureAwait(false);
 				_current   = _isCurrent ? GetNewEnumerable() : null;
 				_finished  = !_isCurrent;
 
@@ -200,7 +198,7 @@ namespace LinqToDB.Common
 				yield return _source.Current;
 				while (++returned < _batchSize)
 				{
-					if (_finished || !await _source.MoveNextAsync().ConfigureAwait(Configuration.ContinueOnCapturedContext))
+					if (_finished || !await _source.MoveNextAsync().ConfigureAwait(false))
 					{
 						_finished = true;
 						yield break;
@@ -209,6 +207,5 @@ namespace LinqToDB.Common
 				}
 			}
 		}
-#endif
 	}
 }

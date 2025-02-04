@@ -1,8 +1,15 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 
 using LinqToDB;
+using LinqToDB.Expressions;
+using LinqToDB.Expressions.Internal;
+using LinqToDB.Extensions;
+using LinqToDB.Mapping;
 using LinqToDB.SqlQuery;
 
 using NUnit.Framework;
@@ -13,7 +20,7 @@ namespace Tests.Linq
 
 	public static class TestedExtensions
 	{
-		class DatePartBuilder: Sql.IExtensionCallBuilder
+		sealed class DatePartBuilder : Sql.IExtensionCallBuilder
 		{
 			public void Build(Sql.ISqExtensionBuilder builder)
 			{
@@ -37,7 +44,7 @@ namespace Tests.Linq
 			}
 		}
 
-		class DatePartBuilderMySql: Sql.IExtensionCallBuilder
+		sealed class DatePartBuilderMySql : Sql.IExtensionCallBuilder
 		{
 			public void Build(Sql.ISqExtensionBuilder builder)
 			{
@@ -55,7 +62,7 @@ namespace Tests.Linq
 					case Sql.DateParts.Week        : partStr = "week";        break;
 					case Sql.DateParts.WeekDay     :
 						builder.Expression = "WeekDay(Date_Add({date}, interval 1 day))";
-						builder.ResultExpression = builder.Inc(builder.ConvertToSqlExpression(Precedence.Primary));
+						builder.ResultExpression = builder.Inc(builder.ConvertToSqlExpression(Precedence.Primary)!);
 						break;
 					case Sql.DateParts.Hour        : partStr = "hour";        break;
 					case Sql.DateParts.Minute      : partStr = "minute";      break;
@@ -70,7 +77,7 @@ namespace Tests.Linq
 			}
 		}
 
-		class DatePartBuilderPostgre: Sql.IExtensionCallBuilder
+		sealed class DatePartBuilderPostgre : Sql.IExtensionCallBuilder
 		{
 			public void Build(Sql.ISqExtensionBuilder builder)
 			{
@@ -86,7 +93,7 @@ namespace Tests.Linq
 					case Sql.DateParts.Week        : partStr = "week";    break;
 					case Sql.DateParts.WeekDay     :
 						builder.Expression = "Extract(dow from {date})";
-						builder.ResultExpression = builder.Inc(builder.ConvertToSqlExpression(Precedence.Primary));
+						builder.ResultExpression = builder.Inc(builder.ConvertToSqlExpression(Precedence.Primary)!);
 						break;
 					case Sql.DateParts.Hour        : partStr = "hour";    break;
 					case Sql.DateParts.Minute      : partStr = "minute";  break;
@@ -103,7 +110,7 @@ namespace Tests.Linq
 			}
 		}
 
-		class DatePartBuilderSqLite: Sql.IExtensionCallBuilder
+		sealed class DatePartBuilderSqLite : Sql.IExtensionCallBuilder
 		{
 			public void Build(Sql.ISqExtensionBuilder builder)
 			{
@@ -114,7 +121,7 @@ namespace Tests.Linq
 					case Sql.DateParts.Year        : partStr = "Y"; break;
 					case Sql.DateParts.Quarter     :
 						builder.Expression = "Cast(strFTime('%m', {date}) as int)";
-						builder.ResultExpression = builder.Inc(builder.Div(builder.Dec(builder.ConvertToSqlExpression(Precedence.Primary)), 3));
+						builder.ResultExpression = builder.Inc(builder.Div(builder.Dec(builder.ConvertToSqlExpression(Precedence.Primary)!), 3));
 						break;
 					case Sql.DateParts.Month       : partStr = "m"; break;
 					case Sql.DateParts.DayOfYear   : partStr = "j"; break;
@@ -122,7 +129,7 @@ namespace Tests.Linq
 					case Sql.DateParts.Week        : partStr = "W"; break;
 					case Sql.DateParts.WeekDay     :
 						builder.Expression = "Cast(strFTime('%w', {date}) as int)";
-						builder.ResultExpression = builder.Inc(builder.ConvertToSqlExpression(Precedence.Primary));
+						builder.ResultExpression = builder.Inc(builder.ConvertToSqlExpression(Precedence.Primary)!);
 						break;
 					case Sql.DateParts.Hour        : partStr = "H"; break;
 					case Sql.DateParts.Minute      : partStr = "M"; break;
@@ -140,7 +147,7 @@ namespace Tests.Linq
 			}
 		}
 
-		class DatePartBuilderAccess: Sql.IExtensionCallBuilder
+		sealed class DatePartBuilderAccess : Sql.IExtensionCallBuilder
 		{
 			public void Build(Sql.ISqExtensionBuilder builder)
 			{
@@ -163,8 +170,7 @@ namespace Tests.Linq
 			}
 		}
 
-
-		class DatePartBuilderSapHana: Sql.IExtensionCallBuilder
+		sealed class DatePartBuilderSapHana : Sql.IExtensionCallBuilder
 		{
 			public void Build(Sql.ISqExtensionBuilder builder)
 			{
@@ -187,7 +193,7 @@ namespace Tests.Linq
 			}
 		}
 
-		class DatePartBuilderInformix: Sql.IExtensionCallBuilder
+		sealed class DatePartBuilderInformix : Sql.IExtensionCallBuilder
 		{
 			public void Build(Sql.ISqExtensionBuilder builder)
 			{
@@ -211,7 +217,7 @@ namespace Tests.Linq
 			}
 		}
 
-		class DatePartBuilderOracle: Sql.IExtensionCallBuilder
+		sealed class DatePartBuilderOracle : Sql.IExtensionCallBuilder
 		{
 			public void Build(Sql.ISqExtensionBuilder builder)
 			{
@@ -235,7 +241,41 @@ namespace Tests.Linq
 			}
 		}
 
-		class DatePartBuilderDB2: Sql.IExtensionCallBuilder
+		sealed class DatePartBuilderClickHouse : Sql.IExtensionCallBuilder
+		{
+			public void Build(Sql.ISqExtensionBuilder builder)
+			{
+				string exprStr;
+				var part = builder.GetValue<Sql.DateParts>("part");
+
+				switch (part)
+				{
+					case Sql.DateParts.Year       : exprStr = "YEAR({date})"                      ; break;
+					case Sql.DateParts.Quarter    : exprStr = "QUARTER({date})"                   ; break;
+					case Sql.DateParts.Month      : exprStr = "MONTH({date})"                     ; break;
+					case Sql.DateParts.DayOfYear  : exprStr = "DAYOFYEAR({date})"                 ; break;
+					case Sql.DateParts.Day        : exprStr = "DAY({date})"                       ; break;
+					case Sql.DateParts.Week       : exprStr = "toISOWeek(toDateTime64({date}, 0))"; break;
+					case Sql.DateParts.Hour       : exprStr = "HOUR({date})"                      ; break;
+					case Sql.DateParts.Minute     : exprStr = "MINUTE({date})"                    ; break;
+					case Sql.DateParts.Second     : exprStr = "SECOND({date})"                    ; break;
+					case Sql.DateParts.WeekDay    :
+						builder.Expression = "DAYOFWEEK(addDays({date}, 1))";
+						builder.Extension.Precedence = Precedence.Additive;
+						return;
+					case Sql.DateParts.Millisecond:
+						builder.Expression = "toUnixTimestamp64Milli({date}) % 1000";
+						builder.Extension.Precedence = Precedence.Multiplicative;
+						return;
+					default:
+						throw new InvalidOperationException($"Unexpected datepart: {part}");
+				}
+
+				builder.Expression = exprStr;
+			}
+		}
+
+		sealed class DatePartBuilderDB2 : Sql.IExtensionCallBuilder
 		{
 			public void Build(Sql.ISqExtensionBuilder builder)
 			{
@@ -259,7 +299,7 @@ namespace Tests.Linq
 			}
 		}
 
-		class DatePartBuilderFirebird: Sql.IExtensionCallBuilder
+		sealed class DatePartBuilderFirebird : Sql.IExtensionCallBuilder
 		{
 			public void Build(Sql.ISqExtensionBuilder builder)
 			{
@@ -270,7 +310,7 @@ namespace Tests.Linq
 					case Sql.DateParts.Year        : partStr = "year";        break;
 					case Sql.DateParts.Quarter     :
 						builder.Expression = "Extract(Month from {date})";
-						builder.ResultExpression = builder.Inc(builder.Div(builder.Dec(builder.ConvertToSqlExpression(Precedence.Primary)), 3));
+						builder.ResultExpression = builder.Inc(builder.Div(builder.Dec(builder.ConvertToSqlExpression(Precedence.Primary)!), 3));
 						return;
 					case Sql.DateParts.Month       : partStr = "month";       break;
 					case Sql.DateParts.DayOfYear   : partStr = "yearday";     break;
@@ -291,7 +331,7 @@ namespace Tests.Linq
 				{
 					case Sql.DateParts.DayOfYear:
 					case Sql.DateParts.WeekDay:
-						builder.ResultExpression = builder.Inc(builder.ConvertToSqlExpression(Precedence.Primary));
+						builder.ResultExpression = builder.Inc(builder.ConvertToSqlExpression(Precedence.Primary)!);
 						break;
 				}
 			}
@@ -308,6 +348,7 @@ namespace Tests.Linq
 		[Sql.Extension(PN.Access,     "DatePart('{part}', {date})",               ServerSideOnly = false, BuilderType = typeof(DatePartBuilderAccess))]
 		[Sql.Extension(PN.SapHana,    "",                                         ServerSideOnly = false, BuilderType = typeof(DatePartBuilderSapHana))]
 		[Sql.Extension(PN.Oracle,     "",                                         ServerSideOnly = false, BuilderType = typeof(DatePartBuilderOracle))]
+		[Sql.Extension(PN.ClickHouse, "",                                         ServerSideOnly = false, BuilderType = typeof(DatePartBuilderClickHouse))]
 		public static int? DatePart(this Sql.ISqlExtension? ext, Sql.DateParts part, [ExprParameter] DateTime? date)
 		{
 			if (date == null)
@@ -340,7 +381,7 @@ namespace Tests.Linq
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
-					from t in    Types select           Sql.Ext.DatePart(Sql.DateParts.Year, t.DateTimeValue),
+					from t in Types select Sql.Ext.DatePart(Sql.DateParts.Year, t.DateTimeValue),
 					from t in db.Types select Sql.AsSql(Sql.Ext.DatePart(Sql.DateParts.Year, t.DateTimeValue)));
 		}
 
@@ -349,7 +390,7 @@ namespace Tests.Linq
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
-					from t in    Types select           Sql.Ext.DatePart(Sql.DateParts.Quarter, t.DateTimeValue),
+					from t in Types select Sql.Ext.DatePart(Sql.DateParts.Quarter, t.DateTimeValue),
 					from t in db.Types select Sql.AsSql(Sql.Ext.DatePart(Sql.DateParts.Quarter, t.DateTimeValue)));
 		}
 
@@ -358,7 +399,7 @@ namespace Tests.Linq
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
-					from t in    Types select           Sql.Ext.DatePart(Sql.DateParts.Month, t.DateTimeValue),
+					from t in Types select Sql.Ext.DatePart(Sql.DateParts.Month, t.DateTimeValue),
 					from t in db.Types select Sql.AsSql(Sql.Ext.DatePart(Sql.DateParts.Month, t.DateTimeValue)));
 		}
 
@@ -367,7 +408,7 @@ namespace Tests.Linq
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
-					from t in    Types select           Sql.Ext.DatePart(Sql.DateParts.DayOfYear, t.DateTimeValue),
+					from t in Types select Sql.Ext.DatePart(Sql.DateParts.DayOfYear, t.DateTimeValue),
 					from t in db.Types select Sql.AsSql(Sql.Ext.DatePart(Sql.DateParts.DayOfYear, t.DateTimeValue)));
 		}
 
@@ -376,7 +417,7 @@ namespace Tests.Linq
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
-					from t in    Types select           Sql.Ext.DatePart(Sql.DateParts.Day, t.DateTimeValue),
+					from t in Types select Sql.Ext.DatePart(Sql.DateParts.Day, t.DateTimeValue),
 					from t in db.Types select Sql.AsSql(Sql.Ext.DatePart(Sql.DateParts.Day, t.DateTimeValue)));
 		}
 
@@ -392,7 +433,7 @@ namespace Tests.Linq
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
-					from t in    Types select           Sql.Ext.DatePart(Sql.DateParts.WeekDay, t.DateTimeValue),
+					from t in Types select Sql.Ext.DatePart(Sql.DateParts.WeekDay, t.DateTimeValue),
 					from t in db.Types select Sql.AsSql(Sql.Ext.DatePart(Sql.DateParts.WeekDay, t.DateTimeValue)));
 		}
 
@@ -401,7 +442,7 @@ namespace Tests.Linq
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
-					from t in    Types select           Sql.Ext.DatePart(Sql.DateParts.Hour, t.DateTimeValue),
+					from t in Types select Sql.Ext.DatePart(Sql.DateParts.Hour, t.DateTimeValue),
 					from t in db.Types select Sql.AsSql(Sql.Ext.DatePart(Sql.DateParts.Hour, t.DateTimeValue)));
 		}
 
@@ -410,7 +451,7 @@ namespace Tests.Linq
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
-					from t in    Types select           Sql.Ext.DatePart(Sql.DateParts.Minute, t.DateTimeValue),
+					from t in Types select Sql.Ext.DatePart(Sql.DateParts.Minute, t.DateTimeValue),
 					from t in db.Types select Sql.AsSql(Sql.Ext.DatePart(Sql.DateParts.Minute, t.DateTimeValue)));
 		}
 
@@ -419,7 +460,7 @@ namespace Tests.Linq
 		{
 			using (var db = GetDataContext(context))
 				AreEqual(
-					from t in    Types select           Sql.Ext.DatePart(Sql.DateParts.Second, t.DateTimeValue),
+					from t in Types select Sql.Ext.DatePart(Sql.DateParts.Second, t.DateTimeValue),
 					from t in db.Types select Sql.AsSql(Sql.Ext.DatePart(Sql.DateParts.Second, t.DateTimeValue)));
 		}
 
@@ -433,6 +474,137 @@ namespace Tests.Linq
 		}
 
 
+		#endregion
+
+		#region Issue 4222
+
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/4222")]
+		public void Issue4222Test1([DataSources] string context)
+		{
+			using var db = GetDataContext(context);
+			using var tb = db.CreateLocalTable<Entry>();
+
+			var ek = new EntryKey("default", 2007);
+			var result = tb.Where(e => KeyEquals(e, ek)).ToArray();
+		}
+
+		[Test(Description = "https://github.com/linq2db/linq2db/issues/4222")]
+		public void Issue4222Test2([DataSources] string context)
+		{
+			using var db = GetDataContext(context);
+			using var tb = db.CreateLocalTable<Entry>();
+
+			var ek = new EntryKey[]
+			{
+				new EntryKey("default", 2007),
+				new EntryKey("other", 2008)
+			};
+			var result = tb.Where(e => KeysEquals(e, ek)).ToArray();
+		}
+
+		[Sql.Extension(typeof(CompositeKeyEqualsExtensionBuilder), IsPredicate = true, ServerSideOnly = true)]
+		static bool KeyEquals<TKey>(IKeyProvider<TKey> entity, TKey value)
+			where TKey : notnull
+			=> throw new ServerSideOnlyException(nameof(KeyEquals));
+
+		[Sql.Extension(typeof(CompositeKeyEqualsExtensionBuilder), IsPredicate = true, ServerSideOnly = true)]
+		static bool KeysEquals<TKey>(IKeyProvider<TKey> entity, TKey[] values)
+			where TKey : notnull
+			=> throw new ServerSideOnlyException(nameof(KeyEquals));
+
+		class CompositeKeyEqualsExtensionBuilder : Sql.IExtensionCallBuilder
+		{
+			public void Build(Sql.ISqExtensionBuilder builder)
+			{
+				var entityType = builder.Arguments[0].Type;
+				var entityDescriptor = builder.DataContext.MappingSchema.GetEntityDescriptor(entityType);
+				var tableExp = builder.GetExpression(0)!;
+
+				ISqlTableSource? table = null;
+
+				if (tableExp is SqlField field)
+				{
+					if (field.Table is SqlTable sqlTable)
+						table = sqlTable;
+					else if (field.Table is SelectQuery select)
+						table = select.From.Tables[0].Source;
+				}
+
+				if (table == null)
+				{
+					builder.IsConvertible = false;
+					return;
+				}
+
+				var keyProviderType = entityType
+					.GetInterfaces()
+					.First(static i => i.IsConstructedGenericType && i.GetGenericTypeDefinition() == typeof(IKeyProvider<>));
+				var keyType = keyProviderType.GetGenericArguments().First();
+				var value = builder.Arguments[1].EvaluateExpression();
+
+				var left = new SqlRowExpression(
+					keyType.GetRuntimeProperties()
+						.Where(prop => !prop.HasAttribute<NotColumnAttribute>())
+						.Select(prop => entityType.GetProperties().First(eProp => eProp.Name.Equals(prop.Name)))
+						.Select(prop => new SqlField(entityDescriptor.Columns.First(c => c.MemberInfo == prop))
+						{
+							Table = table
+						})
+					// .Select(fieldExp => new SqlExpression("{0}.{1}", tableExp, fieldExp)) // trying to make table.Field
+						.Cast<ISqlExpression>()
+						.ToArray());
+
+				if (value!.GetType().IsArray)
+				{
+					var values = new List<SqlRowExpression>();
+					foreach (var v in (IEnumerable)value)
+					{
+						var row = new SqlRowExpression(
+						keyType.GetRuntimeProperties()
+							.Where(prop => !prop.HasAttribute<NotColumnAttribute>())
+							.Select(prop => new SqlValue(prop.PropertyType, prop.GetValue(v)))
+							.Cast<ISqlExpression>()
+							.ToArray());
+						values.Add(row);
+					}
+					builder.ResultExpression = new SqlSearchCondition(false, new SqlPredicate.InList(left, null, false, values));
+				}
+				else
+				{
+					var right = new SqlRowExpression(
+						keyType.GetRuntimeProperties()
+							.Where(prop => !prop.HasAttribute<NotColumnAttribute>())
+							.Select(prop => new SqlValue(prop.PropertyType, prop.GetValue(value)))
+							.Cast<ISqlExpression>()
+							.ToArray());
+					builder.ResultExpression = new SqlSearchCondition(false, new SqlPredicate.ExprExpr(left, SqlPredicate.Operator.Equal, right, null));
+				}
+			}
+		}
+
+		interface IEntryKey
+		{
+			public string RecSrc { get; }
+			public int Value { get; }
+		}
+
+		record EntryKey(string RecSrc, int Value) : IEntryKey;
+
+		interface IKeyProvider<out TKey>
+			where TKey : notnull
+		{
+			[NotColumn]
+			public TKey Key { get; }
+		}
+
+		sealed class Entry : IKeyProvider<IEntryKey>, IEntryKey
+		{
+			public Guid Id { get; set; }
+			public string RecSrc { get; set; } = "default";
+			public int Value { get; set; }
+
+			public IEntryKey Key => this;
+		}
 		#endregion
 	}
 }

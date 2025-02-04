@@ -55,11 +55,11 @@ namespace Tests.UserTests
 			[ValueSource(nameof(DateTimePairs))] Tuple<DateTimeQuantifiers, DateTimeQuantifiers> quantifiers)
 		{
 			var ms = new MappingSchema();
-			ms
-				.GetFluentMappingBuilder()
-					.Entity<DateTimeTestTable>()
-						.Property(t => t.DateTimeField)
-							.HasDbType($"datetime {GetQuantifierName(quantifiers.Item1)} to {GetQuantifierName(quantifiers.Item2)}");
+			new FluentMappingBuilder(ms)
+				.Entity<DateTimeTestTable>()
+					.Property(t => t.DateTimeField)
+						.HasDbType($"datetime {GetQuantifierName(quantifiers.Item1)} to {GetQuantifierName(quantifiers.Item2)}")
+				.Build();
 
 			var isIDS = IsIDSProvider(context);
 
@@ -79,7 +79,7 @@ namespace Tests.UserTests
 
 					var actual = db.GetTable<DateTimeTestTable>().Single().DateTimeField;
 
-					Assert.AreEqual(expected, actual);
+					Assert.That(actual, Is.EqualTo(expected));
 				}
 			}
 		}
@@ -169,8 +169,7 @@ namespace Tests.UserTests
 
 		// server and client should run with DB_LOCALE=en_us.utf8;CLIENT_LOCALE=en_us.utf8 options
 		// and database should be created with same locale
-		//[Explicit("Could fail on non-utf8 locales")]
-		[SkipCI("Used docker image needs locale configuration")]
+		[ActiveIssue("Used docker image needs locale configuration")]
 		[Test]
 		public void Test_Insert([IncludeDataSources(TestProvName.AllInformix)] string context)
 		{
@@ -186,8 +185,7 @@ namespace Tests.UserTests
 			}
 		}
 
-		//[Explicit("Could fail on non-utf8 locales")]
-		[SkipCI("Used docker image needs locale configuration")]
+		[ActiveIssue("Used docker image needs locale configuration")]
 		[Test]
 		public void Test_Update([IncludeDataSources(TestProvName.AllInformix)] string context)
 		{
@@ -203,8 +201,7 @@ namespace Tests.UserTests
 			}
 		}
 
-		//[Explicit("Could fail on non-utf8 locales")]
-		[SkipCI("Used docker image needs locale configuration")]
+		[ActiveIssue("Used docker image needs locale configuration")]
 		[Test]
 		public void Test_InsertOrUpdate([IncludeDataSources(TestProvName.AllInformix)] string context)
 		{
@@ -220,8 +217,7 @@ namespace Tests.UserTests
 			}
 		}
 
-		//[Explicit("Could fail on non-utf8 locales")]
-		[SkipCI("Used docker image needs locale configuration")]
+		[ActiveIssue("Used docker image needs locale configuration")]
 		[Test]
 		public void Test_Inline([IncludeDataSources(TestProvName.AllInformix)] string context)
 		{

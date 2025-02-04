@@ -1,0 +1,8 @@
+﻿{
+	"NETFX.Azure": {
+		"Providers": [
+			"Access.Ace.OleDb",
+			"Access.Ace.Odbc"
+		]
+	}
+}

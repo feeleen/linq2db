@@ -1,17 +1,14 @@
 ﻿using System;
-using System.Data;
+using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace LinqToDB.Linq
 {
-	public interface IQueryRunner: IDisposable
-#if NATIVE_ASYNC
-		, IAsyncDisposable
-#else
-		, Async.IAsyncDisposable
-#endif
+	using Data;
+
+	public interface IQueryRunner: IDisposable, IAsyncDisposable
 	{
 		/// <summary>
 		/// Executes query and returns number of affected records.
@@ -27,7 +24,7 @@ namespace LinqToDB.Linq
 		/// Executes query and returns data reader.
 		/// </summary>
 		/// <returns>Data reader with query results.</returns>
-		IDataReader           ExecuteReader  ();
+		DataReaderWrapper     ExecuteReader  ();
 
 		/// <summary>
 		/// Executes query asynchronously and returns number of affected records.
@@ -49,17 +46,17 @@ namespace LinqToDB.Linq
 		Task<IDataReaderAsync> ExecuteReaderAsync  (CancellationToken cancellationToken);
 
 		/// <summary>
-		/// Returns SQL text for query.
+		/// Returns SQL text with parameters for query.
 		/// </summary>
-		/// <returns>Query SQL text.</returns>
-		string                GetSqlText           ();
-
-		Expression     Expression       { get; set; }
-		IDataContext   DataContext      { get; set; }
-		object?[]?     Parameters       { get; set; }
-		object?[]?     Preambles        { get; set; }
-		Expression?    MapperExpression { get; set; }
-		int            RowsCount        { get; set; }
-		int            QueryNumber      { get; set; }
+		/// <returns>Query SQL text with parameters.</returns>
+		IReadOnlyList<QuerySql> GetSqlText();
+		
+		IQueryExpressions Expressions      { get; }
+		IDataContext      DataContext      { get; }
+		object?[]?        Parameters       { get; }
+		object?[]?        Preambles        { get; }
+		Expression?       MapperExpression { get; set; }
+		int               RowsCount        { get; set; }
+		int               QueryNumber      { get; set; }
 	}
 }

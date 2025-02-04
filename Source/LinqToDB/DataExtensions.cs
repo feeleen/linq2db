@@ -10,11 +10,13 @@ using JetBrains.Annotations;
 
 namespace LinqToDB
 {
-	using Extensions;
-	using Linq;
-	using SqlQuery;
 	using Common;
 	using Expressions;
+	using Extensions;
+	using Linq;
+	using Expressions.Internal;
+	using Mapping;
+	using SqlQuery;
 
 	/// <summary>
 	/// Data context extension methods.
@@ -64,9 +66,7 @@ namespace LinqToDB
 			if (parameters  == null) throw new ArgumentNullException(nameof(parameters));
 
 			if (!typeof(IQueryable<>).IsSameOrParentOf(methodInfo.ReturnType))
-				throw new LinqException(
-					"Method '{0}.{1}' must return type 'IQueryable<{2}>'",
-					methodInfo.Name, methodInfo.DeclaringType!.FullName, typeof(T).FullName);
+				throw new LinqToDBException($"Method '{methodInfo.Name}.{methodInfo.DeclaringType!.FullName}' must return type 'IQueryable<{typeof(T).FullName}>'");
 
 			Expression expr;
 
@@ -741,7 +741,7 @@ namespace LinqToDB
 
 			var ret = await QueryRunner.InsertWithIdentity<T>
 				.QueryAsync(dataContext, obj, columnFilter, tableName: tableName, serverName: serverName, databaseName: databaseName, schemaName: schemaName, tableOptions: tableOptions, token)
-				.ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
+				.ConfigureAwait(false);
 			return dataContext.MappingSchema.ChangeTypeTo<int>(ret);
 		}
 
@@ -804,7 +804,7 @@ namespace LinqToDB
 
 			var ret = await QueryRunner.InsertWithIdentity<T>
 				.QueryAsync(dataContext, obj, columnFilter, tableName: tableName, serverName: serverName, databaseName: databaseName, schemaName: schemaName, tableOptions: tableOptions, token)
-				.ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
+				.ConfigureAwait(false);
 
 			return dataContext.MappingSchema.ChangeTypeTo<long>(ret);
 		}
@@ -868,7 +868,7 @@ namespace LinqToDB
 
 			var ret = await QueryRunner.InsertWithIdentity<T>
 				.QueryAsync(dataContext, obj, columnFilter, tableName: tableName, serverName: serverName, databaseName: databaseName, schemaName: schemaName, tableOptions: tableOptions, token)
-				.ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
+				.ConfigureAwait(false);
 
 			return dataContext.MappingSchema.ChangeTypeTo<decimal>(ret);
 		}
@@ -1089,7 +1089,57 @@ namespace LinqToDB
 		{
 			if (dataContext == null) throw new ArgumentNullException(nameof(dataContext));
 			return QueryRunner.CreateTable<T>.Query(dataContext,
+				tableDescriptor: null,
 				tableName: tableName, serverName: serverName, databaseName: databaseName, schemaName: schemaName, statementHeader, statementFooter, defaultNullable, tableOptions);
+		}
+
+		/// <summary>
+		/// Internal API to support table creation using custom entity descriptor <paramref name="tableDescriptor"/>.
+		/// Creates new table in database for mapping class <typeparamref name="T"/>.
+		/// Information about table name, columns names and types is taken from mapping class.
+		/// </summary>
+		/// <typeparam name="T">Mapping class.</typeparam>
+		/// <param name="dataContext">Database connection context.</param>
+		/// <param name="tableDescriptor">Temporary table entity descriptor.</param>
+		/// <param name="tableName">Optional table name to override default table name, extracted from <typeparamref name="T"/> mapping.</param>
+		/// <param name="databaseName">Optional database name, to override default database name. See <see cref="LinqExtensions.DatabaseName{T}(ITable{T}, string)"/> method for support information per provider.</param>
+		/// <param name="schemaName">Optional schema/owner name, to override default name. See <see cref="LinqExtensions.SchemaName{T}(ITable{T}, string)"/> method for support information per provider.</param>
+		/// <param name="statementHeader">Optional replacement for <c>"CREATE TABLE table_name"</c> header. Header is a template with <c>{0}</c> parameter for table name.</param>
+		/// <param name="statementFooter">Optional SQL, appended to generated create table statement.</param>
+		/// <param name="defaultNullable">Defines how columns nullability flag should be generated:
+		/// <para> - <see cref="DefaultNullable.Null"/> - generate only <c>NOT NULL</c> for non-nullable fields. Missing nullability information treated as <c>NULL</c> by database.</para>
+		/// <para> - <see cref="DefaultNullable.NotNull"/> - generate only <c>NULL</c> for nullable fields. Missing nullability information treated as <c>NOT NULL</c> by database.</para>
+		/// <para> - <see cref="DefaultNullable.None"/> - explicitly generate <c>NULL</c> and <c>NOT NULL</c> for all columns.</para>
+		/// Default value: <see cref="DefaultNullable.None"/>.
+		/// </param>
+		/// <param name="serverName">Optional linked server name. See <see cref="LinqExtensions.ServerName{T}(ITable{T}, string)"/> method for support information per provider.</param>
+		/// <param name="tableOptions">Table options. See <see cref="TableOptions"/> enum for support information per provider.</param>
+		/// <returns>Created table as queryable source.</returns>
+		internal static ITable<T> CreateTable<T>(
+			this IDataContext dataContext,
+			EntityDescriptor? tableDescriptor,
+			string?           tableName       = default,
+			string?           databaseName    = default,
+			string?           schemaName      = default,
+			string?           statementHeader = default,
+			string?           statementFooter = default,
+			DefaultNullable   defaultNullable = DefaultNullable.None,
+			string?           serverName      = default,
+			TableOptions      tableOptions    = default)
+			where T: notnull
+		{
+			if (dataContext == null) throw new ArgumentNullException(nameof(dataContext));
+			return QueryRunner.CreateTable<T>.Query(
+				dataContext,
+				tableDescriptor: tableDescriptor,
+				tableName      : tableName,
+				serverName     : serverName,
+				databaseName   : databaseName,
+				schemaName     : schemaName,
+				statementHeader: statementHeader,
+				statementFooter: statementFooter,
+				defaultNullable: defaultNullable,
+				tableOptions   : tableOptions);
 		}
 
 		/// <summary>
@@ -1128,7 +1178,60 @@ namespace LinqToDB
 		{
 			if (dataContext == null) throw new ArgumentNullException(nameof(dataContext));
 			return QueryRunner.CreateTable<T>.QueryAsync(dataContext,
+				tableDescriptor: null,
 				tableName: tableName, serverName: serverName, databaseName: databaseName, schemaName: schemaName, statementHeader, statementFooter, defaultNullable, tableOptions, token);
+		}
+
+		/// <summary>
+		/// Internal API to support table creation using custom entity descriptor <paramref name="tableDescriptor"/>.
+		/// Asynchronously creates new table in database for mapping class <typeparamref name="T"/>.
+		/// Information about table name, columns names and types is taken from mapping class.
+		/// </summary>
+		/// <typeparam name="T">Mapping class.</typeparam>
+		/// <param name="dataContext">Database connection context.</param>
+		/// <param name="tableDescriptor">Temporary table entity descriptor.</param>
+		/// <param name="tableName">Optional table name to override default table name, extracted from <typeparamref name="T"/> mapping.</param>
+		/// <param name="databaseName">Optional database name, to override default database name. See <see cref="LinqExtensions.DatabaseName{T}(ITable{T}, string)"/> method for support information per provider.</param>
+		/// <param name="schemaName">Optional schema/owner name, to override default name. See <see cref="LinqExtensions.SchemaName{T}(ITable{T}, string)"/> method for support information per provider.</param>
+		/// <param name="statementHeader">Optional replacement for <c>"CREATE TABLE table_name"</c> header. Header is a template with <c>{0}</c> parameter for table name.</param>
+		/// <param name="statementFooter">Optional SQL, appended to generated create table statement.</param>
+		/// <param name="defaultNullable">Defines how columns nullability flag should be generated:
+		/// <para> - <see cref="DefaultNullable.Null"/> - generate only <c>NOT NULL</c> for non-nullable fields. Missing nullability information treated as <c>NULL</c> by database.</para>
+		/// <para> - <see cref="DefaultNullable.NotNull"/> - generate only <c>NULL</c> for nullable fields. Missing nullability information treated as <c>NOT NULL</c> by database.</para>
+		/// <para> - <see cref="DefaultNullable.None"/> - explicitly generate <c>NULL</c> and <c>NOT NULL</c> for all columns.</para>
+		/// Default value: <see cref="DefaultNullable.None"/>.
+		/// </param>
+		/// <param name="serverName">Optional linked server name. See <see cref="LinqExtensions.ServerName{T}(ITable{T}, string)"/> method for support information per provider.</param>
+		/// <param name="tableOptions">Table options. See <see cref="TableOptions"/> enum for support information per provider.</param>
+		/// <param name="token">Optional asynchronous operation cancellation token.</param>
+		/// <returns>Created table as queryable source.</returns>
+		internal static Task<ITable<T>> CreateTableAsync<T>(
+			this IDataContext dataContext,
+			EntityDescriptor? tableDescriptor,
+			string?           tableName       = default,
+			string?           databaseName    = default,
+			string?           schemaName      = default,
+			string?           statementHeader = default,
+			string?           statementFooter = default,
+			DefaultNullable   defaultNullable = DefaultNullable.None,
+			string?           serverName      = default,
+			TableOptions      tableOptions    = default,
+			CancellationToken token           = default)
+			where T : notnull
+		{
+			if (dataContext == null) throw new ArgumentNullException(nameof(dataContext));
+			return QueryRunner.CreateTable<T>.QueryAsync(
+				dataContext,
+				tableDescriptor: tableDescriptor,
+				tableName      : tableName,
+				serverName     : serverName,
+				databaseName   : databaseName,
+				schemaName     : schemaName,
+				statementHeader: statementHeader,
+				statementFooter: statementFooter,
+				defaultNullable: defaultNullable,
+				tableOptions   : tableOptions,
+				token          : token);
 		}
 
 		#endregion
@@ -1164,7 +1267,7 @@ namespace LinqToDB
 			{
 				QueryRunner.DropTable<T>.Query(dataContext, tableName: tableName, serverName: serverName, databaseName: databaseName, schemaName: schemaName, !throwExceptionIfNotExists, tableOptions: tableOptions);
 			}
-			catch when (!throwExceptionIfNotExists ?? tableOptions.HasDropIfExists() || new SqlTable<T>(dataContext.MappingSchema).TableOptions.HasDropIfExists())
+			catch when (!throwExceptionIfNotExists ?? tableOptions.HasDropIfExists() || SqlTable.Create<T>(dataContext).TableOptions.HasDropIfExists())
 			{
 				// ignore
 			}
@@ -1207,7 +1310,7 @@ namespace LinqToDB
 					!throwExceptionIfNotExists,
 					tableOptions.IsSet() ? tableOptions : table.TableOptions);
 			}
-			catch when (!throwExceptionIfNotExists ?? tableOptions.HasDropIfExists() || new SqlTable<T>(table.DataContext.MappingSchema).TableOptions.HasDropIfExists())
+			catch when (!throwExceptionIfNotExists ?? tableOptions.HasDropIfExists() || SqlTable.Create<T>(table.DataContext).TableOptions.HasDropIfExists())
 			{
 				// ignore
 			}
@@ -1245,9 +1348,9 @@ namespace LinqToDB
 			{
 				await QueryRunner.DropTable<T>
 					.QueryAsync(dataContext, tableName: tableName, serverName: serverName, databaseName: databaseName, schemaName: schemaName, !throwExceptionIfNotExists, tableOptions: tableOptions, token)
-					.ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
+					.ConfigureAwait(false);
 			}
-			catch when (!throwExceptionIfNotExists ?? tableOptions.HasDropIfExists() || new SqlTable<T>(dataContext.MappingSchema).TableOptions.HasDropIfExists())
+			catch when (!throwExceptionIfNotExists ?? tableOptions.HasDropIfExists() || SqlTable.Create<T>(dataContext).TableOptions.HasDropIfExists())
 			{
 				// ignore
 			}
@@ -1295,9 +1398,9 @@ namespace LinqToDB
 						!throwExceptionIfNotExists,
 						tableOptions.IsSet() ? tableOptions : table.TableOptions,
 						token)
-					.ConfigureAwait(Common.Configuration.ContinueOnCapturedContext);
+					.ConfigureAwait(false);
 			}
-			catch when (!throwExceptionIfNotExists ?? tableOptions.HasDropIfExists() || new SqlTable<T>(table.DataContext.MappingSchema).TableOptions.HasDropIfExists())
+			catch when (!throwExceptionIfNotExists ?? tableOptions.HasDropIfExists() || SqlTable.Create<T>(table.DataContext).TableOptions.HasDropIfExists())
 			{
 				// ignore
 			}
@@ -1325,15 +1428,49 @@ namespace LinqToDB
 			if (cteBody     == null) throw new ArgumentNullException(nameof(cteBody));
 
 			var cteTable = new CteTable<T>(dataContext);
-			var param    = MethodHelper.GetMethodInfo(cteBody, cteTable).GetParameters()[0];
 
-			var cteQuery = cteBody(cteTable);
+			if (cteTableName == null)
+			{
+				var param = MethodHelper.GetMethodInfo(cteBody, cteTable).GetParameters()[0];
+				cteTableName = param.Name;
+			}
 
-			return ((IQueryable<T>)cteTable).Provider.CreateQuery<T>(
-				Expression.Call(
-					null,
-					MethodHelper.GetMethodInfo(LinqExtensions.AsCte, cteQuery, cteQuery, cteTableName),
-					cteTable.Expression, cteQuery.Expression, Expression.Constant(cteTableName ?? param.Name)));
+			var cteQuery  = cteBody(cteTable);
+			var queryExpr = cteQuery.Expression;
+
+			var paramExpr = Expression.Parameter(typeof(IQueryable<T>), "cteParam");
+			queryExpr = queryExpr.Transform(e =>
+			{
+				if (e.NodeType == ExpressionType.Constant)
+				{
+					var constantExpr = (ConstantExpression)e;
+					if (constantExpr.Value == cteTable)
+						return paramExpr;
+				}
+				else if (e.NodeType == ExpressionType.MemberAccess && e.Type == paramExpr.Type)
+				{
+					var me = (MemberExpression)e;
+					// closure handling
+					//
+					if (me.Expression!.NodeType == ExpressionType.Constant)
+					{
+						var value = me.EvaluateExpression();
+						if (value == cteTable)
+							return paramExpr;
+					}
+				}
+				return e;
+			});
+
+			var queryLambda = Expression.Lambda<Func<IQueryable<T>, IQueryable<T>>>(queryExpr, paramExpr);
+
+			var methodInfo = MethodHelper.GetMethodInfo(GetCte, dataContext, cteBody, cteTableName);
+
+			var queryBody = Expression.Call(
+				methodInfo,
+				SqlQueryRootExpression.Create(dataContext), queryLambda, Expression.Constant(cteTableName));
+
+			return new ExpressionQueryImpl<T>(dataContext, queryBody);
 		}
 
 		/// <summary>
@@ -1357,60 +1494,17 @@ namespace LinqToDB
 
 		#region FromSql
 
-#if !NET45
-		/// <summary>
-		/// Compares two FormattableString parameters
-		/// </summary>
-		public class SqlFormattableComparerAttribute : SqlQueryDependentAttribute
+		static Expression GenerateArray(object?[] arguments)
 		{
-			public override bool ExpressionsEqual<TContext>(TContext context, Expression expr1, Expression expr2, Func<TContext, Expression, Expression, bool> comparer)
+			var argumentsExpr = Expression.NewArrayInit(typeof(object), arguments.Select(p =>
 			{
-				if (expr1.NodeType != expr2.NodeType)
-					return false;
+				Expression constant = Expression.Constant(p, p?.GetType() ?? typeof(object));
+				if (constant.Type != typeof(object))
+					constant = Expression.Convert(constant, typeof(object));
+				return constant;
+			}));
 
-				if (expr1.NodeType == ExpressionType.Call)
-				{
-					var mc1 = (MethodCallExpression)expr1;
-					var mc2 = (MethodCallExpression)expr2;
-					if (!ObjectsEqual(mc1.Arguments[0].EvaluateExpression(), mc2.Arguments[0].EvaluateExpression()))
-						return false;
-					return comparer(context, mc1.Arguments[1], mc2.Arguments[1]);
-				}
-
-				if (expr1.NodeType == ExpressionType.Constant)
-				{
-					var c1 = (ConstantExpression)expr1;
-					var c2 = (ConstantExpression)expr2;
-
-					if (c1.Value is FormattableString str1 && c2.Value is FormattableString str2)
-					{
-						if (str1.Format != str2.Format || str1.ArgumentCount != str2.ArgumentCount)
-							return false;
-
-						for (var i = 0; i < str1.ArgumentCount; i++)
-							if (!comparer(context, Expression.Constant(str1.GetArgument(i)), Expression.Constant(str2.GetArgument(i))))
-								return false;
-
-						return true;
-					}
-				}
-
-				return base.ExpressionsEqual(context, expr1, expr2, comparer);
-			}
-
-			public override Expression PrepareForCache(Expression expression)
-			{
-				if (expression.NodeType != ExpressionType.Call)
-					return base.PrepareForCache(expression);
-
-				var mc = (MethodCallExpression)expression;
-				var newArguments = new List<Expression>();
-				newArguments.Add(Expression.Constant(mc.Arguments[0].EvaluateExpression()));
-				newArguments.AddRange(mc.Arguments.Skip(1));
-
-				mc = mc.Update(mc.Object, newArguments);
-				return mc;
-			}
+			return argumentsExpr;
 		}
 
 		/// <summary>
@@ -1435,18 +1529,26 @@ namespace LinqToDB
 		/// <returns> An <see cref="IQueryable{T}" /> representing the raw SQL query. </returns>
 		[StringFormatMethod("sql")]
 		public static IQueryable<TEntity> FromSql<TEntity>(
-			this                     IDataContext      dataContext,
-			[SqlFormattableComparer] FormattableString sql)
+			this IDataContext dataContext,
+			FormattableString sql)
 		{
 			if (dataContext == null) throw new ArgumentNullException(nameof(dataContext));
 			if (sql         == null) throw new ArgumentNullException(nameof(sql));
+
+			var arguments = sql.GetArguments();
+			var methodInfo = MethodHelper.GetMethodInfo(System.Runtime.CompilerServices.FormattableStringFactory.Create,
+				sql.Format, arguments);
+			var argumentsExpr = GenerateArray(arguments);
+
+			var formattableStringExpr =
+				Expression.Call(null, methodInfo, Expression.Constant(sql.Format), argumentsExpr);
 
 			return new ExpressionQueryImpl<TEntity>(
 				dataContext,
 				Expression.Call(
 					null,
 					MethodHelper.GetMethodInfo(FromSql<TEntity>, dataContext, sql),
-					Expression.Constant(dataContext), Expression.Constant(sql)));
+					SqlQueryRootExpression.Create(dataContext), formattableStringExpr));
 		}
 
 		/// <summary>
@@ -1472,7 +1574,7 @@ namespace LinqToDB
 		[StringFormatMethod("sql")]
 		public static IQueryable<TEntity> FromSqlScalar<TEntity>(
 			this                     IDataContext      dataContext,
-			[SqlFormattableComparer] FormattableString sql)
+			FormattableString sql)
 		{
 			if (dataContext == null) throw new ArgumentNullException(nameof(dataContext));
 			if (sql         == null) throw new ArgumentNullException(nameof(sql));
@@ -1482,10 +1584,8 @@ namespace LinqToDB
 				Expression.Call(
 					null,
 					MethodHelper.GetMethodInfo(FromSqlScalar<TEntity>, dataContext, sql),
-					Expression.Constant(dataContext), Expression.Constant(sql)));
+					SqlQueryRootExpression.Create(dataContext), Expression.Constant(sql)));
 		}
-
-#endif
 
 		/// <summary>
 		///     <para>
@@ -1496,7 +1596,7 @@ namespace LinqToDB
 		///         LINQ operators - <code>context.FromSql&lt;Blogs&gt;("SELECT * FROM dbo.Blogs").OrderBy(b => b.Name);</code>
 		///     </para>
 		///     <para>
-		///         As with any API that accepts SQL it is important to parametrize any user input to protect against a SQL injection
+		///         As with any API that accepts SQL it is important to parameterize any user input to protect against a SQL injection
 		///         attack. You can include parameter place holders in the SQL query string and then supply parameter values as additional
 		///         arguments. Any parameter values you supply will automatically be converted to a DbParameter -
 		///         <code>context.FromSql&lt;Blogs&gt;("SELECT * FROM [dbo].[SearchBlogs]({0})", userSuppliedSearchTerm);</code>
@@ -1514,18 +1614,20 @@ namespace LinqToDB
 		/// <returns> An <see cref="IQueryable{T}" /> representing the raw SQL query. </returns>
 		[StringFormatMethod("sql")]
 		public static IQueryable<TEntity> FromSql<TEntity>(
-			this                             IDataContext dataContext,
-			[SqlQueryDependent]              RawSqlString sql,
-			[SqlQueryDependentParams] params object?[]    parameters)
+			this IDataContext dataContext,
+			RawSqlString      sql,
+			params object?[]  parameters)
 		{
 			if (dataContext == null) throw new ArgumentNullException(nameof(dataContext));
+
+			var paramsExpr = GenerateArray(parameters);
 
 			return new ExpressionQueryImpl<TEntity>(
 				dataContext,
 				Expression.Call(
 					null,
 					MethodHelper.GetMethodInfo(FromSql<TEntity>, dataContext, sql, parameters),
-					Expression.Constant(dataContext), Expression.Constant(sql), Expression.Constant(parameters)));
+					SqlQueryRootExpression.Create(dataContext), Expression.Constant(sql), paramsExpr));
 		}
 
 		#endregion
@@ -1572,9 +1674,48 @@ namespace LinqToDB
 				Expression.Call(
 					null,
 					MethodHelper.GetMethodInfo(SelectQuery, dataContext, selector),
-					Expression.Constant(dataContext), Expression.Quote(selector)));
+					SqlQueryRootExpression.Create(dataContext), Expression.Quote(selector)));
 		}
 
 		#endregion
+
+		/// <summary>Creates a <see cref="ITable{T}"/> for given query expression.</summary>
+		/// <typeparam name="TResult">The result type of the table expression.</typeparam>
+		/// <param name="expression">The query expression to create.</param>
+		/// <returns>An <see cref="ITable{T}" /> representing the query.</returns>
+		public static ITable<TResult> TableFromExpression<TResult>(
+			this IDataContext                 dataContext,
+			Expression<Func<ITable<TResult>>> expression)
+			where TResult : notnull
+		{
+			var body = expression.UnwrapLambda().Body;
+
+			if (body is not MethodCallExpression mc)
+				throw new InvalidOperationException("TableFromExpression accepts only methods in body.");
+
+			var attr = mc.Method.GetTableFunctionAttribute(dataContext.MappingSchema);
+			if (attr == null)
+				throw new InvalidOperationException($"TableFromExpression accepts only methods which have '{nameof(Sql.TableFunctionAttribute)}' attribute.");
+
+			return new Table<TResult>(dataContext,
+				Expression.Call(
+					null,
+					MethodHelper.GetMethodInfo(TableFromExpression, dataContext, expression),
+					SqlQueryRootExpression.Create(dataContext),
+					Expression.Quote(expression)
+				));
+		}
+
+		/// <summary>Creates a <see cref="IQueryable{T}"/> for given query expression.</summary>
+		/// <typeparam name="TResult">The result type of the query expression.</typeparam>
+		/// <param name="expression">The query expression to create.</param>
+		/// <returns>An <see cref="IQueryable{T}" /> representing the query.</returns>
+		public static IQueryable<TResult> QueryFromExpression<TResult>(
+			this IDataContext                     dataContext,
+			Expression<Func<IQueryable<TResult>>> expression)
+		{
+			return new ExpressionQueryImpl<TResult>(dataContext, expression.Body);
+		}
+
 	}
 }

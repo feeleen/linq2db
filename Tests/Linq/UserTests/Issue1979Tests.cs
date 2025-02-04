@@ -64,7 +64,7 @@ namespace Tests.UserTests
 		}
 
 		[Test]
-		public void Test_Linq([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		public void Test_Linq([IncludeDataSources(TestProvName.AllSqlServer)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (db.CreateLocalTable<Tag>())
@@ -80,32 +80,12 @@ namespace Tests.UserTests
 							where tagFilter.Where(t => t.TaggableId == i.Id).Any()
 							select i;
 
-				var sql = query.ToString();
 				query.ToList();
-
-				/*
-				 * SQL:
-SELECT
-	[i].[Id]
-FROM
-	[Issue] [i]
-WHERE
-	EXISTS(
-		SELECT
-			*
-		FROM
-			[Tagging] [t_1]
-				INNER JOIN [Tag] [t] ON [t_1].[TagId] = [t].[Id]
-		WHERE
-			[t].[Name] = N'Visu' AND [t_1].[TaggableId] = [i].[Id] AND
-			[t_1].[TaggableType] = N'Issue'
-	)
-	*/
 			}
 
 		}
 		[Test]
-		public void Test_Associations([IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context)
+		public void Test_Associations([IncludeDataSources(TestProvName.AllSqlServer)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (db.CreateLocalTable<Tag>())
@@ -116,42 +96,7 @@ WHERE
 							where i.Tagging.Any(x => x.Tag.Name == "Visu")
 							select i;
 
-				var sql = query.ToString();
 				query.ToList();
-
-				/*
-
-SELECT
-	[i].[Id]
-FROM
-	[Issue] [i]
-WHERE
-	EXISTS(
-		SELECT
-			*
-		FROM
-			[Tagging] [_1]
-				OUTER APPLY (
-					SELECT
-						[t1].[Name]
-					FROM
-						(
-							SELECT
-								[_].[Name],
-								ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) as [RN]
-							FROM
-								[Tag] [_]
-							WHERE
-								Convert(BigInt, [_1].[TagId]) = [_].[Id]
-						) [t1]
-					WHERE
-						[t1].[RN] <= @take
-				) [a_Tag]
-		WHERE
-			[_1].[TaggableType] = N'Issue' AND [i].[Id] = [_1].[TaggableId] AND
-			[a_Tag].[Name] = N'Visu'
-	)
-				 */
 			}
 		}
 	}

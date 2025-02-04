@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Runtime.Serialization;
+using System.ComponentModel;
 
 namespace LinqToDB.Metadata
 {
@@ -10,23 +10,25 @@ namespace LinqToDB.Metadata
 	/// This class is the base class for exceptions that may occur during
 	/// execution of the namespace members.
 	/// </remarks>
-	[Serializable] 
-	public class MetadataException : Exception
+	[Serializable]
+	public class MetadataException : LinqToDBException
 	{
 		/// <summary>
 		/// Initializes a new instance of the <see cref="MetadataException"/> class.
 		/// </summary>
 		/// <remarks>
 		/// This constructor initializes the <see cref="Exception.Message"/>
-		/// property of the new instance such as "A Build Type exception has occurred."
+		/// property of the new instance such as "A Metadata exception has occurred."
 		/// </remarks>
+		// don't remove, we just want to guard users from using it explicitly
+		[Obsolete("Use one of constructors with message parameter"), EditorBrowsable(EditorBrowsableState.Never)]
 		public MetadataException()
 			: base("A Metadata exception has occurred.")
 		{
 		}
 
 		/// <summary>
-		/// Initializes a new instance of the <see cref="MetadataException"/> class 
+		/// Initializes a new instance of the <see cref="MetadataException"/> class
 		/// with the specified error message.
 		/// </summary>
 		/// <param name="message">The message to display to the client when the
@@ -38,7 +40,7 @@ namespace LinqToDB.Metadata
 		}
 
 		/// <summary>
-		/// Initializes a new instance of the <see cref="MetadataException"/> class 
+		/// Initializes a new instance of the <see cref="MetadataException"/> class
 		/// with the specified error message and InnerException property.
 		/// </summary>
 		/// <param name="message">The message to display to the client when the
@@ -53,28 +55,16 @@ namespace LinqToDB.Metadata
 		}
 
 		/// <summary>
-		/// Initializes a new instance of the <see cref="MetadataException"/> class 
+		/// Initializes a new instance of the <see cref="MetadataException"/> class
 		/// with the specified InnerException property.
 		/// </summary>
 		/// <param name="innerException">The InnerException, if any, that threw
 		/// the current exception.</param>
 		/// <seealso cref="Exception.InnerException"/>
+		// don't remove, we just want to guard users from using it explicitly
+		[Obsolete("Use one of constructors with message parameter"), EditorBrowsable(EditorBrowsableState.Never)]
 		public MetadataException(Exception innerException)
 			: base(innerException.Message, innerException)
-		{
-		}
-
-		/// <summary>
-		/// Initializes a new instance of the <see cref="MetadataException"/> class
-		/// with serialized data.
-		/// </summary>
-		/// <param name="info">The object that holds the serialized object data.</param>
-		/// <param name="context">The contextual information about the source or
-		/// destination.</param>
-		/// <remarks>This constructor is called during deserialization to
-		/// reconstitute the exception object transmitted over a stream.</remarks>
-		protected MetadataException(SerializationInfo info, StreamingContext context)
-			: base(info, context)
 		{
 		}
 	}

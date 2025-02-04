@@ -16,7 +16,7 @@ namespace Tests.UserTests
 			[Column, PrimaryKey, Identity] public int Id { get; set; } // integer
 		}
 
-		[Table(Schema = "public", Name = "custom_invoice")]
+		[Table]
 		public class CustomInvoice : BaseEntity
 		{
 			[Column, NotNull] public int ContractId { get; set; } // integer
@@ -27,100 +27,70 @@ namespace Tests.UserTests
 
 			[Column, NotNull] public int AccessTariffId { get; set; } // integer
 
-			[Association(ThisKey = "InvoiceId", OtherKey = "Id", CanBeNull = false,
-				KeyName = "custom_invoice_InvoiceId_fkey",
-				BackReferenceName = "facturaciofacturainvoiceidfkeys")]
+			[Association(ThisKey = "InvoiceId", OtherKey = "Id", CanBeNull = false)]
 			public Invoice Invoice { get; set; }
 
-			[Association(ThisKey = "ServicePointId", OtherKey = "Id", CanBeNull = false,
-				KeyName = "custom_invoice_ServicePointId_fkey",
-				BackReferenceName = "facturaciofacturacupsidfkeys")]
+			[Association(ThisKey = "ServicePointId", OtherKey = "Id", CanBeNull = false)]
 			public ServicePoint ServicePoint { get; set; }
 
-			[Association(ThisKey = "ContractId", OtherKey = "Id", CanBeNull = false,
-				KeyName = "custom_invoice_ContractId_fkey",
-				BackReferenceName = "facturaciofacturapolissaidfkeys")]
+			[Association(ThisKey = "ContractId", OtherKey = "Id", CanBeNull = false)]
 			public Contract Contract { get; set; }
 
-			[Association(ThisKey = "AccessTariffId", OtherKey = "Id", CanBeNull = false,
-				KeyName = "custom_invoice_AccessTariffId_fkey",
-				BackReferenceName = "facturaciofacturatarifaaccesidfkeys")]
+			[Association(ThisKey = "AccessTariffId", OtherKey = "Id", CanBeNull = false)]
 			public AccessTariff AccessTariff { get; set; }
 
-			/// <summary>
-			/// Línies d energia
-			/// </summary>
 			[Association(ThisKey = "Id", OtherKey = "CustomInvoiceId", CanBeNull = true)]
 			public ICollection<CustomInvoiceLine> InvoiceLines { get; set; }
 
-			/// <summary>
-			/// Lecturas de energía
-			/// </summary>
 			[Association(ThisKey = "Id", OtherKey = "CustomInvoiceId", CanBeNull = true)]
 			public ICollection<TypeAMeasures> TypeAMeasures { get; set; }
 
-			/// <summary>
-			/// Lecturas de energía
-			/// </summary>
 			[Association(ThisKey = "Id", OtherKey = "CustomInvoiceId", CanBeNull = true)]
 			public ICollection<TypeBMeasures> TypeBMeasures { get; set; }
 
 
 			[Column, NotNull] public int PriceListId { get; set; } // integer
 
-			/// <summary>
-			/// Price list used for this invoice
-			/// </summary>
-			[Association(ThisKey = "PriceListId", OtherKey = "Id", CanBeNull = true,
-				KeyName = "custom_invoice_llista_preu_fkey",
-				BackReferenceName = "facturaciofacturallista_preufkeys")]
+			[Association(ThisKey = "PriceListId", OtherKey = "Id", CanBeNull = true)]
 			public PriceList PriceList { get; set; }
 		}
 
-		[Table(Schema = "public", Name = "custom_invoice_linia")]
+		[Table]
 		public class CustomInvoiceLine : BaseEntity
 		{
 			[Column, NotNull] public int CustomInvoiceId { get; set; }
 		}
 
-		[Table(Schema = "public", Name = "polissa")]
+		[Table]
 		public class Contract : BaseEntity
 		{
 		}
 
-
-		[Table(Schema = "public", Name = "product_uom")]
+		[Table]
 		public class ProductUnit : BaseEntity
 		{
 		}
 
-
-		[Table(Schema = "public", Name = "cups_ps")]
+		[Table]
 		public class ServicePoint : BaseEntity
 		{
 			[Column, NotNull] public int TownId { get; set; }
 
 			[Column, NotNull] public int StreetTypeId { get; set; }
 
-			/// <summary>
-			///     Municipio
-			/// </summary>
-			[Association(ThisKey = "TownId", OtherKey = "Id", CanBeNull = true, KeyName = "service_point_TownId_fkey", BackReferenceName = "cupspsidmunicipifkeys")]
+			[Association(ThisKey = "TownId", OtherKey = "Id", CanBeNull = true)]
 			public Town Town { get; set; }
 
-			/// <summary>
-			///     Tipo vía
-			/// </summary>
-			[Association(ThisKey = "StreetTypeId", OtherKey = "Id", CanBeNull = true, KeyName = "service_point_StreetTypeId_fkey")]
+			[Association(ThisKey = "StreetTypeId", OtherKey = "Id", CanBeNull = true)]
 			public StreetType StreetType { get; set; }
 		}
 
-		[Table(Schema = "public", Name = "street_type")]
+		[Table]
 		public class StreetType : BaseEntity
 		{
 		}
 
-		[Table(Schema = "public", Name = "type_a_measures")]
+		[Table]
 		public class TypeAMeasures : BaseEntity
 		{
 			/// <summary>
@@ -139,18 +109,18 @@ namespace Tests.UserTests
 			public MeasureSource PreviousSource { get; set; }
 		}
 
-		[Table(Schema = "public", Name = "lectures_origen")]
+		[Table]
 		public class MeasureSource : BaseEntity
 		{
 		}
 
-		[Table(Schema = "public", Name = "invoice")]
+		[Table]
 		public class Invoice : BaseEntity
 		{
 			/// <summary>
 			/// Invoice Lines
 			/// </summary>
-			[Association(ThisKey = "Id", OtherKey = "InvoiceId", CanBeNull = true, IsBackReference = true)]
+			[Association(ThisKey = "Id", OtherKey = "InvoiceId", CanBeNull = true)]
 			public ICollection<InvoiceLine> Lines { get; set; }
 
 			/// <summary>
@@ -161,119 +131,135 @@ namespace Tests.UserTests
 
 			[Column, Nullable] public int PendingStateId { get; set; }
 
-			[Association(ThisKey = "PendingStateId", OtherKey = "Id", CanBeNull = true, KeyName = "invoice_pending_state_fkey", BackReferenceName = "accountinvoicependingstatefkeys")]
+			[Association(ThisKey = "PendingStateId", OtherKey = "Id", CanBeNull = true)]
 			public InvoicePendingState PendingState { get; set; }
 
 			[Column, Nullable] public int? RectifyingInvoiceId { get; set; }
 
-			[Association(ThisKey = "RectifyingInvoiceId", OtherKey = "Id", CanBeNull = true, KeyName = "invoice_rectifying_id_fkey", BackReferenceName = "accountinvoicerectifyingidfkeys")]
+			[Association(ThisKey = "RectifyingInvoiceId", OtherKey = "Id", CanBeNull = true)]
 			public Invoice Rectifying { get; set; }
 
 			[Column, Nullable] public int? RefundByInvoiceId { get; set; }
 
-			[Association(ThisKey = "RefundByInvoiceId", OtherKey = "Id", CanBeNull = true, KeyName = "invoice_refund_by_id_fkey", BackReferenceName = "accountinvoicerefundbyidfkeys")]
+			[Association(ThisKey = "RefundByInvoiceId", OtherKey = "Id", CanBeNull = true)]
 			public Invoice RefundBy { get; set; }
 		}
 
-		[Table(Schema = "public", Name = "invoice_tax")]
+		[Table]
 		public class InvoiceTaxLine : BaseEntity
 		{
 			[Column, Nullable] public int InvoiceId { get; set; } // integer
 
 			[Column, Nullable] public int? TaxId { get; set; } // integer
 
-			[Association(ThisKey = "TaxId", OtherKey = "Id", CanBeNull = false, KeyName = "invoice_TaxId_fkey", BackReferenceName = "accountinvoicetaxidfkeys")]
+			[Association(ThisKey = "TaxId", OtherKey = "Id", CanBeNull = false)]
 			public AccountTax Tax { get; set; }
 		}
 
-		[Table(Schema = "public", Name = "account_tax")]
+		[Table]
 		public class AccountTax : BaseEntity
 		{
 		}
 
-
-		[Table(Schema = "public", Name = "invoice_line")]
+		[Table]
 		public class InvoiceLine : BaseEntity
 		{
 			[Column, Nullable] public int? ProductUnitId { get; set; } // integer
 			[Column, Nullable] public int? InvoiceId { get; set; } // integer
 			[Column, Nullable] public int? ProductId { get; set; } // integer
 
-			[Association(ThisKey = "ProductUnitId", OtherKey = "Id", CanBeNull = true,
-				KeyName = "invoice_line_uos_fkey",
-				BackReferenceName = "accountinvoicelineuosfkeys")]
+			[Association(ThisKey = "ProductUnitId", OtherKey = "Id", CanBeNull = true)]
 			public ProductUnit ProductUnit { get; set; }
 
-			[Association(ThisKey = "ProductId", OtherKey = "Id", CanBeNull = true,
-				KeyName = "invoice_line_procut_fkey", BackReferenceName = "invoice_line_procut_fkeys")]
+			[Association(ThisKey = "ProductId", OtherKey = "Id", CanBeNull = true)]
 			public Product Product { get; set; }
 		}
 
-		[Table(Schema = "public", Name = "town")]
+		[Table]
 		public class Town : BaseEntity
 		{
 			[Column, Nullable] public int? StateId { get; set; } // integer
 
-			[Association(ThisKey = "StateId", OtherKey = "Id", CanBeNull = true, KeyName = "town_state_fkey")]
+			[Association(ThisKey = "StateId", OtherKey = "Id", CanBeNull = true)]
 			public CountryState State { get; set; }
 		}
 
-		[Table(Schema = "public", Name = "country_state")]
+		[Table]
 		public class CountryState : BaseEntity
 		{
 			[Column, NotNull] public int CountryId { get; set; } // integer
 			[Column, Nullable] public int? AutonomousCommunityId { get; set; } // integer
 
-			[Association(ThisKey = "AutonomousCommunityId", OtherKey = "Id", CanBeNull = true, KeyName = "country_state_autonomous_community_fkey")]
+			[Association(ThisKey = "AutonomousCommunityId", OtherKey = "Id", CanBeNull = true)]
 			public AutonomousCommunity Community { get; set; }
 
-			[Association(ThisKey = "CountryId", OtherKey = "Id", CanBeNull = true, KeyName = "country_state_contry_fkey")]
+			[Association(ThisKey = "CountryId", OtherKey = "Id", CanBeNull = true)]
 			public Country Country { get; set; }
 		}
 
-		[Table(Schema = "public", Name = "autonomous_community")]
+		[Table]
 		public class AutonomousCommunity : BaseEntity
 		{
 		}
 
-		[Table(Schema = "public", Name = "country")]
+		[Table]
 		public class Country : BaseEntity
 		{
 		}
 
-		[Table(Schema = "public", Name = "invoice_pending_state")]
+		[Table]
 		public class InvoicePendingState : BaseEntity
 		{
 		}
 
-		[Table(Schema = "public", Name = "type_b_measures")]
+		[Table]
 		public class TypeBMeasures : BaseEntity
 		{
 			[Column, NotNull] public int CustomInvoiceId { get; set; }
 		}
 
-		[Table(Schema = "public", Name = "access_tariff")]
+		[Table]
 		public class AccessTariff : BaseEntity
 		{
 		}
 
-		[Table(Schema = "public", Name = "product_product")]
+		[Table]
 		public class Product : BaseEntity
 		{
 		}
 
-
-		[Table(Schema = "public", Name = "product_pricelist")]
+		[Table]
 		public class PriceList : BaseEntity
 		{
 		}
 
 		[Test]
-		public void TestLoadWithInfiniteLoop([IncludeDataSources(TestProvName.AllSQLite)] string context)
+		public void TestLoadWithInfiniteLoop([DataSources] string context)
 		{
-			using (var db = GetDataContext(context))
-			{
-				var query = db
+			using var db = GetDataContext(context);
+			using var t01 = db.CreateLocalTable<PriceList>();
+			using var t02 = db.CreateLocalTable<Product>();
+			using var t03 = db.CreateLocalTable<AccessTariff>();
+			using var t04 = db.CreateLocalTable<CountryState>();
+			using var t05 = db.CreateLocalTable<AutonomousCommunity>();
+			using var t06 = db.CreateLocalTable<Country>();
+			using var t07 = db.CreateLocalTable<InvoicePendingState>();
+			using var t08 = db.CreateLocalTable<TypeBMeasures>();
+			using var t09 = db.CreateLocalTable<Town>();
+			using var t10 = db.CreateLocalTable<InvoiceLine>();
+			using var t11 = db.CreateLocalTable<AccountTax>();
+			using var t12 = db.CreateLocalTable<InvoiceTaxLine>();
+			using var t13 = db.CreateLocalTable<Invoice>();
+			using var t14 = db.CreateLocalTable<MeasureSource>();
+			using var t15 = db.CreateLocalTable<TypeAMeasures>();
+			using var t16 = db.CreateLocalTable<StreetType>();
+			using var t17 = db.CreateLocalTable<ServicePoint>();
+			using var t18 = db.CreateLocalTable<ProductUnit>();
+			using var t19 = db.CreateLocalTable<Contract>();
+			using var t20 = db.CreateLocalTable<CustomInvoice>();
+			using var t21 = db.CreateLocalTable<CustomInvoiceLine>();
+
+			var query = db
 					.GetTable<CustomInvoice>()
 					.LoadWith(i => i.Invoice)
 					.LoadWith(i => i.Invoice.Rectifying)
@@ -298,8 +284,7 @@ namespace Tests.UserTests
 					.LoadWith(i => i.PriceList)
 					.Where(f => f.Id == 1);
 
-				Assert.DoesNotThrow(() => _ = query.ToString());
-			}
+			query.ToArray();
 		}
 	}
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -8,24 +9,27 @@ using JetBrains.Annotations;
 
 namespace LinqToDB
 {
+	using Common.Internal;
+	using Expressions;
+	using Extensions;
+	using Linq.Builder;
 	using Mapping;
 	using SqlQuery;
 
-	
 	partial class Sql
 	{
 		/// <summary>
 		/// An Attribute that allows custom Expressions to be defined
-		/// for a Method used within a Linq Expression. 
+		/// for a Method used within a Linq Expression.
 		/// </summary>
 		[PublicAPI]
 		[Serializable]
 		[AttributeUsage(AttributeTargets.Property | AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
-		public class ExpressionAttribute : Attribute
+		public class ExpressionAttribute : MappingAttribute
 		{
 			/// <summary>
 			/// Creates an Expression that will be used in SQL,
-			/// in place of the method call decorated by this attribute. 
+			/// in place of the method call decorated by this attribute.
 			/// </summary>
 			/// <param name="expression">The SQL expression. Use {0},{1}... for parameters given to the method call.</param>
 			public ExpressionAttribute(string? expression)
@@ -94,19 +98,13 @@ namespace LinqToDB
 			public int[]?         ArgIndices       { get; set; }
 			/// <summary>
 			/// Determines the priority of the expression in evaluation.
-			/// Refer to <see cref="LinqToDB.SqlQuery.Precedence"/>.
+			/// Refer to <see cref="SqlQuery.Precedence"/>.
 			/// </summary>
 			public int            Precedence       { get; set; }
 			/// <summary>
-			/// If <c>null</c>, this will be treated as the default
-			/// evaluation for the expression. If set to a <see cref="ProviderName"/>,
-			/// It will only be used for that provider configuration.
-			/// </summary>
-			public string?        Configuration    { get; set; }
-			/// <summary>
 			/// If <c>true</c> The expression will only be evaluated on the
 			/// database server. If it cannot, an exception will
-			/// be thrown. 
+			/// be thrown.
 			/// </summary>
 			public bool           ServerSideOnly   { get; set; }
 			/// <summary>
@@ -143,8 +141,8 @@ namespace LinqToDB
 			/// For example ORDER BY PureFunction("Str") can be removed because PureFunction function uses constant value.
 			/// <example>
 			/// For example Random function is NOT Pure function because it returns different result all time.
-			/// But expression <see cref="Sql.CurrentTimestamp"/> is Pure in case of executed query.
-			/// <see cref="Sql.DateAdd(LinqToDB.Sql.DateParts,System.Nullable{double},System.Nullable{System.DateTime})"/> is also Pure function because it returns the same result with the same parameters.  
+			/// But expression <see cref="CurrentTimestamp"/> is Pure in case of executed query.
+			/// <see cref="DateAdd(DateParts,double?,System.DateTime?)"/> is also Pure function because it returns the same result with the same parameters.
 			/// </example>
 			/// </summary>
 			public bool           IsPure          { get; set; }
@@ -152,9 +150,14 @@ namespace LinqToDB
 			/// Used to determine whether the return type should be treated as
 			/// something that can be null If CanBeNull is not explicitly set.
 			/// <para>Default is <see cref="IsNullableType.Undefined"/>,
-			/// which will be treated as <c>true</c></para> 
+			/// which will be treated as <c>true</c></para>
 			/// </summary>
 			public IsNullableType IsNullable       { get; set; }
+
+			/// <summary>
+			/// if <c>true</c>, do not generate generic parameters.
+			/// </summary>
+			public bool IgnoreGenericParameters { get; set; }
 
 			internal  bool? _canBeNull;
 			/// <summary>
@@ -166,48 +169,10 @@ namespace LinqToDB
 				set => _canBeNull = value;
 			}
 
-			protected bool GetCanBeNull(ISqlExpression[] parameters)
-			{
-				if (_canBeNull != null)
-					return _canBeNull.Value;
-
-				return CalcCanBeNull(IsNullable, parameters.Select(p => p.CanBeNull)) ?? true;
-			}
-
-			public static bool? CalcCanBeNull(IsNullableType isNullable, IEnumerable<bool> nullInfo)
-			{
-				switch (isNullable)
-				{
-					case IsNullableType.Undefined              : return null;
-					case IsNullableType.Nullable               : return true;
-					case IsNullableType.NotNullable            : return false;
-				}
-
-				var parameters = nullInfo.ToArray();
-
-				switch (isNullable)
-				{
-					case IsNullableType.SameAsFirstParameter   : return SameAs(0);
-					case IsNullableType.SameAsSecondParameter  : return SameAs(1);
-					case IsNullableType.SameAsThirdParameter   : return SameAs(2);
-					case IsNullableType.SameAsLastParameter    : return SameAs(parameters.Length - 1);
-					case IsNullableType.IfAnyParameterNullable : return parameters.Any(p => p);
-				}
-
-				bool SameAs(int parameterNumber)
-				{
-					if (parameterNumber >= 0 && parameters.Length > parameterNumber)
-						return parameters[parameterNumber];
-					return true;
-				}
-
-				return null;
-			}
-
 			const  string MatchParamPattern = @"{([0-9a-z_A-Z?]*)(,\s'(.*)')?}";
-			static Regex  _matchParamRegEx  = new Regex(MatchParamPattern, RegexOptions.Compiled);
+			static Regex  _matchParamRegEx  = new (MatchParamPattern, RegexOptions.Compiled);
 
-			public static string ResolveExpressionValues(string expression, Func<string, string?, string?> valueProvider)
+			public static string ResolveExpressionValues<TContext>(TContext context, string expression, Func<TContext, string, string?, string?> valueProvider, out Expression? error)
 			{
 				if (expression    == null) throw new ArgumentNullException(nameof(expression));
 				if (valueProvider == null) throw new ArgumentNullException(nameof(valueProvider));
@@ -215,6 +180,8 @@ namespace LinqToDB
 				int  prevMatch         = -1;
 				int  prevNotEmptyMatch = -1;
 				bool spaceNeeded       = false;
+
+				Expression? errorExpr = null;
 
 				var str = _matchParamRegEx.Replace(expression, match =>
 				{
@@ -231,10 +198,13 @@ namespace LinqToDB
 					}
 
 					var delimiter  = match.Groups[3].Success ? match.Groups[3].Value : null;
-					var calculated = valueProvider(paramName, delimiter);
+					var calculated = valueProvider(context, paramName, delimiter);
 
 					if (string.IsNullOrEmpty(calculated) && !canBeOptional)
-						throw new InvalidOperationException($"Non optional parameter '{paramName}' not found");
+					{
+						errorExpr = new SqlErrorExpression($"Non-optional parameter '{paramName}' not found", typeof(string));
+						return "error";
+					}
 
 					var res = calculated;
 					if (spaceNeeded)
@@ -253,17 +223,29 @@ namespace LinqToDB
 						prevNotEmptyMatch = match.Index + match.Length;
 					}
 
-					return res;
+					return res ?? string.Empty;
 				});
+
+				error = errorExpr;
 
 				return str;
 			}
 
-			public static readonly SqlExpression UnknownExpression = new SqlExpression("!!!");
+			public static readonly SqlExpression UnknownExpression = new ("!!!");
 
-			public static void PrepareParameterValues(Expression expression, ref string? expressionStr, bool includeInstance, out List<Expression?> knownExpressions, out List<ISqlExpression>? genericTypes)
+			public static void PrepareParameterValues<TContext>(
+				TContext                                                              context,
+				MappingSchema                                                         mappingSchema,
+				Expression                                                            expression,
+				ref string?                                                           expressionStr,
+				bool                                                                  includeInstance,
+				out List<(Expression? expression, ExprParameterAttribute? parameter)> knownExpressions,
+				bool                                                                  ignoreGenericParameters,
+				bool                                                                  forceInlineParameters,
+				out List<SqlDataType>?                                                genericTypes,
+				ConvertFunc<TContext>                                                 converter)
 			{
-				knownExpressions = new List<Expression?>();
+				knownExpressions = new List<(Expression?, ExprParameterAttribute?)>();
 				genericTypes     = null;
 
 				if (expression.NodeType == ExpressionType.Call)
@@ -272,7 +254,7 @@ namespace LinqToDB
 					expressionStr ??= mc.Method.Name;
 
 					if (includeInstance && !mc.Method.IsStatic)
-						knownExpressions.Add(mc.Object);
+						knownExpressions.Add((mc.Object, null));
 
 					ParameterInfo[]? pis = null;
 
@@ -280,40 +262,93 @@ namespace LinqToDB
 					{
 						var arg = mc.Arguments[i];
 
+						pis ??= mc.Method.GetParameters();
+						var p              = pis[i];
+						var paramAttribute = p.GetAttribute<ExprParameterAttribute>();
+
 						if (arg is NewArrayExpression nae)
 						{
-							if (pis == null)
-								pis = mc.Method.GetParameters();
-
-							var p = pis[i];
-
-							if (p.GetCustomAttributes(true).OfType<ParamArrayAttribute>().Any())
+							if (p.HasAttribute<ParamArrayAttribute>())
 							{
-								knownExpressions.AddRange(nae.Expressions);
+								foreach (var e in nae.Expressions)
+								{
+									knownExpressions.Add((e, paramAttribute));
+								}
 							}
 							else
 							{
-								knownExpressions.Add(nae);
+								knownExpressions.Add((nae, paramAttribute));
 							}
 						}
 						else
 						{
-							knownExpressions.Add(arg);
+							knownExpressions.Add((arg, paramAttribute));
 						}
 					}
 
-					if (mc.Method.DeclaringType!.IsGenericType)
+					if (!ignoreGenericParameters)
 					{
-						genericTypes ??= new List<ISqlExpression>();
-						genericTypes.AddRange(mc.Method.DeclaringType.GetGenericArguments()
-							.Select(t => (ISqlExpression)SqlDataType.GetDataType(t)));
-					}
+						ParameterInfo[]? pi = null;
 
-					if (mc.Method.IsGenericMethod)
-					{
-						genericTypes ??= new List<ISqlExpression>();
-						genericTypes.AddRange(mc.Method.GetGenericArguments()
-							.Select(t => (ISqlExpression)SqlDataType.GetDataType(t)));
+						if (mc.Method.DeclaringType!.IsGenericType)
+						{
+							genericTypes = new List<SqlDataType>();
+							foreach (var t in mc.Method.DeclaringType.GetGenericArguments())
+							{
+								var type = mappingSchema.GetDataType(t);
+								if (type.Type.DataType == DataType.Undefined)
+								{
+									pi ??= mc.Method.GetParameters();
+									for (var i = 0; i < pi.Length; i++)
+									{
+										if (pi[i].ParameterType == t)
+										{
+											var paramAttribute = pi[i].GetAttribute<ExprParameterAttribute>();
+
+											var converted      = converter(context, mc.Arguments[i], null, forceInlineParameters || paramAttribute?.DoNotParameterize == true);
+											if (converted is SqlPlaceholderExpression placeholder)
+											{
+												var dbType = QueryHelper.GetDbDataType(placeholder.Sql, mappingSchema);
+												if (dbType.DataType != DataType.Undefined)
+													type = new SqlDataType(dbType);
+											}
+										}
+									}
+								}
+
+								genericTypes.Add(type);
+							}
+						}
+
+						if (mc.Method.IsGenericMethod)
+						{
+							genericTypes ??= new List<SqlDataType>();
+							foreach (var t in mc.Method.GetGenericArguments())
+							{
+								var type = mappingSchema.GetDataType(t);
+								if (type.Type.DataType == DataType.Undefined)
+								{
+									pi ??= mc.Method.GetParameters();
+									for (var i = 0; i < pi.Length; i++)
+									{
+										if (pi[i].ParameterType == t)
+										{
+											var paramAttribute = pi[i].GetAttribute<ExprParameterAttribute>();
+
+											var converted = converter(context, mc.Arguments[i], null, forceInlineParameters || paramAttribute?.DoNotParameterize == true);
+											if (converted is SqlPlaceholderExpression placeholder)
+											{
+												var dbType = QueryHelper.GetDbDataType(placeholder.Sql, mappingSchema);
+												if (dbType.DataType != DataType.Undefined)
+													type = new SqlDataType(dbType);
+											}
+										}
+									}
+								}
+
+								genericTypes.Add(type);
+							}
+						}
 					}
 				}
 				else
@@ -321,69 +356,94 @@ namespace LinqToDB
 					var me = (MemberExpression) expression;
 					expressionStr ??= me.Member.Name;
 					if (me.Expression != null)
-						knownExpressions.Add(me.Expression);
+						knownExpressions.Add((me.Expression, null));
 				}
 			}
 
-			public static ISqlExpression[] PrepareArguments(string expressionStr, int[]? argIndices, bool addDefault, List<Expression?> knownExpressions, List<ISqlExpression>? genericTypes, Func<Expression, ColumnDescriptor?, ISqlExpression> converter)
+			public delegate Expression ConvertFunc<TContext>(TContext context, Expression expression, ColumnDescriptor? columnDescriptor, bool? inlineParameters);
+
+			public static ISqlExpression?[] PrepareArguments<TContext>(TContext   context,
+				string                                                            expressionStr,
+				int[]?                                                            argIndices,
+				bool                                                              addDefault,
+				List<(Expression? expression, ExprParameterAttribute? parameter)> knownExpressions,
+				List<SqlDataType>?                                                genericTypes,
+				ConvertFunc<TContext>                                             converter,
+				bool                                                              forceInlineParameters,
+				out Expression?                                                   error)
 			{
 				var parms = new List<ISqlExpression?>();
+				var ctx   = WritableContext.Create((found: false, error: (Expression?)null), (context, expressionStr, argIndices, knownExpressions, genericTypes, converter, parms, forceInlineParameters));
 
-				var foundPosition = false;
-
-				_ = ResolveExpressionValues(expressionStr!,
-					(v, d) =>
+				ResolveExpressionValues(
+					ctx,
+					expressionStr!,
+					static (ctx, v, d) =>
 					{
-						foundPosition = true;
+						ctx.WriteableValue = (true, ctx.WriteableValue.error);
 
-						var argIdx = int.Parse(v);
+						var argIdx = int.Parse(v, NumberFormatInfo.InvariantInfo);
 						var idx    = argIdx;
 
-						if (argIndices != null)
+						if (ctx.StaticValue.argIndices != null)
 						{
-							if (idx < 0 || idx >= argIndices.Length)
-								throw new LinqToDBException($"Expression '{expressionStr}' has wrong ArgIndices mapping. Index '{idx}' do not fit in range.");
+							if (idx < 0 || idx >= ctx.StaticValue.argIndices.Length)
+								throw new LinqToDBException(FormattableString.Invariant($"Expression '{ctx.StaticValue.expressionStr}' has wrong ArgIndices mapping. Index '{idx}' do not fit in range."));
 
-							idx = argIndices[idx];
+							idx = ctx.StaticValue.argIndices[idx];
 						}
 
 						if (idx < 0)
-							throw new LinqToDBException($"Expression '{expressionStr}' has wrong param index mapping. Index '{idx}' do not fit in range.");
+							throw new LinqToDBException(FormattableString.Invariant($"Expression '{ctx.StaticValue.expressionStr}' has wrong param index mapping. Index '{idx}' do not fit in range."));
 
-						while (idx >= parms.Count)
+						while (idx >= ctx.StaticValue.parms.Count)
 						{
-							parms.Add(null);
+							ctx.StaticValue.parms.Add(null);
 						}
 
-						if (parms[idx] == null)
+						if (ctx.StaticValue.parms[idx] == null)
 						{
 							ISqlExpression? paramExpr = null;
-							if (argIdx >= knownExpressions.Count)
+							if (argIdx >= ctx.StaticValue.knownExpressions.Count)
 							{
-								var typeIndex = argIdx - knownExpressions.Count;
-								if (genericTypes == null || typeIndex >= genericTypes.Count || typeIndex < 0)
+								var typeIndex = argIdx - ctx.StaticValue.knownExpressions.Count;
+								if (ctx.StaticValue.genericTypes == null || typeIndex >= ctx.StaticValue.genericTypes.Count || typeIndex < 0)
 								{
-									throw new LinqToDBException($"Expression '{expressionStr}' has wrong param index mapping. Index '{argIdx}' do not fit in parameters range.");
+									throw new LinqToDBException(FormattableString.Invariant($"Expression '{ctx.StaticValue.expressionStr}' has wrong param index mapping. Index '{argIdx}' do not fit in parameters range."));
 								}
 
-								paramExpr = genericTypes[typeIndex];
+								paramExpr = ctx.StaticValue.genericTypes[typeIndex];
 							}
 							else
 							{
-								var expr = knownExpressions[argIdx];
-								if (expr != null)
-									paramExpr = converter(expr, null);
+								var (expression, parameter) = ctx.StaticValue.knownExpressions[argIdx];
+								if (expression != null)
+								{
+									var converted = ctx.StaticValue.converter(ctx.StaticValue.context, expression, null, ctx.StaticValue.forceInlineParameters || parameter?.DoNotParameterize == true);
+									if (converted is SqlPlaceholderExpression placeholder)
+									{
+										paramExpr = placeholder.Sql;
+									}
+									else
+									{
+										paramExpr          = null;
+										ctx.WriteableValue = (true, converted);
+									}
+								}
 							}
 
-							parms[idx] = paramExpr;
+							ctx.StaticValue.parms[idx] = paramExpr;
 						}
 
 						return v;
-					});
+					}, out error);
 
-				if (!foundPosition)
+				if (error != null)
+					return [];
+
+				if (!ctx.WriteableValue.found)
 				{
-					// It means that we have to prepare parameters for function 
+					// It means that we have to prepare parameters for function
 					if (argIndices != null)
 					{
 						for (var idx = 0; idx < argIndices.Length; idx++)
@@ -403,16 +463,30 @@ namespace LinqToDB
 									var typeIndex = argIdx - knownExpressions.Count;
 									if (genericTypes == null || typeIndex >= genericTypes.Count || typeIndex < 0)
 									{
-										throw new LinqToDBException($"Function '{expressionStr}' has wrong param index mapping. Index '{argIdx}' do not fit in parameters range.");
+										throw new LinqToDBException(FormattableString.Invariant($"Function '{expressionStr}' has wrong param index mapping. Index '{argIdx}' do not fit in parameters range."));
 									}
 
 									paramExpr = genericTypes[typeIndex];
 								}
 								else
 								{
-									var expr = knownExpressions[argIdx];
-									if (expr != null)
-										paramExpr = converter(expr, null);
+									var (expression, parameter) = knownExpressions[argIdx];
+									if (expression != null)
+									{
+										var converted = converter(context, expression, null, ctx.StaticValue.forceInlineParameters || parameter?.DoNotParameterize == true);
+										if (converted is SqlPlaceholderExpression placeholder)
+										{
+											paramExpr = placeholder.Sql;
+										}
+										else
+										{
+											// do not allow overriding first error
+											if (ctx.WriteableValue.error == null)
+												ctx.WriteableValue = (true, error);
+											paramExpr = null;
+										}
+					
+									}
 								}
 
 								parms[idx] = paramExpr;
@@ -423,39 +497,84 @@ namespace LinqToDB
 					{
 						if (addDefault)
 						{
-							parms.AddRange(knownExpressions.Select(e => e == null ? null : converter(e, null)));
+							foreach (var (expression, parameter) in knownExpressions)
+							{
+								if (expression == null)
+									parms.Add(null);
+								else
+								{
+									var converted = converter(context, expression, null, ctx.StaticValue.forceInlineParameters || parameter?.DoNotParameterize == true);
+
+									if (converted is SqlPlaceholderExpression placeholder)
+										parms.Add(placeholder.Sql);
+									else
+									{
+										error = expression;
+									}
+								}
+							}
+
 							if (genericTypes != null)
 								parms.AddRange(genericTypes);
 						}
 					}
 				}
 
-				return parms.Select(p => p ?? UnknownExpression).ToArray();
+				if (ctx.WriteableValue.error != null)
+				{
+					error = ctx.WriteableValue.error;
+					return parms.Select(static p => p).ToArray();
+				}
+
+				return parms.Select(static p => p ?? UnknownExpression).ToArray();
 			}
 
-			public virtual ISqlExpression? GetExpression(IDataContext dataContext, SelectQuery query,
-				Expression expression, Func<Expression, ColumnDescriptor?, ISqlExpression> converter)
+			public virtual Expression GetExpression<TContext>(
+				TContext              context,
+				IDataContext          dataContext,
+				IExpressionEvaluator  evaluator,
+				SelectQuery           query,
+				Expression            expression,
+				ConvertFunc<TContext> converter)
 			{
 				var expressionStr = Expression;
-				PrepareParameterValues(expression, ref expressionStr, true, out var knownExpressions, out var genericTypes);
+				PrepareParameterValues(context, dataContext.MappingSchema, expression, ref expressionStr, true, out var knownExpressions, IgnoreGenericParameters, InlineParameters, out var genericTypes, converter);
 
 				if (string.IsNullOrEmpty(expressionStr))
 					throw new LinqToDBException($"Cannot retrieve SQL Expression body from expression '{expression}'.");
 
-				var parameters = PrepareArguments(expressionStr!, ArgIndices, addDefault: false, knownExpressions, genericTypes, converter);
+				var parameters = PrepareArguments(context, expressionStr!, ArgIndices, false, knownExpressions, genericTypes, converter, InlineParameters, out var error);
 
-				return new SqlExpression(expression.Type, expressionStr!, Precedence,
-					(IsAggregate      ? SqlFlags.IsAggregate      : SqlFlags.None) | 
+				if (error != null)
+					return SqlErrorExpression.EnsureError(error, expression.Type);
+
+				var sqlExpression = new SqlExpression(expression.Type, expressionStr!, Precedence,
+					(IsAggregate      ? SqlFlags.IsAggregate      : SqlFlags.None) |
 					(IsPure           ? SqlFlags.IsPure           : SqlFlags.None) |
-					(IsPredicate      ? SqlFlags.IsPredicate      : SqlFlags.None) | 
-					(IsWindowFunction ? SqlFlags.IsWindowFunction : SqlFlags.None), 
-					parameters)
-				{
-					CanBeNull = GetCanBeNull(parameters)
-				};
+					(IsPredicate      ? SqlFlags.IsPredicate      : SqlFlags.None) |
+					(IsWindowFunction ? SqlFlags.IsWindowFunction : SqlFlags.None),
+					ToParametersNullabilityType(IsNullable),
+					_canBeNull,
+					parameters!);
+
+				if (_canBeNull != null)
+					sqlExpression.CanBeNull = _canBeNull.Value;
+
+				// placeholder will be updated later by concrete path
+				return ExpressionBuilder.CreatePlaceholder(query, sqlExpression, expression);
+			}
+
+			public static ParametersNullabilityType ToParametersNullabilityType(IsNullableType nullableType)
+			{
+				return (ParametersNullabilityType)nullableType;
 			}
 
 			public virtual bool GetIsPredicate(Expression expression) => IsPredicate;
+
+			public override string GetObjectID()
+			{
+				return FormattableString.Invariant($".{Configuration}.{Expression}.{IdentifierBuilder.GetObjectID(ArgIndices)}.{Precedence}.{(ServerSideOnly ? 1 : 0)}.{(PreferServerSide ? 1 : 0)}.{(InlineParameters ? 1 : 0)}.{(ExpectExpression ? 1 : 0)}.{(IsPredicate ? 1 : 0)}.{(IsAggregate ? 1 : 0)}.{(IsWindowFunction ? 1 : 0)}.{(IsPure ? 1 : 0)}.{(int)IsNullable}.{(IgnoreGenericParameters ? 1 : 0)}.{(CanBeNull ? 1 : 0)}.");
+			}
 		}
 	}
 }

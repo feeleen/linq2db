@@ -9,14 +9,13 @@ namespace LinqToDB.Linq.Builder
 
 	internal partial class MergeBuilder
 	{
-		internal class DeleteWhenMatched : MethodCallBuilder
+		[BuildsMethodCall(nameof(LinqExtensions.DeleteWhenMatchedAnd))]
+		internal sealed class DeleteWhenMatched : MethodCallBuilder
 		{
-			protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
-			{
-				return methodCall.IsSameGenericMethod(DeleteWhenMatchedAndMethodInfo);
-			}
+			public static bool CanBuildMethod(MethodCallExpression call, BuildInfo info, ExpressionBuilder builder)
+				=> call.IsSameGenericMethod(DeleteWhenMatchedAndMethodInfo);
 
-			protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
+			protected override BuildSequenceResult BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 			{
 				var mergeContext = (MergeContext)builder.BuildSequence(new BuildInfo(buildInfo, methodCall.Arguments[0]));
 
@@ -25,19 +24,25 @@ namespace LinqToDB.Linq.Builder
 				statement.Operations.Add(operation);
 
 				var predicate = methodCall.Arguments[1];
-				if (!(predicate is ConstantExpression constPredicate) || constPredicate.Value != null)
+				if (!predicate.IsNullValue())
 				{
-					var condition   = (LambdaExpression)predicate.Unwrap();
-					operation.Where = BuildSearchCondition(builder, statement, mergeContext.TargetContext, mergeContext.SourceContext, condition);
+					var condition           = predicate.UnwrapLambda();
+					var conditionExpression = mergeContext.SourceContext.PrepareTargetSource(condition);
+
+					operation.Where = new SqlSearchCondition();
+
+					var saveIsSourceOuter = mergeContext.SourceContext.IsSourceOuter;
+					mergeContext.SourceContext.IsSourceOuter = true;
+
+					builder.BuildSearchCondition(
+						mergeContext.SourceContext, 
+						conditionExpression, 
+						operation.Where);
+
+					mergeContext.SourceContext.IsSourceOuter = saveIsSourceOuter;
 				}
 
-				return mergeContext;
-			}
-
-			protected override SequenceConvertInfo? Convert(
-				ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo, ParameterExpression? param)
-			{
-				return null;
+				return BuildSequenceResult.FromContext(mergeContext);
 			}
 		}
 	}

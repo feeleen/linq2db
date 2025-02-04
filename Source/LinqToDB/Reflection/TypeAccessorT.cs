@@ -1,92 +1,118 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Reflection;
 
 namespace LinqToDB.Reflection
 {
 	using Extensions;
-	using LinqToDB.Common;
 
 	public class TypeAccessor<T> : TypeAccessor
 	{
 		static TypeAccessor()
 		{
-			// Create Instance.
-			//
 			var type = typeof(T);
 
-			if (type.IsValueType)
+			var interfaces = !type.IsInterface && !type.IsArray ? type.GetInterfaces() : [];
+
+			if (interfaces.Length == 0)
 			{
-				_createInstance = () => default!;
+				_members.AddRange(type.GetPublicInstanceValueMembers());
 			}
 			else
 			{
-				var ctor = type.IsAbstract ? null : type.GetDefaultConstructorEx();
+				// load properties takin into account explicit interface implementations
+				var interfacePropertiesList = new List<PropertyInfo?>();
+				var interfaceProperties     = new Dictionary<(Type? declaringType, string name, Type type), int>();
 
-				if (ctor == null)
+				// as interface could be re-implemented multiple times, we should track which inteface property accessors
+				// are not mapped yet and reduce this list walking inheritance hierarchy from top to base type
+				HashSet<MethodInfo>? unmappedAccessors = null;
+
+				// fill unmappedAccessors with accessors, except those from public properties
+				foreach (var iface in type.GetInterfaces())
 				{
-					Expression<Func<T>> mi;
+					var map = type.GetInterfaceMapEx(iface);
 
-					if (type.IsAbstract) mi = () => ThrowAbstractException();
-					else                     mi = () => ThrowException();
-
-					var body = Expression.Call(null, ((MethodCallExpression)mi.Body).Method);
-
-					_createInstance = Expression.Lambda<Func<T>>(body).CompileExpression();
-				}
-				else
-				{
-					_createInstance = Expression.Lambda<Func<T>>(Expression.New(ctor)).CompileExpression();
-				}
-			}
-
-			_members.AddRange(type.GetPublicInstanceValueMembers());
-
-			// Add explicit interface implementation properties support
-			// Or maybe we should support all private fields/properties?
-			//
-			if (!type.IsInterface && !type.IsArray)
-			{
-				var interfaceMethods = type.GetInterfaces().SelectMany(ti => type.GetInterfaceMapEx(ti).TargetMethods)
-					.ToList();
-
-				if (interfaceMethods.Count > 0)
-				{
-					foreach (var pi in type.GetNonPublicPropertiesEx())
+					for (var i = 0; i < map.InterfaceMethods.Length; i++)
 					{
-						if (pi.GetIndexParameters().Length == 0)
-						{
-							var getMethod = pi.GetGetMethod(true);
-							var setMethod = pi.GetSetMethod(true);
+						if (!map.InterfaceMethods[i].IsStatic)
+							(unmappedAccessors ??= new()).Add(map.InterfaceMethods[i]);
+					}
+				}
 
-							if ((getMethod == null || interfaceMethods.Contains(getMethod)) &&
-								(setMethod == null || interfaceMethods.Contains(setMethod)))
+				// go down in hierarchy and pick first found explicit implementation for interface properties
+				var implementor = type;
+				while (unmappedAccessors != null && unmappedAccessors.Count > 0)
+				{
+					Dictionary<MethodInfo, List<MethodInfo>>? methods = null;
+
+					foreach (var iface in implementor.GetInterfaces())
+					{
+						var map = implementor.GetInterfaceMapEx(iface);
+
+						for (var i = 0; i < map.InterfaceMethods.Length; i++)
+						{
+							if (map.InterfaceMethods[i].IsStatic)
+								continue;
+
+							methods ??= new();
+							if (methods.TryGetValue(map.TargetMethods[i], out var interfaceMethods))
+								interfaceMethods.Add(map.InterfaceMethods[i]);
+							else
+								methods.Add(map.TargetMethods[i], new List<MethodInfo>() { map.InterfaceMethods[i] });
+						}
+					}
+
+					if (methods != null)
+					{
+						foreach (var pi in implementor.GetDeclaredPropertiesEx())
+						{
+							if ((pi.GetMethod == null || (methods.TryGetValue(pi.GetMethod, out var ifaceGetters) && RemoveAll(unmappedAccessors, ifaceGetters))) &&
+								(pi.SetMethod == null || (methods.TryGetValue(pi.SetMethod, out var ifaceSetters) && RemoveAll(unmappedAccessors, ifaceSetters))))
 							{
-								_members.Add(pi);
+								interfaceProperties.Add((pi.DeclaringType, pi.Name, pi.PropertyType), interfacePropertiesList.Count);
+								interfacePropertiesList.Add(pi);
 							}
 						}
 					}
+
+					if (implementor.BaseType == null || implementor.BaseType == typeof(object) || implementor.BaseType == typeof(ValueType))
+						break;
+
+					implementor = implementor.BaseType;
 				}
+
+				var uniqueNames = new HashSet<string>();
+				foreach (var mi in type.GetPublicInstanceValueMembers())
+				{
+					if (mi is PropertyInfo pi && interfaceProperties.TryGetValue((pi.DeclaringType, pi.Name, pi.PropertyType), out var idx))
+						interfacePropertiesList[idx] = null;
+
+					if (uniqueNames.Add(mi.Name))
+						_members.Add(mi);
+				}
+
+				foreach (var pi in interfacePropertiesList)
+					if (pi != null && uniqueNames.Add(pi.Name))
+						_members.Add(pi);
 			}
 
 			// ObjectFactory
 			//
-			var attr = type.GetFirstAttribute<ObjectFactoryAttribute>();
+			var attr = type.GetAttribute<ObjectFactoryAttribute>();
 
 			if (attr != null)
 				_objectFactory = attr.ObjectFactory;
-		}
 
-		static T ThrowException()
-		{
-			throw new LinqToDBException($"The '{typeof(T).FullName}' type must have default or init constructor.");
-		}
+			static bool RemoveAll(HashSet<MethodInfo> unmappedAccessors, List<MethodInfo> ifaceAccessors)
+			{
+				var removed = true;
+				foreach (var accessor in ifaceAccessors)
+					removed = unmappedAccessors.Remove(accessor) && removed;
 
-		static T ThrowAbstractException()
-		{
-			throw new LinqToDBException($"Cant create an instance of abstract class '{typeof(T).FullName}'.");
+				return removed;
+			}
 		}
 
 		static readonly List<MemberInfo> _members = new();
@@ -98,19 +124,20 @@ namespace LinqToDB.Reflection
 			foreach (var member in _members)
 				if (!member.GetMemberType().IsByRef)
 					AddMember(new MemberAccessor(this, member, null));
-
-			ObjectFactory = _objectFactory;
 		}
 
-		static readonly Func<T> _createInstance;
-		public override object   CreateInstance()
+		public override object CreateInstance()
 		{
-			return _createInstance()!;
+			if (_objectFactory != null)
+				return _objectFactory.CreateInstance(this);
+			return ObjectFactory<T>.CreateInstance()!;
 		}
 
 		public T Create()
 		{
-			return _createInstance();
+			if (_objectFactory != null)
+				return (T)_objectFactory.CreateInstance(this);
+			return ObjectFactory<T>.CreateInstance()!;
 		}
 
 		public override Type Type => typeof(T);

@@ -4,6 +4,8 @@ using System.Linq.Expressions;
 
 namespace LinqToDB.Expressions
 {
+	using Internal;
+
 	/// <summary>
 	/// Used for controlling query caching of custom SQL Functions.
 	/// Parameter with this attribute will be evaluated on client side before generating SQL.
@@ -18,6 +20,7 @@ namespace LinqToDB.Expressions
 
 			return base.ExpressionsEqual(context, expr1, expr2, comparer);
 		}
+
 		public override IEnumerable<Expression> SplitExpression(Expression expression)
 		{
 			var val = expression.EvaluateExpression();

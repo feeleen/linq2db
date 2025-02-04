@@ -1,8 +1,12 @@
-using System;
-using System.Runtime.Serialization;
+﻿using System;
+using System.ComponentModel;
+using System.Globalization;
 
 namespace LinqToDB.SqlQuery
 {
+	// TODO: Remove in v7
+	[Obsolete($"This exception type is not used anymore. Please update your code to handle {nameof(LinqToDBException)}."), EditorBrowsable(EditorBrowsableState.Never)]
+	[Serializable]
 	public class SqlException : Exception
 	{
 		public SqlException()
@@ -17,7 +21,7 @@ namespace LinqToDB.SqlQuery
 
 		[JetBrains.Annotations.StringFormatMethod("message")]
 		public SqlException(string message, params object?[] args)
-			: base(string.Format(message, args))
+			: base(string.Format(CultureInfo.InvariantCulture, message, args))
 		{
 		}
 
@@ -30,11 +34,5 @@ namespace LinqToDB.SqlQuery
 			: base(innerException.Message, innerException)
 		{
 		}
-
-		protected SqlException(SerializationInfo info, StreamingContext context)
-			: base(info, context)
-		{
-		}
 	}
 }
-

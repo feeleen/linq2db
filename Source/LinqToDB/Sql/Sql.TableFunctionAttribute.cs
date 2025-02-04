@@ -1,20 +1,20 @@
 ﻿using System;
-using System.Linq;
 using System.Linq.Expressions;
-using LinqToDB.Mapping;
 
 // ReSharper disable CheckNamespace
 
 namespace LinqToDB
 {
-	using LinqToDB.SqlProvider;
+	using Common.Internal;
+	using Mapping;
+	using SqlProvider;
 	using SqlQuery;
 
 	partial class Sql
 	{
 		[Serializable]
 		[AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
-		public class TableFunctionAttribute : Attribute
+		public class TableFunctionAttribute : MappingAttribute
 		{
 			public TableFunctionAttribute()
 			{
@@ -44,30 +44,39 @@ namespace LinqToDB
 				ArgIndices    = argIndices;
 			}
 
-			public string? Configuration { get; set; }
 			public string? Name          { get; set; }
 			public string? Schema        { get; set; }
 			public string? Database      { get; set; }
 			public string? Server        { get; set; }
+			public string? Package       { get; set; }
 			public int[]?  ArgIndices    { get; set; }
 
-			public virtual void SetTable(ISqlBuilder sqlBuilder, MappingSchema mappingSchema, SqlTable table, MethodCallExpression methodCall, Func<Expression, ColumnDescriptor?, ISqlExpression> converter)
+			public virtual void SetTable<TContext>(DataOptions options, TContext context, ISqlBuilder sqlBuilder, MappingSchema mappingSchema, SqlTable table, MethodCallExpression methodCall, ExpressionAttribute.ConvertFunc<TContext> converter)
 			{
-				table.SqlTableType   = SqlTableType.Function;
-				table.Name           = Name ?? methodCall.Method.Name;
-				table.PhysicalName   = Name ?? methodCall.Method.Name;
+				table.SqlTableType = SqlTableType.Function;
+				var expressionStr  = table.Expression = Name ?? methodCall.Method.Name!;
 
-				var expressionStr = table.Name;
-				ExpressionAttribute.PrepareParameterValues(methodCall, ref expressionStr, false, out var knownExpressions, out var genericTypes);
+				ExpressionAttribute.PrepareParameterValues(context, mappingSchema, methodCall, ref expressionStr, false, out var knownExpressions, false, false, out var genericTypes, converter);
 
 				if (string.IsNullOrEmpty(expressionStr))
 					throw new LinqToDBException($"Cannot retrieve Table Function body from expression '{methodCall}'.");
 
-				table.TableArguments = ExpressionAttribute.PrepareArguments(string.Empty, ArgIndices, addDefault: true, knownExpressions, genericTypes, converter).ToArray();
+				table.TableName = new SqlObjectName(
+					expressionStr!,
+					Schema  : Schema   ?? table.TableName.Schema,
+					Database: Database ?? table.TableName.Database,
+					Server  : Server   ?? table.TableName.Server,
+					Package : Package  ?? table.TableName.Package);
 
-				if (Schema   != null) table.Schema   = Schema;
-				if (Database != null) table.Database = Database;
-				if (Server   != null) table.Server   = Server;
+				table.TableArguments = ExpressionAttribute.PrepareArguments(context, string.Empty, ArgIndices, true, knownExpressions, genericTypes, converter, false, out var error)!;
+
+				if (error != null)
+					throw Expressions.SqlErrorExpression.EnsureError(error).CreateException();
+			}
+
+			public override string GetObjectID()
+			{
+				return $".{Configuration}.{Name}.{Schema}.{Database}.{Server}.{Package}.{IdentifierBuilder.GetObjectID(ArgIndices)}.";
 			}
 		}
 	}

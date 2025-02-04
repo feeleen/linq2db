@@ -7,8 +7,7 @@ using System.Reflection;
 
 namespace LinqToDB.Common.Internal
 {
-
-	public class ValueComparer<T> : ValueComparer, IEqualityComparer<T>
+	class ValueComparer<T> : ValueComparer, IEqualityComparer<T>
 	{
 		private Func<T?, T?, bool>? _equals;
 		private Func<T?, int>?      _hashCode;
@@ -153,7 +152,7 @@ namespace LinqToDB.Common.Internal
 			if (type != unwrappedType || !type.IsValueType)
 			{
 				expression = Expression.Condition(Expression.NotEqual(param, Expression.Constant(null, param.Type)),
-					expression, Expression.Constant(0, typeof(int)));
+					expression, Expressions.ExpressionInstances.Constant0);
 			}
 
 			return Expression.Lambda<Func<T, int>>(expression, param);
@@ -189,7 +188,7 @@ namespace LinqToDB.Common.Internal
 		/// <returns> <see langword="true" /> if they are equal; <see langword="false" /> otherwise. </returns>
 		public virtual bool Equals(T? x, T? y)
 			=> NonCapturingLazyInitializer.EnsureInitialized(
-				ref _equals, this, c => c.EqualsExpression.Compile())(x, y);
+				ref _equals, this, c => c.EqualsExpression.CompileExpression())(x, y);
 
 		/// <summary>
 		///     Returns the hash code for the given instance.
@@ -198,7 +197,7 @@ namespace LinqToDB.Common.Internal
 		/// <returns> The hash code. </returns>
 		public virtual int GetHashCode(T? obj)
 			=> NonCapturingLazyInitializer.EnsureInitialized(
-				ref _hashCode, this, c => c.HashCodeExpression.Compile())(obj);
+				ref _hashCode, this, c => c.HashCodeExpression.CompileExpression())(obj);
 
 		/// <summary>
 		///     The type.

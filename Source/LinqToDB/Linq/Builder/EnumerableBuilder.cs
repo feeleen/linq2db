@@ -1,71 +1,59 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq.Expressions;
-using LinqToDB.Extensions;
+using System.Reflection;
 
 namespace LinqToDB.Linq.Builder
 {
-	class EnumerableBuilder : ISequenceBuilder
+	using Extensions;
+	using Reflection;
+	using LinqToDB.Expressions;
+
+	[BuildsExpression(ExpressionType.Constant, ExpressionType.Call, ExpressionType.MemberAccess, ExpressionType.NewArrayInit)]
+	sealed class EnumerableBuilder : ISequenceBuilder
 	{
-		public int BuildCounter { get; set; }
-
-		public bool CanBuild(ExpressionBuilder builder, BuildInfo buildInfo)
+		public static bool CanBuild(Expression expr, BuildInfo info, ExpressionBuilder builder)
 		{
-			var expr = buildInfo.Expression;
-
 			if (expr.NodeType == ExpressionType.NewArrayInit)
-			{
 				return true;
-			}
 
 			if (!typeof(IEnumerable<>).IsSameOrParentOf(expr.Type))
 				return false;
 
-			var collectionType = typeof(IEnumerable<>).GetGenericType(expr.Type);
-			if (collectionType == null)
+			if (typeof(IEnumerable<>).GetGenericType(expr.Type) is null)
 				return false;
 
-			if (!builder.CanBeCompiled(expr))
-				return false;
-
-			switch (expr.NodeType)
+			return expr.NodeType switch
 			{
-				case ExpressionType.MemberAccess:
-				{
-					var ma = (MemberExpression)expr;
-					if (ma.Expression.NodeType != ExpressionType.Constant)
-						return false;
-					break;
-				}
-				case ExpressionType.Constant:
-					break;
-				default:
-					return false;
+				ExpressionType.MemberAccess => CanBuildMemberChain(((MemberExpression)expr).Expression),
+				ExpressionType.Constant     => ((ConstantExpression)expr).Value is IEnumerable,
+				ExpressionType.Call         => builder.CanBeEvaluatedOnClient(expr),
+				_ => false,
+			};
+
+			static bool CanBuildMemberChain(Expression? expr)
+			{
+				while (expr is { NodeType: ExpressionType.MemberAccess })
+					expr = ((MemberExpression)expr).Expression;
+				
+				return expr is null or { NodeType: ExpressionType.Constant };
 			}
-
-			return true;
-
 		}
 
-		public IBuildContext BuildSequence(ExpressionBuilder builder, BuildInfo buildInfo)
+		public BuildSequenceResult BuildSequence(ExpressionBuilder builder, BuildInfo buildInfo)
 		{
 			var collectionType = typeof(IEnumerable<>).GetGenericType(buildInfo.Expression.Type) ??
 			                     throw new InvalidOperationException();
 
-			var enumerableContext = new EnumerableContext(builder, buildInfo, buildInfo.SelectQuery, collectionType.GetGenericArguments()[0]);
+			var enumerableContext = new EnumerableContext(builder.GetTranslationModifier(), builder, buildInfo, buildInfo.SelectQuery, collectionType.GetGenericArguments()[0]);
 
-			return enumerableContext;
-		}
-
-		public SequenceConvertInfo? Convert(ExpressionBuilder builder, BuildInfo buildInfo, ParameterExpression? param)
-		{
-			return null;
+			return BuildSequenceResult.FromContext(enumerableContext);
 		}
 
 		public bool IsSequence(ExpressionBuilder builder, BuildInfo buildInfo)
 		{
 			return true;
 		}
-
 	}
 }

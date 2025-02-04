@@ -5,9 +5,10 @@ using System.Threading.Tasks;
 namespace LinqToDB.Linq
 {
 	using Builder;
+	using Internal;
 	using Common.Internal.Cache;
 
-	class CompiledTable<T>
+	sealed class CompiledTable<T>
 		where T : notnull
 	{
 		public CompiledTable(LambdaExpression lambda, Expression expression)
@@ -19,54 +20,79 @@ namespace LinqToDB.Linq
 		readonly LambdaExpression _lambda;
 		readonly Expression       _expression;
 
-		Query<T> GetInfo(IDataContext dataContext)
+		Query<T> GetInfo(IDataContext dataContext, object?[] parameterValues)
 		{
-			var contextID       = dataContext.ContextID;
-			var contextType     = dataContext.GetType();
-			var mappingSchemaID = dataContext.MappingSchema.ConfigurationID;
+			var configurationID = dataContext.ConfigurationID;
+			var dataOptions     = dataContext.Options;
 
 			var result = QueryRunner.Cache<T>.QueryCache.GetOrCreate(
-				(operation: "CT", contextID, contextType, mappingSchemaID, expression: _expression),
-				(dataContext, lambda: _lambda),
+				(
+					operation: "CT",
+					configurationID,
+					expression : _expression,
+					queryFlags : dataContext.GetQueryFlags()
+				),
+				(dataContext, lambda: _lambda, dataOptions, parameterValues),
 				static (o, key, ctx) =>
 				{
-					o.SlidingExpiration = Common.Configuration.Linq.CacheSlidingExpiration;
+					o.SlidingExpiration = ctx.dataOptions.LinqOptions.CacheSlidingExpirationOrDefault;
 
-					var query = new Query<T>(ctx.dataContext, key.expression);
+					var optimizationContext = new ExpressionTreeOptimizationContext(ctx.dataContext);
+					var exposed = ExpressionBuilder.ExposeExpression(key.expression, ctx.dataContext,
+						optimizationContext, ctx.parameterValues, optimizeConditions : false, compactBinary : true);
 
-					var optimisationContext = new ExpressionTreeOptimizationContext(ctx.dataContext);
+					var query             = new Query<T>(ctx.dataContext);
+					var expressions       = (IQueryExpressions)new RuntimeExpressionsContainer(exposed);
+					var parametersContext = new ParametersContext(expressions, optimizationContext, ctx.dataContext);
 
-					query = new ExpressionBuilder(query, optimisationContext, ctx.dataContext, key.expression, ctx.lambda.Parameters.ToArray())
-						.Build<T>();
+					var validateSubqueries = !ExpressionBuilder.NeedsSubqueryValidation(ctx.dataContext);
+					query = new ExpressionBuilder(query, validateSubqueries, optimizationContext, parametersContext, ctx.dataContext, exposed, ctx.parameterValues)
+						.Build<T>(ref expressions);
 
-					query.ClearMemberQueryableInfo();
+					if (query.ErrorExpression != null)
+					{
+						if (!validateSubqueries)
+						{
+							query = new Query<T>(ctx.dataContext);
+
+							query = new ExpressionBuilder(query, true, optimizationContext, parametersContext, ctx.dataContext, exposed, ctx.parameterValues)
+								.Build<T>(ref expressions);
+						}
+
+						if (query.ErrorExpression != null)
+							throw query.ErrorExpression.CreateException();
+					}
+
+					query.CompiledExpressions = expressions;
+
 					return query;
-				});
-
+				})!;
 
 			return result;
 		}
 
 		public IQueryable<T> Create(object[] parameters, object[] preambles)
 		{
-			var db = (IDataContext)parameters[0];
-			return new Table<T>(db, _expression) { Info = GetInfo(db), Parameters = parameters };
+			var db    = (IDataContext)parameters[0];
+			var query = GetInfo(db, parameters);
+
+			return new Table<T>(db, _expression) { Info = query, Parameters = parameters };
 		}
 
 		public T Execute(object[] parameters, object[] preambles)
 		{
 			var db    = (IDataContext)parameters[0];
-			var query = GetInfo(db);
+			var query = GetInfo(db, parameters);
 
-			return (T)query.GetElement(db, _expression, parameters, preambles)!;
+			return (T)query.GetElement(db, query.CompiledExpressions!, parameters, preambles)!;
 		}
 
 		public async Task<T> ExecuteAsync(object[] parameters, object[] preambles)
 		{
 			var db    = (IDataContext)parameters[0];
-			var query = GetInfo(db);
+			var query = GetInfo(db, parameters);
 
-			return (T)(await query.GetElementAsync(db, _expression, parameters, preambles, default).ConfigureAwait(Common.Configuration.ContinueOnCapturedContext))!;
+			return (T)(await query.GetElementAsync(db, query.CompiledExpressions!, parameters, preambles, default).ConfigureAwait(false))!;
 		}
 	}
 }

@@ -11,15 +11,11 @@ namespace Tests.UserTests
 	{
 		[Sql.Extension("LIST({expr}, {splitter})", TokenName = "function", PreferServerSide = true)]
 		public static string FbList<T>(this Sql.ISqlExtension? ext, [ExprParameter] T expr, [ExprParameter] string splitter)
-		{
-			throw new LinqException($"'{nameof(FbList)}' is server-side method.");
-		}
+			=> throw new ServerSideOnlyException(nameof(FbList));
 
 		[Sql.Extension("LIST({expr})", TokenName = "function",  PreferServerSide = true)]
 		public static string FbList<T>(this Sql.ISqlExtension? ext, [ExprParameter] T expr)
-		{
-			throw new LinqException($"'{nameof(FbList)}' is server-side method.");
-		}
+			=> throw new ServerSideOnlyException(nameof(FbList));
 	}
 	
 	[TestFixture]
@@ -51,7 +47,7 @@ namespace Tests.UserTests
 
 
 		[Test]
-		public void DynamicColumn([IncludeDataSources(ProviderName.Firebird)] string context)
+		public void DynamicColumn([IncludeDataSources(TestProvName.AllFirebird)] string context)
 		{
 			using (var db = GetDataContext(context))
 			using (var table = db.CreateLocalTable<Person2562>())

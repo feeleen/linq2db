@@ -1,77 +1,86 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Data;
+using System.Data.Common;
 using System.Linq.Expressions;
 
 namespace LinqToDB.Expressions
 {
 	using Common;
-	using LinqToDB.Extensions;
-	using LinqToDB.Linq;
-	using LinqToDB.Reflection;
+	using Common.Internal;
+	using Extensions;
+	using Interceptors;
+	using Linq;
 	using Mapping;
+	using Reflection;
+	using Tools;
+	using Infrastructure;
 
-	class ConvertFromDataReaderExpression : Expression
+	sealed class ConvertFromDataReaderExpression : Expression
 	{
-		public ConvertFromDataReaderExpression(Type type, int idx, IValueConverter? converter,
-			Expression dataReaderParam)
+		public ConvertFromDataReaderExpression(Type type, int idx, IValueConverter? converter, Expression dataReaderParam, bool? canBeNull)
 		{
 			_type            = type;
 			Converter        = converter;
+			CanBeNull        = canBeNull;
 			_idx             = idx;
 			_dataReaderParam = dataReaderParam;
 		}
 
 		// slow mode constructor
-		public ConvertFromDataReaderExpression(Type type, int idx, IValueConverter? converter,
-			Expression dataReaderParam, IDataContext dataContext)
-			: this(type, idx, converter, dataReaderParam)
+		public ConvertFromDataReaderExpression(Type type, int idx, IValueConverter? converter, Expression dataReaderParam, IDataContext dataContext)
+			: this(type, idx, converter, dataReaderParam, (bool?)null)
 		{
 			_slowModeDataContext = dataContext;
 		}
 
-		readonly int              _idx;
-		readonly Expression       _dataReaderParam;
-		readonly Type             _type;
-		readonly IDataContext?    _slowModeDataContext;
-		
-		public IValueConverter?   Converter { get; }
+		readonly int            _idx;
+		readonly Expression     _dataReaderParam;
+		readonly Type           _type;
+		readonly IDataContext?  _slowModeDataContext;
 
-		public override Type           Type        => _type;
-		public override ExpressionType NodeType    => ExpressionType.Extension;
-		public override bool           CanReduce   => true;
-		public          int            Index       => _idx;
+		public IValueConverter? Converter { get; }
+		public bool?            CanBeNull { get; }
+
+		public override Type           Type      => _type;
+		public override ExpressionType NodeType  => ExpressionType.Extension;
+		public override bool           CanReduce => true;
+		public          int            Index     => _idx;
 
 		public override Expression Reduce()
 		{
-			return Reduce(_slowModeDataContext!, true);
+			return Reduce(_slowModeDataContext, true);
 		}
 
-		public Expression Reduce(IDataContext dataContext, bool slowMode)
+		public Expression Reduce(IDataContext? dataContext, bool slowMode)
 		{
+			if (dataContext == null)
+				return _dataReaderParam;
+
 			var columnReader = new ColumnReader(dataContext, dataContext.MappingSchema, _type, _idx, Converter, slowMode);
 
 			if (slowMode && Configuration.OptimizeForSequentialAccess)
-				return Convert(Call(Constant(columnReader), Methods.LinqToDB.ColumnReader.GetValueSequential, _dataReaderParam, Call(_dataReaderParam, Methods.ADONet.IsDBNull, Constant(_idx)), Call(Methods.LinqToDB.ColumnReader.RawValuePlaceholder)), _type);
+				return Convert(Call(Constant(columnReader), Methods.LinqToDB.ColumnReader.GetValueSequential, _dataReaderParam, Call(_dataReaderParam, Methods.ADONet.IsDBNull, ExpressionInstances.Int32Array(_idx)), Call(Methods.LinqToDB.ColumnReader.RawValuePlaceholder)), _type);
 			else
 				return Convert(Call(Constant(columnReader), Methods.LinqToDB.ColumnReader.GetValue, _dataReaderParam), _type);
 		}
 
-		public Expression Reduce(IDataContext dataContext, IDataReader dataReader)
+		public Expression Reduce(IDataContext dataContext, DbDataReader dataReader)
 		{
-			dataReader = DataReaderWrapCache.TryUnwrapDataReader(dataContext.MappingSchema, dataReader);
+			if (dataContext is IInterceptable<IUnwrapDataObjectInterceptor> { Interceptor: { } interceptor })
+				using (ActivityService.Start(ActivityID.UnwrapDataObjectInterceptorUnwrapDataReader))
+					dataReader = interceptor.UnwrapDataReader(dataContext, dataReader);
 
-			return GetColumnReader(dataContext, dataContext.MappingSchema, dataReader, _type, Converter, _idx, _dataReaderParam, forceNullCheck: false);
+			return GetColumnReader(dataContext, dataContext.MappingSchema, dataReader, _type, Converter, _idx, _dataReaderParam, forceNullCheck: CanBeNull == true);
 		}
 
-		public Expression Reduce(IDataContext dataContext, IDataReader dataReader, Expression dataReaderParam)
+		public Expression Reduce(IDataContext dataContext, DbDataReader dataReader, Expression dataReaderParam)
 		{
-			return GetColumnReader(dataContext, dataContext.MappingSchema, dataReader, _type, Converter, _idx, dataReaderParam, forceNullCheck: false);
+			return GetColumnReader(dataContext, dataContext.MappingSchema, dataReader, _type, Converter, _idx, dataReaderParam, forceNullCheck: CanBeNull == true);
 		}
 
 		static Expression ConvertExpressionToType(Expression current, Type toType, MappingSchema mappingSchema)
 		{
-			var toConvertExpression = mappingSchema.GetConvertExpression(current.Type, toType, false, current.Type != toType);
+			var toConvertExpression = mappingSchema.GetConvertExpression(current.Type, toType, false, current.Type != toType, ConversionType.FromDatabase);
 
 			if (toConvertExpression == null)
 				return current;
@@ -82,19 +91,24 @@ namespace LinqToDB.Expressions
 		}
 
 		static Expression GetColumnReader(
-			IDataContext dataContext, MappingSchema mappingSchema, IDataReader dataReader, Type type, IValueConverter? converter, int idx, Expression dataReaderExpr, bool forceNullCheck)
+			IDataContext dataContext, MappingSchema mappingSchema, DbDataReader dataReader, Type type, IValueConverter? converter, int idx, Expression dataReaderExpr, bool forceNullCheck)
 		{
 			var toType = type.ToNullableUnderlying();
 
 			Expression ex;
+			Type? mapType = null;
+
+			if (toType.IsEnum)
+				mapType = ConvertBuilder.GetDefaultMappingFromEnumType(mappingSchema, toType);
+
 			if (converter != null)
 			{
 				var expectedProvType = converter.FromProviderExpression.Parameters[0].Type;
 				ex = dataContext.GetReaderExpression(dataReader, idx, dataReaderExpr, expectedProvType);
 			}
 			else
-			{ 
-				ex = dataContext.GetReaderExpression(dataReader, idx, dataReaderExpr, toType);
+			{
+				ex = dataContext.GetReaderExpression(dataReader, idx, dataReaderExpr, mapType?.ToNullableUnderlying() ?? toType);
 			}
 
 			if (ex.NodeType == ExpressionType.Lambda)
@@ -103,8 +117,8 @@ namespace LinqToDB.Expressions
 
 				switch (l.Parameters.Count)
 				{
-					case 1 : ex = l.GetBody(dataReaderExpr);                break;
-					case 2 : ex = l.GetBody(dataReaderExpr, Constant(idx)); break;
+					case 1 : ex = l.GetBody(dataReaderExpr);                                 break;
+					case 2 : ex = l.GetBody(dataReaderExpr, ExpressionInstances.Int32(idx)); break;
 				}
 			}
 
@@ -113,18 +127,16 @@ namespace LinqToDB.Expressions
 				// we have to prepare read expression to conversion
 				//
 				var expectedType = converter.FromProviderExpression.Parameters[0].Type;
-				
+
+				if (expectedType != ex.Type)
+					ex = ConvertExpressionToType(ex, expectedType, mappingSchema);
+
 				if (converter.HandlesNulls)
 				{
 					ex = Condition(
-						Call(dataReaderExpr, Methods.ADONet.IsDBNull, Constant(idx)),
+						Call(dataReaderExpr, Methods.ADONet.IsDBNull, ExpressionInstances.Int32Array(idx)),
 						Constant(mappingSchema.GetDefaultValue(expectedType), expectedType),
 						ex);
-				}
-
-				if (expectedType != ex.Type)
-				{
-					ex = ConvertExpressionToType(ex, expectedType, mappingSchema);
 				}
 
 				ex = InternalExtensions.ApplyLambdaToExpression(converter.FromProviderExpression, ex);
@@ -132,17 +144,15 @@ namespace LinqToDB.Expressions
 				{
 					ex = Convert(ex, toType);
 				}
-					
 			}
 			else if (toType.IsEnum)
 			{
-				var mapType = ConvertBuilder.GetDefaultMappingFromEnumType(mappingSchema, toType)!;
-
 				if (mapType != ex.Type)
 				{
 					// Use only defined convert
-					var econv = mappingSchema.GetConvertExpression(ex.Type, type,    false, false) ??
-					            mappingSchema.GetConvertExpression(ex.Type, mapType, false)!;
+					var econv =
+						mappingSchema.GetConvertExpression(ex.Type, type,     false, false, ConversionType.FromDatabase) ??
+						mappingSchema.GetConvertExpression(ex.Type, mapType!, false, true,  ConversionType.ToDatabase)!;
 
 					ex = InternalExtensions.ApplyLambdaToExpression(econv, ex);
 				}
@@ -161,11 +171,10 @@ namespace LinqToDB.Expressions
 			// Microsoft.Data.SQLite
 			// Oracle (group by columns)
 			// MySql.Data and some other providers enforce null check in IsDBNullAllowed implementation
-			if (converter?.HandlesNulls != true &&
-			    (forceNullCheck || (dataContext.IsDBNullAllowed(dataReader, idx) ?? true)))
+			if (converter?.HandlesNulls != true && (forceNullCheck || (dataContext.IsDBNullAllowed(dataReader, idx) ?? true)))
 			{
 				ex = Condition(
-					Call(dataReaderExpr, Methods.ADONet.IsDBNull, Constant(idx)),
+					Call(dataReaderExpr, Methods.ADONet.IsDBNull, ExpressionInstances.Int32Array(idx)),
 					Constant(mappingSchema.GetDefaultValue(type), type),
 					ex);
 			}
@@ -173,7 +182,7 @@ namespace LinqToDB.Expressions
 			return ex;
 		}
 
-		internal class ColumnReader
+		internal sealed class ColumnReader
 		{
 			public ColumnReader(IDataContext dataContext, MappingSchema mappingSchema, Type columnType, int columnIndex, IValueConverter? converter, bool slowMode)
 			{
@@ -201,18 +210,18 @@ namespace LinqToDB.Expressions
 			 * from multiple threads, so it cannot have state. For same reason it doesn't make much sense to reduce number
 			 * of ColumnReader instances in mapper expression to one for single column. It could be done later if we will
 			 * see benefits of it, but frankly speaking it doesn't make sense to optimize slow-mode reader.
-			 * 
+			 *
 			 * Limitation is the same as for non-slow mapper:
 			 * column mapping expressions should use same reader method to get column value. This limitation enforced
 			 * in GetRawValueSequential method.
 			 */
-			public object? GetValueSequential(IDataReader dataReader, bool isNull, object? rawValue)
+			public object? GetValueSequential(DbDataReader dataReader, bool isNull, object? rawValue)
 			{
 				var fromType = dataReader.GetFieldType(ColumnIndex);
 
 				if (!_slowColumnConverters.TryGetValue(fromType, out var func))
 				{
-					var dataReaderParameter = Parameter(typeof(IDataReader));
+					var dataReaderParameter = Parameter(typeof(DbDataReader));
 					var isNullParameter     = Parameter(typeof(bool));
 					var rawValueParameter   = Parameter(typeof(object));
 					var dataReaderExpr      = Convert(dataReaderParameter, dataReader.GetType());
@@ -248,13 +257,13 @@ namespace LinqToDB.Expressions
 				}
 			}
 
-			public object GetRawValueSequential(IDataReader dataReader, Type[] forTypes)
+			public object GetRawValueSequential(DbDataReader dataReader, Type[] forTypes)
 			{
 				var fromType = dataReader.GetFieldType(ColumnIndex);
 
 				if (!_slowRawReaders.TryGetValue(fromType, out var func))
 				{
-					var dataReaderParameter = Parameter(typeof(IDataReader));
+					var dataReaderParameter = Parameter(typeof(DbDataReader));
 					var dataReaderExpr      = Convert(dataReaderParameter, dataReader.GetType());
 
 					MethodCallExpression rawExpr = null!;
@@ -271,7 +280,7 @@ namespace LinqToDB.Expressions
 
 					}
 
-					var lex  = Lambda<Func<IDataReader, object>>(
+					var lex  = Lambda<Func<DbDataReader, object>>(
 						rawExpr.Type == typeof(object) ? rawExpr : Convert(rawExpr, typeof(object)),
 						dataReaderParameter);
 
@@ -281,18 +290,18 @@ namespace LinqToDB.Expressions
 				return func(dataReader);
 			}
 
-			public object? GetValue(IDataReader dataReader)
+			public object? GetValue(DbDataReader dataReader)
 			{
 				var fromType = dataReader.GetFieldType(ColumnIndex);
 
 				if (!_columnConverters.TryGetValue(fromType, out var func))
 				{
-					var parameter      = Parameter(typeof(IDataReader));
+					var parameter      = Parameter(typeof(DbDataReader));
 					var dataReaderExpr = Convert(parameter, dataReader.GetType());
 
 					var expr = GetColumnReader(_dataContext, _mappingSchema, dataReader, ColumnType, _converter, ColumnIndex, dataReaderExpr, _slowMode);
 
-					var lex  = Lambda<Func<IDataReader, object>>(
+					var lex  = Lambda<Func<DbDataReader, object>>(
 						expr.Type == typeof(object) ? expr : Convert(expr, typeof(object)),
 						parameter);
 
@@ -319,9 +328,9 @@ namespace LinqToDB.Expressions
 				}
 			}
 
-			readonly ConcurrentDictionary<Type, Func<IDataReader, object?>>   _columnConverters     = new ();
+			readonly ConcurrentDictionary<Type, Func<DbDataReader, object?>>  _columnConverters     = new ();
 			readonly ConcurrentDictionary<Type, Func<bool, object?, object?>> _slowColumnConverters = new ();
-			readonly ConcurrentDictionary<Type, Func<IDataReader, object>>    _slowRawReaders       = new ();
+			readonly ConcurrentDictionary<Type, Func<DbDataReader, object>>   _slowRawReaders       = new ();
 
 			readonly IDataContext     _dataContext;
 			readonly MappingSchema    _mappingSchema;
@@ -334,15 +343,18 @@ namespace LinqToDB.Expressions
 
 		public override string ToString()
 		{
-			return $"ConvertFromDataReaderExpression<{_type.Name}>({_idx})";
+			var result = $"ConvertFromDataReaderExpression[{_type.ShortDisplayName()}]({_idx})";
+			if (CanBeNull == true || Type.IsNullable())
+				result += "?";
+			return result;
 		}
 
 		public ConvertFromDataReaderExpression MakeNullable()
 		{
-			if (Type.IsValueType && !Type.IsNullable())
+			if (!Type.IsNullableType())
 			{
-				var type = typeof(Nullable<>).MakeGenericType(Type);
-				return new ConvertFromDataReaderExpression(type, _idx, Converter, _dataReaderParam);
+				var type = Type.AsNullable();
+				return new ConvertFromDataReaderExpression(type, _idx, Converter, _dataReaderParam, true);
 			}
 
 			return this;
@@ -350,13 +362,20 @@ namespace LinqToDB.Expressions
 
 		public ConvertFromDataReaderExpression MakeNotNullable()
 		{
-			if (typeof(Nullable<>).IsSameOrParentOf(Type))
+			if (Type.IsNullable())
 			{
 				var type = Type.GetGenericArguments()[0];
-				return new ConvertFromDataReaderExpression(type, _idx, Converter, _dataReaderParam);
+				return new ConvertFromDataReaderExpression(type, _idx, Converter, _dataReaderParam, (bool?)null);
 			}
 
 			return this;
+		}
+
+		protected override Expression Accept(ExpressionVisitor visitor)
+		{
+			if (visitor is ExpressionVisitorBase baseVisitor)
+				return baseVisitor.VisitConvertFromDataReaderExpression(this);
+			return base.Accept(visitor);
 		}
 
 	}

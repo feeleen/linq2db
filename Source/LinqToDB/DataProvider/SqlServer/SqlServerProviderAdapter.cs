@@ -2,22 +2,29 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using LinqToDB.Expressions;
 
 namespace LinqToDB.DataProvider.SqlServer
 {
+	using Expressions;
+	using LinqToDB.Common;
+	using LinqToDB.Mapping;
+	using LinqToDB.Reflection;
+	using LinqToDB.SqlQuery;
+
 	// old System.Data.SqlClient versions for .net core (< 4.5.0)
 	// miss UDT and BulkCopy support
 	// We don't take it into account, as there is no reason to use such old provider versions
 	public class SqlServerProviderAdapter : IDynamicProviderAdapter
 	{
-		private static readonly object _sysSyncRoot = new object();
-		private static readonly object _msSyncRoot  = new object();
+		private static readonly object _sysSyncRoot = new ();
+		private static readonly object _msSyncRoot  = new ();
 
 		private static SqlServerProviderAdapter? _systemAdapter;
 		private static SqlServerProviderAdapter? _microsoftAdapter;
@@ -31,32 +38,41 @@ namespace LinqToDB.DataProvider.SqlServer
 		public const string MicrosoftProviderFactoryName = "Microsoft.Data.SqlClient";
 
 		private SqlServerProviderAdapter(
+			SqlServerProvider provider,
+
 			Type connectionType,
 			Type dataReaderType,
 			Type parameterType,
 			Type commandType,
 			Type transactionType,
+			Func<string, DbConnection> connectionFactory,
+
 			Type sqlDataRecordType,
 			Type sqlExceptionType,
 
-			Action<IDbDataParameter, SqlDbType> dbTypeSetter,
-			Func  <IDbDataParameter, SqlDbType> dbTypeGetter,
-			Action<IDbDataParameter, string> udtTypeNameSetter,
-			Func  <IDbDataParameter, string> udtTypeNameGetter,
-			Action<IDbDataParameter, string> typeNameSetter,
-			Func  <IDbDataParameter, string> typeNameGetter,
+			Action<DbParameter, SqlDbType> dbTypeSetter,
+			Func  <DbParameter, SqlDbType> dbTypeGetter,
+			Action<DbParameter, string> udtTypeNameSetter,
+			Func  <DbParameter, string> udtTypeNameGetter,
+			Action<DbParameter, string> typeNameSetter,
+			Func  <DbParameter, string> typeNameGetter,
 
 			Func<string, SqlConnectionStringBuilder> createConnectionStringBuilder,
-			Func<string, SqlConnection>              createConnection,
 
-			Func<IDbConnection, SqlBulkCopyOptions, IDbTransaction?, SqlBulkCopy> createBulkCopy,
-			Func<int, string, SqlBulkCopyColumnMapping>                           createBulkCopyColumnMapping)
+			Func<DbConnection, SqlBulkCopyOptions, DbTransaction?, SqlBulkCopy> createBulkCopy,
+			Func<int, string, SqlBulkCopyColumnMapping>                         createBulkCopyColumnMapping,
+			
+			MappingSchema? mappingSchema,
+			Type? sqlJsonType)
 		{
-			ConnectionType  = connectionType;
-			DataReaderType  = dataReaderType;
-			ParameterType   = parameterType;
-			CommandType     = commandType;
-			TransactionType = transactionType;
+			Provider = provider;
+
+			ConnectionType = connectionType;
+			DataReaderType     = dataReaderType;
+			ParameterType      = parameterType;
+			CommandType        = commandType;
+			TransactionType    = transactionType;
+			_connectionFactory = connectionFactory;
 
 			SqlDataRecordType = sqlDataRecordType;
 			SqlExceptionType  = sqlExceptionType;
@@ -69,17 +85,28 @@ namespace LinqToDB.DataProvider.SqlServer
 			GetTypeName    = typeNameGetter;
 
 			_createConnectionStringBuilder = createConnectionStringBuilder;
-			_createConnection              = createConnection;
 
 			_createBulkCopy              = createBulkCopy;
 			_createBulkCopyColumnMapping = createBulkCopyColumnMapping;
+
+			MappingSchema = mappingSchema;
+			SqlJsonType   = sqlJsonType;
 		}
+
+		public SqlServerProvider Provider { get; }
+
+		#region IDynamicProviderAdapter
 
 		public Type ConnectionType  { get; }
 		public Type DataReaderType  { get; }
 		public Type ParameterType   { get; }
 		public Type CommandType     { get; }
 		public Type TransactionType { get; }
+
+		readonly Func<string, DbConnection> _connectionFactory;
+		public DbConnection CreateConnection(string connectionString) => _connectionFactory(connectionString);
+
+#endregion
 
 		public Type SqlDataRecordType { get; }
 		public Type SqlExceptionType  { get; }
@@ -88,52 +115,61 @@ namespace LinqToDB.DataProvider.SqlServer
 		public string GetDateTimeOffsetReaderMethod => "GetDateTimeOffset";
 		public string GetTimeSpanReaderMethod       => "GetTimeSpan";
 
+		public MappingSchema? MappingSchema { get; }
+
+		public Type?   SqlJsonType { get; }
+		public string? GetSqlJsonReaderMethod => SqlJsonType == null ? null : "GetSqlJson";
+		public SqlDbType JsonDbType => SqlJsonType == null ? SqlDbType.NVarChar : (SqlDbType)35;
+
 		private readonly Func<string, SqlConnectionStringBuilder> _createConnectionStringBuilder;
 		public SqlConnectionStringBuilder CreateConnectionStringBuilder(string connectionString) => _createConnectionStringBuilder(connectionString);
 
-		private readonly Func<IDbConnection, SqlBulkCopyOptions, IDbTransaction?, SqlBulkCopy> _createBulkCopy;
-		public SqlBulkCopy CreateBulkCopy(IDbConnection connection, SqlBulkCopyOptions options, IDbTransaction? transaction)
+		private readonly Func<DbConnection, SqlBulkCopyOptions, DbTransaction?, SqlBulkCopy> _createBulkCopy;
+		internal SqlBulkCopy CreateBulkCopy(DbConnection connection, SqlBulkCopyOptions options, DbTransaction? transaction)
 			=> _createBulkCopy(connection, options, transaction);
 
 		private readonly Func<int, string, SqlBulkCopyColumnMapping> _createBulkCopyColumnMapping;
 		public SqlBulkCopyColumnMapping CreateBulkCopyColumnMapping(int source, string destination)
 			=> _createBulkCopyColumnMapping(source, destination);
 
-		public Action<IDbDataParameter, SqlDbType> SetDbType { get; }
-		public Func  <IDbDataParameter, SqlDbType> GetDbType { get; }
+		public Action<DbParameter, SqlDbType> SetDbType { get; }
+		public Func  <DbParameter, SqlDbType> GetDbType { get; }
 
-		public Action<IDbDataParameter, string> SetUdtTypeName { get; }
-		public Func  <IDbDataParameter, string> GetUdtTypeName { get; }
+		public Action<DbParameter, string> SetUdtTypeName { get; }
+		public Func  <DbParameter, string> GetUdtTypeName { get; }
 
-		public Action<IDbDataParameter, string> SetTypeName { get; }
-		public Func  <IDbDataParameter, string> GetTypeName { get; }
-
-		private readonly Func<string, SqlConnection> _createConnection;
-		public SqlConnection CreateConnection(string connectionString) => _createConnection(connectionString);
+		public Action<DbParameter, string> SetTypeName { get; }
+		public Func  <DbParameter, string> GetTypeName { get; }
 
 		public static SqlServerProviderAdapter GetInstance(SqlServerProvider provider)
 		{
 			if (provider == SqlServerProvider.SystemDataSqlClient)
 			{
 				if (_systemAdapter == null)
+				{
 					lock (_sysSyncRoot)
-						if (_systemAdapter == null)
-							_systemAdapter = CreateAdapter(SystemAssemblyName, SystemClientNamespace, SystemProviderFactoryName);
+#pragma warning disable CA1508 // Avoid dead conditional code
+						_systemAdapter ??= CreateAdapter(provider, SystemAssemblyName, SystemClientNamespace, SystemProviderFactoryName);
+#pragma warning restore CA1508 // Avoid dead conditional code
+				}
 
 				return _systemAdapter;
 			}
 			else
 			{
 				if (_microsoftAdapter == null)
+				{
 					lock (_msSyncRoot)
-						if (_microsoftAdapter == null)
-							_microsoftAdapter = CreateAdapter(MicrosoftAssemblyName, MicrosoftClientNamespace, MicrosoftProviderFactoryName);
+#pragma warning disable CA1508 // Avoid dead conditional code
+						_microsoftAdapter ??= CreateAdapter(provider, MicrosoftAssemblyName, MicrosoftClientNamespace, MicrosoftProviderFactoryName);
+#pragma warning restore CA1508 // Avoid dead conditional code
+				}
 
 				return _microsoftAdapter;
 			}
 		}
 
-		private static SqlServerProviderAdapter CreateAdapter(string assemblyName, string clientNamespace, string factoryName)
+		private static SqlServerProviderAdapter CreateAdapter(SqlServerProvider provider, string assemblyName, string clientNamespace, string factoryName)
 		{
 			var isSystem = assemblyName == SystemAssemblyName;
 
@@ -146,7 +182,7 @@ namespace LinqToDB.DataProvider.SqlServer
 			else
 #endif
 			{
-				assembly = Common.Tools.TryLoadAssembly(assemblyName, factoryName);
+				assembly = Tools.TryLoadAssembly(assemblyName, factoryName);
 			}
 
 			if (assembly == null)
@@ -202,36 +238,124 @@ namespace LinqToDB.DataProvider.SqlServer
 
 			SqlServerTransientExceptionDetector.RegisterExceptionType(sqlExceptionType, exceptionErrorsGettter);
 
+			var connectionFactory = typeMapper.BuildTypedFactory<string, SqlConnection, DbConnection>((string connectionString) => new SqlConnection(connectionString));
+
+			MappingSchema? mappingSchema = null;
+			Type?          sqlJsonType   = null;
+
+			if (provider == SqlServerProvider.MicrosoftDataSqlClient)
+			{
+				sqlJsonType = LoadType("SqlJson", DataType.Json, null, true, true);
+				if (sqlJsonType != null)
+				{
+					var sb = Expression.Parameter(typeof(StringBuilder));
+					var dt = Expression.Parameter(typeof(SqlDataType));
+					var op = Expression.Parameter(typeof(DataOptions));
+					var v = Expression.Parameter(typeof(object));
+
+					var converter = Expression.Lambda<Action<StringBuilder,SqlDataType,DataOptions,object>>(
+						Expression.Call(
+							null,
+							Methods.SqlServer.ConvertStringToSql,
+							sb,
+							ExpressionHelper.Property(ExpressionHelper.Property(dt, nameof(SqlDataType.Type)), nameof(DbDataType.DataType)),
+							ExpressionHelper.Property(Expression.Convert(v, sqlJsonType), "Value")
+							),
+						sb, dt, op, v)
+						.CompileExpression();
+
+					mappingSchema!.SetValueToSqlConverter(sqlJsonType, converter);
+
+					// JsonDocument inlining
+					var jsonDocumentType = Type.GetType("System.Text.Json.JsonDocument, System.Text.Json");
+
+					if (jsonDocumentType != null)
+					{
+						mappingSchema.SetScalarType(jsonDocumentType);
+						mappingSchema.SetDataType(jsonDocumentType, new SqlDataType(new DbDataType(jsonDocumentType, DataType.Json)));
+
+						var jsdocConverter = Expression.Lambda<Action<StringBuilder,SqlDataType,DataOptions,object>>(
+						Expression.Call(
+							null,
+							Methods.SqlServer.ConvertStringToSql,
+							sb,
+							ExpressionHelper.Property(ExpressionHelper.Property(dt, nameof(SqlDataType.Type)), nameof(DbDataType.DataType)),
+							Expression.Call(ExpressionHelper.Property(Expression.Convert(v, jsonDocumentType), "RootElement"), "GetRawText", null)
+							),
+						sb, dt, op, v)
+						.CompileExpression();
+
+						mappingSchema!.SetValueToSqlConverter(jsonDocumentType, jsdocConverter);
+					}
+
+				}
+			}
+
 			return new SqlServerProviderAdapter(
+				provider,
+
 				connectionType,
 				dataReaderType,
 				parameterType,
 				commandType,
 				transactionType,
+				connectionFactory,
+
 				sqlDataRecordType,
 				sqlExceptionType,
 
-				dbTypeBuilder.BuildSetter<IDbDataParameter>(),
-				dbTypeBuilder.BuildGetter<IDbDataParameter>(),
-				udtTypeNameBuilder.BuildSetter<IDbDataParameter>(),
-				udtTypeNameBuilder.BuildGetter<IDbDataParameter>(),
-				typeNameBuilder.BuildSetter<IDbDataParameter>(),
-				typeNameBuilder.BuildGetter<IDbDataParameter>(),
+				dbTypeBuilder.BuildSetter<DbParameter>(),
+				dbTypeBuilder.BuildGetter<DbParameter>(),
+				udtTypeNameBuilder.BuildSetter<DbParameter>(),
+				udtTypeNameBuilder.BuildGetter<DbParameter>(),
+				typeNameBuilder.BuildSetter<DbParameter>(),
+				typeNameBuilder.BuildGetter<DbParameter>(),
 
 				typeMapper.BuildWrappedFactory((string connectionString) => new SqlConnectionStringBuilder(connectionString)),
-				typeMapper.BuildWrappedFactory((string connectionString) => new SqlConnection(connectionString)),
 
-				typeMapper.BuildWrappedFactory((IDbConnection connection, SqlBulkCopyOptions options, IDbTransaction? transaction) => new SqlBulkCopy((SqlConnection)connection, options, (SqlTransaction?)transaction)),
-				typeMapper.BuildWrappedFactory((int source, string destination) => new SqlBulkCopyColumnMapping(source, destination)));
+				typeMapper.BuildWrappedFactory((DbConnection connection, SqlBulkCopyOptions options, DbTransaction? transaction) => new SqlBulkCopy((SqlConnection)(object)connection, options, (SqlTransaction?)(object?)transaction)),
+				typeMapper.BuildWrappedFactory((int source, string destination) => new SqlBulkCopyColumnMapping(source, destination)),
+
+				mappingSchema,
+				sqlJsonType);
 
 			IEnumerable<int> exceptionErrorsGettter(Exception ex) => typeMapper.Wrap<SqlException>(ex).Errors.Errors.Select(err => err.Number);
+
+			Type? LoadType(string typeName, DataType dataType, string? dbType, bool optional = false, bool register = true)
+			{
+				var type = assembly!.GetType($"Microsoft.Data.SqlTypes.{typeName}", !optional);
+
+				if (type == null)
+					return null;
+
+				if (register)
+				{
+					var getNullValue = Expression.Lambda<Func<object>>(Expression.Convert(ExpressionHelper.Property(type, "Null"), typeof(object))).CompileExpression();
+
+					mappingSchema ??= new SqlServerAdapterMappingSchema(provider);
+
+					mappingSchema.SetScalarType(type);
+					mappingSchema.SetDefaultValue(type, getNullValue());
+					mappingSchema.SetCanBeNull(type, true);
+					mappingSchema.SetDataType(type, new SqlDataType(new DbDataType(type, dataType, dbType)));
+				}
+
+				return type;
+			}
+		}
+
+		sealed class SqlServerAdapterMappingSchema : LockedMappingSchema
+		{
+			public SqlServerAdapterMappingSchema(SqlServerProvider provider) : base($"SqlServerAdapter.{provider}")
+			{
+			}
 		}
 
 		#region Wrappers
 
 		#region SqlException
 		[Wrapper]
-		internal class SqlException : TypeWrapper
+		internal sealed class SqlException : TypeWrapper
 		{
 			private static LambdaExpression[] Wrappers { get; }
 				= new LambdaExpression[]
@@ -248,7 +372,7 @@ namespace LinqToDB.DataProvider.SqlServer
 		}
 
 		[Wrapper]
-		internal class SqlErrorCollection : TypeWrapper
+		internal sealed class SqlErrorCollection : TypeWrapper
 		{
 			private static LambdaExpression[] Wrappers { get; }
 				= new LambdaExpression[]
@@ -279,7 +403,7 @@ namespace LinqToDB.DataProvider.SqlServer
 		}
 
 		[Wrapper]
-		internal class SqlError : TypeWrapper
+		internal sealed class SqlError : TypeWrapper
 		{
 			private static LambdaExpression[] Wrappers { get; }
 				= new LambdaExpression[]
@@ -297,7 +421,7 @@ namespace LinqToDB.DataProvider.SqlServer
 		#endregion
 
 		[Wrapper]
-		private class SqlParameter
+		private sealed class SqlParameter
 		{
 			// string return type is correct, TypeName and UdtTypeName return empty string instead of null
 			public string    UdtTypeName { get; set; } = null!;
@@ -331,31 +455,9 @@ namespace LinqToDB.DataProvider.SqlServer
 		}
 
 		[Wrapper]
-		public class SqlConnection : TypeWrapper, IDisposable
+		internal class SqlConnection
 		{
-			private static LambdaExpression[] Wrappers { get; }
-				= new LambdaExpression[]
-			{
-				// [0]: get ServerVersion
-				(Expression<Func<SqlConnection, string>>    )((SqlConnection this_) => this_.ServerVersion),
-				// [1]: CreateCommand
-				(Expression<Func<SqlConnection, IDbCommand>>)((SqlConnection this_) => this_.CreateCommand()),
-				// [2]: Open
-				(Expression<Action<SqlConnection>>          )((SqlConnection this_) => this_.Open()),
-				// [3]: Dispose
-				(Expression<Action<SqlConnection>>          )((SqlConnection this_) => this_.Dispose()),
-			};
-
-			public SqlConnection(object instance, Delegate[] wrappers) : base(instance, wrappers)
-			{
-			}
-
 			public SqlConnection(string connectionString) => throw new NotImplementedException();
-
-			public string     ServerVersion   => ((Func<SqlConnection, string>)CompiledWrappers[0])(this);
-			public IDbCommand CreateCommand() => ((Func<SqlConnection, IDbCommand>)CompiledWrappers[1])(this);
-			public void       Open()          => ((Action<SqlConnection>)CompiledWrappers[2])(this);
-			public void       Dispose()       => ((Action<SqlConnection>)CompiledWrappers[3])(this);
 		}
 
 		[Wrapper]
@@ -365,7 +467,7 @@ namespace LinqToDB.DataProvider.SqlServer
 
 		#region BulkCopy
 		[Wrapper]
-		public class SqlBulkCopy : TypeWrapper, IDisposable
+		internal class SqlBulkCopy : TypeWrapper, IDisposable
 		{
 			private static LambdaExpression[] Wrappers { get; }
 				= new LambdaExpression[]
@@ -393,7 +495,7 @@ namespace LinqToDB.DataProvider.SqlServer
 				// [10]: set DestinationTableName
 				PropertySetter((SqlBulkCopy this_) => this_.DestinationTableName),
 				// [11]: WriteToServerAsync
-				(Expression<Func<SqlBulkCopy, IDataReader, CancellationToken, Task>>)((SqlBulkCopy this_, IDataReader reader, CancellationToken token) 
+				(Expression<Func<SqlBulkCopy, IDataReader, CancellationToken, Task>>)((SqlBulkCopy this_, IDataReader reader, CancellationToken token)
 					=> this_.WriteToServerAsync(reader, token)),
 			};
 
@@ -410,9 +512,11 @@ namespace LinqToDB.DataProvider.SqlServer
 			public SqlBulkCopy(SqlConnection connection, SqlBulkCopyOptions options, SqlTransaction? transaction) => throw new NotImplementedException();
 
 			void IDisposable.Dispose()                        => ((Action<SqlBulkCopy>)CompiledWrappers[0])(this);
+#pragma warning disable RS0030 // API mapping must preserve type
 			public void WriteToServer(IDataReader dataReader) => ((Action<SqlBulkCopy, IDataReader>)CompiledWrappers[1])(this, dataReader);
 			public Task WriteToServerAsync(IDataReader dataReader, CancellationToken cancellationToken)
 				=> ((Func<SqlBulkCopy, IDataReader, CancellationToken, Task>)CompiledWrappers[11])(this, dataReader, cancellationToken);
+#pragma warning restore RS0030 //  API mapping must preserve type
 
 			public int NotifyAfter
 			{
@@ -519,6 +623,7 @@ namespace LinqToDB.DataProvider.SqlServer
 		}
 
 		#endregion
+
 		#endregion
 	}
 }

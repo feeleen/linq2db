@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 
 namespace LinqToDB.SqlQuery
@@ -40,9 +39,8 @@ namespace LinqToDB.SqlQuery
 		public ISqlTableSource Source       { get; set; }
 		public SqlTableType    SqlTableType => Source.SqlTableType;
 
-		// TODO: remove internal.
-		internal string? _alias;
-		public   string?  Alias
+		private string? _alias;
+		public  string?  Alias
 		{
 			get
 			{
@@ -60,6 +58,8 @@ namespace LinqToDB.SqlQuery
 			set => _alias = value;
 		}
 
+		internal string? RawAlias => _alias;
+
 		private List<ISqlExpression[]>? _uniqueKeys;
 
 		/// <summary>
@@ -70,6 +70,10 @@ namespace LinqToDB.SqlQuery
 
 		public  bool                    HasUniqueKeys => _uniqueKeys != null && _uniqueKeys.Count > 0;
 
+		public void Modify(ISqlTableSource source)
+		{
+			Source = source;
+		}
 
 		public SqlTableSource? this[ISqlTableSource table] => this[table, null];
 
@@ -89,17 +93,17 @@ namespace LinqToDB.SqlQuery
 			}
 		}
 
-		public List<SqlJoinedTable> Joins { get; } = new List<SqlJoinedTable>();
+		public List<SqlJoinedTable> Joins { get; private set; } = new();
 
-		public void ForEach(Action<SqlTableSource> action, HashSet<SelectQuery> visitedQueries)
+		public void ForEach<TContext>(TContext context, Action<TContext, SqlTableSource> action, HashSet<SelectQuery> visitedQueries)
 		{
 			foreach (var join in Joins)
-				join.Table.ForEach(action, visitedQueries);
+				join.Table.ForEach(context, action, visitedQueries);
 
-			action(this);
+			action(context, this);
 
 			if (Source is SelectQuery query && visitedQueries.Contains(query))
-				query.ForEachTable(action, visitedQueries);
+				query.ForEachTable(context, action, visitedQueries);
 		}
 
 		public IEnumerable<ISqlTableSource> GetTables()
@@ -125,7 +129,7 @@ namespace LinqToDB.SqlQuery
 
 		public override string ToString()
 		{
-			return ((IQueryElement)this).ToString(new StringBuilder(), new Dictionary<IQueryElement,IQueryElement>()).ToString();
+			return this.ToDebugString();
 		}
 
 #endif
@@ -139,26 +143,12 @@ namespace LinqToDB.SqlQuery
 
 		#endregion
 
-		#region ISqlExpressionWalkable Members
-
-		public ISqlExpression Walk(WalkOptions options, Func<ISqlExpression,ISqlExpression> func)
-		{
-			Source = (ISqlTableSource)Source.Walk(options, func)!;
-
-			foreach (var t in Joins)
-				((ISqlExpressionWalkable)t).Walk(options, func);
-
-			return this;
-		}
-
-		#endregion
-
 		#region ISqlTableSource Members
 
 		public int       SourceID => Source.SourceID;
 		public SqlField  All      => Source.All;
 
-		IList<ISqlExpression> ISqlTableSource.GetKeys(bool allIfEmpty)
+		IList<ISqlExpression>? ISqlTableSource.GetKeys(bool allIfEmpty)
 		{
 			return Source.GetKeys(allIfEmpty);
 		}
@@ -167,52 +157,70 @@ namespace LinqToDB.SqlQuery
 
 		#region IQueryElement Members
 
+#if DEBUG
+		public string DebugText => this.ToDebugString();
+#endif
+
 		public QueryElementType ElementType => QueryElementType.TableSource;
 
-		StringBuilder IQueryElement.ToString(StringBuilder sb, Dictionary<IQueryElement,IQueryElement> dic)
+		QueryElementTextWriter IQueryElement.ToString(QueryElementTextWriter writer)
 		{
-			if (dic.ContainsKey(this))
-				return sb.Append("...");
-
-			dic.Add(this, this);
+			if (!writer.AddVisited(this))
+				return writer.Append("...");
 
 			if (Source is SelectQuery)
 			{
-				sb.Append("(\n\t");
-				var len = sb.Length;
-				Source.ToString(sb, dic).Replace("\n", "\n\t", len, sb.Length - len);
-				sb.Append("\n)");
+				writer.AppendLine("(");
+				using (writer.IndentScope())
+					writer.AppendElement(Source);
+				writer.AppendLine();
+				writer.Append(")");
 			}
 			else
-				Source.ToString(sb, dic);
+				writer.AppendElement(Source);
 
-			sb
+			writer
 				.Append(" as t")
-				.Append(SourceID);
+				.Append(SourceID)
+				.Append(" (")
+				.Append(RawAlias ?? "<none>")
+				.Append(")");
 
-			foreach (IQueryElement join in Joins)
+			using (writer.IndentScope())
 			{
-				sb.AppendLine().Append('\t');
-				var len = sb.Length;
-				join.ToString(sb, dic).Replace("\n", "\n\t", len, sb.Length - len);
+				foreach (var join in Joins)
+				{
+					writer.AppendLine();
+					writer.AppendElement(join);
+				}
 			}
 
-			dic.Remove(this);
+			writer.RemoveVisited(this);
 
-			return sb;
+			return writer;
 		}
 
 		#endregion
 
 		#region ISqlExpression Members
 
-		public bool  CanBeNull  => Source.CanBeNull;
+		public bool CanBeNullable(NullabilityContext nullability) => false;
+
 		public int   Precedence => Source.Precedence;
 		public Type? SystemType => Source.SystemType;
 
 		public bool Equals(ISqlExpression other, Func<ISqlExpression,ISqlExpression,bool> comparer)
 		{
 			return this == other;
+		}
+
+		#endregion
+
+		#region Deconstruct
+
+		public void Deconstruct(out ISqlTableSource source)
+		{
+			source = Source;
 		}
 
 		#endregion

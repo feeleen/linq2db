@@ -1,172 +1,95 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace LinqToDB.DataProvider.MySql
+﻿namespace LinqToDB.DataProvider.MySql
 {
-	using Extensions;
-	using LinqToDB.Mapping;
+	using Mapping;
 	using SqlProvider;
 	using SqlQuery;
 
-	class MySqlSqlOptimizer : BasicSqlOptimizer
+	sealed class MySqlSqlOptimizer : BasicSqlOptimizer
 	{
 		public MySqlSqlOptimizer(SqlProviderFlags sqlProviderFlags) : base(sqlProviderFlags)
 		{
 		}
 
-		public override bool CanCompareSearchConditions => true;
-		
-		public override SqlStatement TransformStatement(SqlStatement statement)
+		public override SqlExpressionConvertVisitor CreateConvertVisitor(bool allowModify)
 		{
+			return new MySqlSqlExpressionConvertVisitor(allowModify);
+		}
+
+		public override SqlStatement TransformStatement(SqlStatement statement, DataOptions dataOptions, MappingSchema mappingSchema)
+		{
+			statement = base.TransformStatement(statement, dataOptions, mappingSchema);
+
 			return statement.QueryType switch
 			{
-				QueryType.Update => CorrectMySqlUpdate((SqlUpdateStatement)statement),
+				QueryType.Update => CorrectMySqlUpdate((SqlUpdateStatement)statement, dataOptions, mappingSchema),
+				QueryType.Delete => PrepareDelete     ((SqlDeleteStatement)statement),
 				_                => statement,
 			};
 		}
 
-		private SqlUpdateStatement CorrectMySqlUpdate(SqlUpdateStatement statement)
+		SqlStatement PrepareDelete(SqlDeleteStatement statement)
 		{
-			if (statement.SelectQuery.Select.SkipValue != null)
-				throw new LinqToDBException("MySql does not support Skip in update query");
+			var tables = statement.SelectQuery.From.Tables;
 
-			statement = CorrectUpdateTable(statement);
-
-			if (!statement.SelectQuery.OrderBy.IsEmpty)
-				statement.SelectQuery.OrderBy.Items.Clear();
+			if (tables.Count == 1 && tables[0].Joins.Count == 0
+				&& !statement.SelectQuery.Select.HasSomeModifiers(SqlProviderFlags.IsUpdateSkipTakeSupported, SqlProviderFlags.IsUpdateTakeSupported))
+				tables[0].Alias = "$";
 
 			return statement;
 		}
 
-		public override ISqlExpression ConvertExpressionImpl<TContext>(ISqlExpression expression, ConvertVisitor<TContext> visitor,
-			EvaluationContext context)
+		private SqlUpdateStatement CorrectMySqlUpdate(SqlUpdateStatement statement, DataOptions dataOptions, MappingSchema mappingSchema)
 		{
-			expression = base.ConvertExpressionImpl(expression, visitor, context);
+			if (statement.SelectQuery.Select.SkipValue != null)
+				throw new LinqToDBException(ErrorHelper.MySql.Error_SkipInUpdate);
 
-			if (expression is SqlBinaryExpression be)
+			statement = CorrectUpdateTable(statement, leaveUpdateTableInQuery: true, dataOptions, mappingSchema);
+
+			// Mysql do not allow Update table usage in FROM clause. Moving it to subquery
+			// https://stackoverflow.com/a/14302701/10646316
+			// See UpdateIssue319Regression test
+			var changed = false;
+			statement.SelectQuery.VisitParentFirst(e =>
 			{
-				switch (be.Operation)
+				// Skip root query FROM clause
+				if (ReferenceEquals(e, statement.SelectQuery.From))
 				{
-					case "+":
-						if (be.SystemType == typeof(string))
-						{
-							if (be.Expr1 is SqlFunction func)
-							{
-								if (func.Name == "Concat")
-								{
-									var list = new List<ISqlExpression>(func.Parameters) { be.Expr2 };
-									return new SqlFunction(be.SystemType, "Concat", list.ToArray());
-								}
-							}
-							else if (be.Expr1 is SqlBinaryExpression && be.Expr1.SystemType == typeof(string) && ((SqlBinaryExpression)be.Expr1).Operation == "+")
-							{
-								var list = new List<ISqlExpression> { be.Expr2 };
-								var ex   = be.Expr1;
-
-								while (ex is SqlBinaryExpression && ex.SystemType == typeof(string) && ((SqlBinaryExpression)be.Expr1).Operation == "+")
-								{
-									var bex = (SqlBinaryExpression)ex;
-
-									list.Insert(0, bex.Expr2);
-									ex = bex.Expr1;
-								}
-
-								list.Insert(0, ex);
-
-								return new SqlFunction(be.SystemType, "Concat", list.ToArray());
-							}
-
-							return new SqlFunction(be.SystemType, "Concat", be.Expr1, be.Expr2);
-						}
-
-						break;
-				}
-			}
-			else if (expression is SqlFunction func)
-			{
-				switch (func.Name)
-				{
-					case "Convert" :
-						var ftype = func.SystemType.ToUnderlying();
-
-						if (ftype == typeof(bool))
-						{
-							var ex = AlternativeConvertToBoolean(func, 1);
-							if (ex != null)
-								return ex;
-						}
-
-						if ((ftype == typeof(double) || ftype == typeof(float)) && func.Parameters[1].SystemType!.ToUnderlying() == typeof(decimal))
-							return func.Parameters[1];
-
-						return new SqlExpression(func.SystemType, "Cast({0} as {1})", Precedence.Primary, FloorBeforeConvert(func), func.Parameters[0]);
-				}
-			}
-
-			return expression;
-		}
-
-		public override ISqlPredicate ConvertSearchStringPredicate<TContext>(MappingSchema mappingSchema, SqlPredicate.SearchString predicate,
-			ConvertVisitor<RunOptimizationContext<TContext>> visitor,
-			OptimizationContext optimizationContext)
-		{
-			var caseSensitive = predicate.CaseSensitive.EvaluateBoolExpression(optimizationContext.Context);
-
-			if (caseSensitive == null || caseSensitive == false)
-			{
-				var searchExpr = predicate.Expr2;
-				var dataExpr = predicate.Expr1;
-
-				if (caseSensitive == false)
-				{
-					searchExpr = new SqlFunction(typeof(string), "$ToLower$", searchExpr);
-					dataExpr   = new SqlFunction(typeof(string), "$ToLower$", dataExpr);
+					return false;
 				}
 
-				ISqlPredicate? newPredicate = null;
-				switch (predicate.Kind)
+				if (e is SqlTableSource ts)
 				{
-					case SqlPredicate.SearchString.SearchKind.Contains:
+					if (ts.Source is SqlTable table 
+						&& !ReferenceEquals(table, statement.Update.Table) 
+						&& QueryHelper.IsEqualTables(table, statement.Update.Table))
 					{
-						newPredicate = new SqlPredicate.ExprExpr(
-							new SqlFunction(typeof(int), "LOCATE", searchExpr, dataExpr), SqlPredicate.Operator.Greater,
-							new SqlValue(0), null);
-						break;
+						var subQuery = new SelectQuery
+						{
+							DoNotRemove = true,
+						};
+						subQuery.From.Tables.Add(new SqlTableSource(table, ts.Alias));
+						ts.Source = subQuery;
+						changed = true;
+
+						return false;
 					}
 				}
 
-				if (newPredicate != null)
-				{
-					if (predicate.IsNot)
-					{
-						newPredicate = new SqlSearchCondition(new SqlCondition(true, newPredicate));
-					}
+				return true;
+			});
 
-					return newPredicate;
-				}
+			//if (!statement.SelectQuery.OrderBy.IsEmpty)
+			//	statement.SelectQuery.OrderBy.Items.Clear();
 
-				if (caseSensitive == false)
-				{
-					predicate = new SqlPredicate.SearchString(
-						dataExpr,
-						predicate.IsNot,
-						searchExpr,
-						predicate.Kind,
-						new SqlValue(false));
-				}
-			}
+			CorrectUpdateSetters(statement);
 
-			if (caseSensitive == true)
+			if (changed)
 			{
-				predicate = new SqlPredicate.SearchString(
-					new SqlExpression(typeof(string), $"{{0}} COLLATE utf8_bin", Precedence.Primary, predicate.Expr1),
-					predicate.IsNot,
-					predicate.Expr2,
-					predicate.Kind,
-					new SqlValue(false));
+				var corrector = new SqlQueryColumnNestingCorrector();
+				corrector.CorrectColumnNesting(statement);
 			}
 
-			return ConvertSearchStringPredicateViaLike(mappingSchema, predicate, visitor, optimizationContext);
+			return statement;
 		}
 	}
 }

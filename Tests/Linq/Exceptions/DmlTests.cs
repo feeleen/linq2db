@@ -17,8 +17,7 @@ namespace Tests.Exceptions
 			{
 				db.BeginTransaction();
 
-				Assert.Throws(
-					typeof(LinqException),
+				Assert.Throws<LinqToDBException>(
 					() =>
 						db.Doctor.InsertOrUpdate(
 							() => new Doctor
@@ -41,8 +40,7 @@ namespace Tests.Exceptions
 			{
 				db.BeginTransaction();
 
-				Assert.Throws(
-					typeof(LinqException),
+				Assert.Throws<LinqToDBException>(
 					() =>
 						db.Patient.InsertOrUpdate(
 							() => new Patient

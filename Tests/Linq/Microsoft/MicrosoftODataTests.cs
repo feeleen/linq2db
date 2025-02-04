@@ -1,21 +1,29 @@
-﻿#if NET472
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
 using System.Reflection;
-using System.Web.Http;
-using System.Web.Http.Hosting;
 using LinqToDB;
 using LinqToDB.Expressions;
 using LinqToDB.Mapping;
+using NUnit.Framework;
+
+#if NETFRAMEWORK
+using System.Net.Http;
+using System.Web.Http;
+using System.Web.Http.Hosting;
 using Microsoft.AspNet.OData;
 using Microsoft.AspNet.OData.Builder;
 using Microsoft.AspNet.OData.Extensions;
 using Microsoft.AspNet.OData.Query;
 using Microsoft.AspNet.OData.Routing;
-using NUnit.Framework;
+#else
+using Microsoft.OData.UriParser;
+using Microsoft.OData.ModelBuilder;
+using Microsoft.AspNetCore.OData.Query;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+#endif
 
 namespace Tests.OData.Microsoft
 {
@@ -40,7 +48,7 @@ namespace Tests.OData.Microsoft
 		{
 			var elementType = query.ElementType;
 			var method = _toArray.MakeGenericMethod(elementType);
-			return (ICollection)method.Invoke(null, new object[] { query });
+			return (ICollection)method.Invoke(null, new object[] { query })!;
 		}
 
 		public class ODataQueries
@@ -83,7 +91,7 @@ namespace Tests.OData.Microsoft
 
 		[Test]
 		public void SelectViaOData(
-			[IncludeDataSources(TestProvName.AllSqlServer2005Plus)] string context,
+			[IncludeDataSources(TestProvName.AllSqlServer)] string context,
 			[ValueSource(nameof(ODataQueriesTestCases))] ODataQueries testCase)
 		{
 			var modelBuilder = new ODataModelBuilder();
@@ -101,23 +109,37 @@ namespace Tests.OData.Microsoft
 				var path = new ODataPath();
 				ODataQueryContext queryContext = new ODataQueryContext(model, typeof(PersonClass), path);
 
-				var request = new HttpRequestMessage()
+				var uri = new Uri("http://localhost:15580" + testCase.Query);
+#if NETFRAMEWORK
+				using var request = new HttpRequestMessage()
 				{
 					Method = HttpMethod.Get,
-					RequestUri =
-						new Uri("http://localhost:15580" + testCase.Query)
+					RequestUri = uri
 				};
 
 				var config = new HttpConfiguration();
 				config.EnableDependencyInjection();
 
 				request.Properties.Add(HttpPropertyKeys.HttpConfigurationKey, config);
+#else
+				// https://github.com/OData/AspNetCoreOData/blob/master/test/Microsoft.AspNetCore.OData.Tests/Extensions/RequestFactory.cs#L78
+				var  httpContext    = new DefaultHttpContext();
+				HttpRequest request = httpContext.Request;
 
+				IServiceCollection services = new ServiceCollection();
+				httpContext.RequestServices = services.BuildServiceProvider();
+
+				request.Method      = "GET";
+				request.Scheme      = uri.Scheme;
+				request.Host        = uri.IsDefaultPort ? new HostString(uri.Host) : new HostString(uri.Host, uri.Port);
+				request.QueryString = new QueryString(uri.Query);
+				request.Path        = new PathString(uri.AbsolutePath);
+#endif
 				var options = new ODataQueryOptions(queryContext, request);
 
-				var resultQuery = options.ApplyTo(table);
+				var resultQuery  = options.ApplyTo(table);
 				var materialized = Materialize(resultQuery);
-				Assert.That(materialized.Count, Is.EqualTo(1));
+				Assert.That(materialized, Has.Count.EqualTo(1));
 			}
 		}
 
@@ -152,24 +174,24 @@ namespace Tests.OData.Microsoft
 			public virtual AggregationPropertyContainer Container { get; set; } = null!;
 		}
 
-		class AggregationWrapper : GroupByWrapper
+		sealed class AggregationWrapper : GroupByWrapper
 		{
 		}
 
 		class AggregationPropertyContainer : NamedProperty
 		{
-			public class LastInChain : AggregationPropertyContainer
+			public sealed class LastInChain : AggregationPropertyContainer
 			{
 			}
 		}
 
-		class FlatteningWrapper<T>: GroupByWrapper
+		sealed class FlatteningWrapper<T>: GroupByWrapper
 		{
 			public T Source { get; set; } = default!;
 		}
 
 		[Test]
-		public void SelectPure([IncludeDataSources(ProviderName.SQLiteClassic)] string context)
+		public void SelectPure([IncludeDataSources(ProviderName.SQLiteClassic, TestProvName.AllClickHouse)] string context)
 		{
 			var testData = GenerateTestData();
 			using (var db = GetDataContext(context))
@@ -208,7 +230,7 @@ namespace Tests.OData.Microsoft
 
 				var materialized = query.ToArray();
 
-				Assert.That(materialized.Length, Is.EqualTo(1));
+				Assert.That(materialized, Has.Length.EqualTo(1));
 			}
 		}
 
@@ -257,7 +279,7 @@ namespace Tests.OData.Microsoft
 
 				var materialized = query.ToArray();
 
-				Assert.That(materialized.Length, Is.EqualTo(1));
+				Assert.That(materialized, Has.Length.EqualTo(1));
 			}
 		}
 
@@ -281,6 +303,130 @@ namespace Tests.OData.Microsoft
 			}
 		}
 
+		#region Issue 3757 Data
+		[Test]
+		public void Issue3757Test([DataSources(TestProvName.AllClickHouse)] string context, [Values("", "?$filter=Children/any(c: contains(c/LS, 'de'))")] string queryString)
+		{
+			var modelBuilder = new ODataModelBuilder();
+
+			var level1 = modelBuilder.EntityType<Issue3757Level1>();
+			level1.HasKey(p => p.ID);
+			level1.Property(p => p.ValS);
+			level1.Property(p => p.ValB);
+			level1.Property(p => p.ValInt);
+
+			var level2 = modelBuilder.EntityType<Issue3757Level2>();
+			level2.HasKey(p => p.ID);
+			level2.HasKey(p => p.ParentId);
+			level2.Property(p => p.ValS);
+			level2.Property(p => p.ValB);
+			level2.Property(p => p.ValInt);
+
+			var projection = modelBuilder.ComplexType<Issue3757ODataModel>();
+			projection.Property(p => p.Id);
+			projection.Property(p => p.L1B);
+			projection.Property(p => p.L1S);
+			projection.Property(p => p.L1I);
+			projection.CollectionProperty(p => p.Children);
+
+			var cjildProjection = modelBuilder.ComplexType<Issue3757ODataChild>();
+			cjildProjection.Property(p => p.Id);
+			cjildProjection.Property(p => p.LB);
+			cjildProjection.Property(p => p.LS);
+			cjildProjection.Property(p => p.LI);
+
+			var model = modelBuilder.GetEdmModel();
+
+			using var db = GetDataContext(context);
+			var path = new ODataPath();
+			ODataQueryContext queryContext = new ODataQueryContext(model, typeof(Issue3757ODataModel), path);
+
+			var uri = new Uri($"http://localhost:15580/odata/Issue3757{queryString}");
+#if NETFRAMEWORK
+			using var request = new HttpRequestMessage()
+			{
+				Method = HttpMethod.Get,
+				RequestUri = uri
+			};
+
+			var config = new HttpConfiguration();
+			config.EnableDependencyInjection();
+
+			request.Properties.Add(HttpPropertyKeys.HttpConfigurationKey, config);
+#else
+			// https://github.com/OData/AspNetCoreOData/blob/master/test/Microsoft.AspNetCore.OData.Tests/Extensions/RequestFactory.cs#L78
+			var  httpContext    = new DefaultHttpContext();
+			HttpRequest request = httpContext.Request;
+
+			IServiceCollection services = new ServiceCollection();
+			httpContext.RequestServices = services.BuildServiceProvider();
+
+			request.Method = "GET";
+			request.Scheme = uri.Scheme;
+			request.Host = uri.IsDefaultPort ? new HostString(uri.Host) : new HostString(uri.Host, uri.Port);
+			request.QueryString = new QueryString(uri.Query);
+			request.Path = new PathString(uri.AbsolutePath);
+#endif
+			var options = new ODataQueryOptions(queryContext, request);
+
+			IQueryable resultQuery;
+			using var t1 = db.CreateLocalTable<Issue3757Level1>();
+			using var t2 = db.CreateLocalTable<Issue3757Level2>();
+
+			var query = from l1 in t1
+						select new Issue3757ODataModel
+						{
+							Id = l1.ID,
+							L1B = l1.ValB,
+							L1S = l1.ValS,
+							L1I = l1.ValInt,
+							Children = from l2 in t2
+									   where l1.ID == l2.ParentId
+									   select new Issue3757ODataChild
+									   {
+										   Id = l2.ID,
+										   LB = l2.ValB,
+										   LS = l1.ValS, // #### Important: l1 instead of l2
+										   LI = l2.ValInt
+									   }
+						};
+			resultQuery = options.ApplyTo(query);
+			var materialized = Materialize(resultQuery);
+		}
+
+		[Table]
+		public class Issue3757Level1
+		{
+			[PrimaryKey] public int ID { get; set; }
+			[Column] public string? ValS { get; set; }
+			[Column] public bool? ValB { get; set; }
+			[Column] public int? ValInt { get; set; }
+		}
+		[Table]
+		public class Issue3757Level2
+		{
+			[PrimaryKey] public int ID { get; set; }
+			[Column] public int ParentId { get; set; }
+			[Column] public string? ValS { get; set; }
+			[Column] public bool? ValB { get; set; }
+			[Column] public int? ValInt { get; set; }
+		}
+
+		public class Issue3757ODataModel
+		{
+			public int Id { get; set; }
+			public string? L1S { get; set; }
+			public bool? L1B { get; set; }
+			public int? L1I { get; set; }
+			public IEnumerable<Issue3757ODataChild> Children { get; set; } = null!;
+		}
+		public class Issue3757ODataChild
+		{
+			public int Id { get; set; }
+			public string? LS { get; set; }
+			public bool? LB { get; set; }
+			public int? LI { get; set; }
+		}
+		#endregion
 	}
 }
-#endif

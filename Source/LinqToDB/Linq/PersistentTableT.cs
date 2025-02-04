@@ -6,11 +6,9 @@ using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-using LinqToDB.Async;
-
 namespace LinqToDB.Linq
 {
-	class PersistentTable<T> : ITable<T>
+	sealed class PersistentTable<T> : ITable<T>
 		where T : notnull
 	{
 		private readonly IQueryable<T> _query;
@@ -31,16 +29,11 @@ namespace LinqToDB.Linq
 		}
 
 		public Expression Expression => _query.Expression;
-		Expression IExpressionQuery<T>.Expression
-		{
-			get => _query.Expression;
-			set => throw new NotImplementedException();
-		}
 
-		public string         SqlText     { get; } = null!;
-		public IDataContext   DataContext => null!;
-		public Type           ElementType => _query.ElementType;
-		public IQueryProvider Provider    => _query.Provider;
+		IReadOnlyList<QuerySql> IExpressionQuery.GetSqlQueries(SqlGenerationOptions? options) => Array.Empty<QuerySql>();
+		public IDataContext   DataContext                                                     => null!;
+		public Type           ElementType                                                     => _query.ElementType;
+		public IQueryProvider Provider                                                        => _query.Provider;
 
 		public IQueryable CreateQuery(Expression expression)
 		{
@@ -52,7 +45,7 @@ namespace LinqToDB.Linq
 			return _query.Provider.CreateQuery<TElement>(expression);
 		}
 
-		public object Execute(Expression expression)
+		public object? Execute(Expression expression)
 		{
 			return _query.Provider.Execute(expression);
 		}
@@ -79,10 +72,6 @@ namespace LinqToDB.Linq
 		public string       TableName    { get; } = null!;
 		public string?      ServerName   { get; }
 		public TableOptions TableOptions { get; }
-
-		public string GetTableName()
-		{
-			return null!;
-		}
+		public string?      TableID      { get; }
 	}
 }

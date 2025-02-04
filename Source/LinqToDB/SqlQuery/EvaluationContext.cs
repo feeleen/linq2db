@@ -7,21 +7,8 @@ namespace LinqToDB.SqlQuery
 
 	public class EvaluationContext
 	{
-		public class EvaluationInfo
-		{
-			public EvaluationInfo(bool isEvaluated, object? value, string? errorMessage)
-			{
-				IsEvaluated  = isEvaluated;
-				Value        = value;
-				ErrorMessage = errorMessage;
-			}
-
-			public bool    IsEvaluated  { get; }
-			public object? Value        { get; }
-			public string? ErrorMessage { get; }
-		}
-
-		private Dictionary<IQueryElement, EvaluationInfo>? _evaluationCache;
+		private Dictionary<IQueryElement, (object? value, bool success)>? _clientEvaluationCache;
+		private Dictionary<IQueryElement, (object? value, bool success)>? _serverEvaluationCache;
 
 		public EvaluationContext(IReadOnlyParameterValues? parameterValues = null)
 		{
@@ -30,22 +17,53 @@ namespace LinqToDB.SqlQuery
 
 		public IReadOnlyParameterValues? ParameterValues { get; }
 
-		public bool TryGetValue(IQueryElement expr, [NotNullWhen(true)] out EvaluationInfo? info)
+		public bool IsParametersInitialized => ParameterValues != null;
+
+		internal bool TryGetValue(IQueryElement expr, bool forServer, [NotNullWhen(true)] out (object? value, bool success)? info)
 		{
-			if (_evaluationCache == null)
+			var chache = forServer ? _serverEvaluationCache : _clientEvaluationCache;
+			if (chache == null)
 			{
 				info = null;
 				return false;
 			}
 
-			return _evaluationCache.TryGetValue(expr, out info);
+			if (chache.TryGetValue(expr, out var infoValue))
+			{
+				info = infoValue;
+				return true;
+			}
+
+			info = null;
+			return false;
 		}
 
-		public void Register(IQueryElement expr, EvaluationInfo info)
+		public void Register(IQueryElement expr, bool forServer, object? value)
 		{
-			_evaluationCache ??= new Dictionary<IQueryElement, EvaluationInfo>(Utils.ObjectReferenceEqualityComparer<IQueryElement>.Default);
-			_evaluationCache.Add(expr, info);
+			if (forServer)
+			{
+				_serverEvaluationCache ??= new(Utils.ObjectReferenceEqualityComparer<IQueryElement>.Default);
+				_serverEvaluationCache.Add(expr, (value, true));
+			}
+			else
+			{
+				_clientEvaluationCache ??= new(Utils.ObjectReferenceEqualityComparer<IQueryElement>.Default);
+				_clientEvaluationCache.Add(expr, (value, true));
+			}
 		}
 
+		public void RegisterError(IQueryElement expr, bool forServer)
+		{
+			if (forServer)
+			{
+				_serverEvaluationCache ??= new(Utils.ObjectReferenceEqualityComparer<IQueryElement>.Default);
+				_serverEvaluationCache.Add(expr, (null, false));
+			}
+			else
+			{
+				_clientEvaluationCache ??= new(Utils.ObjectReferenceEqualityComparer<IQueryElement>.Default);
+				_clientEvaluationCache.Add(expr, (null, false));
+			}
+		}
 	}
 }

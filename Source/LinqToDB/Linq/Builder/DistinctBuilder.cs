@@ -1,48 +1,96 @@
 ﻿using System.Linq.Expressions;
+using System.Reflection;
 
 namespace LinqToDB.Linq.Builder
 {
-	using Reflection;
 	using LinqToDB.Expressions;
-	using System.Reflection;
+	using Reflection;
 
-	class DistinctBuilder : MethodCallBuilder
+	[BuildsMethodCall("Distinct", nameof(LinqExtensions.SelectDistinct))]
+	sealed class DistinctBuilder : MethodCallBuilder
 	{
 		static readonly MethodInfo[] _supportedMethods = { Methods.Queryable.Distinct, Methods.Enumerable.Distinct, Methods.LinqToDB.SelectDistinct };
 
-		protected override bool CanBuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
-		{
-			return methodCall.IsSameGenericMethod(_supportedMethods);
-		}
+		public static bool CanBuildMethod(MethodCallExpression call, BuildInfo info, ExpressionBuilder builder)
+			=> call.IsSameGenericMethod(_supportedMethods);
 
-		protected override IBuildContext BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
+		protected override BuildSequenceResult BuildMethodCall(ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo)
 		{
-			var sequence = builder.BuildSequence(new BuildInfo(buildInfo, methodCall.Arguments[0]));
+			var buildResult = builder.TryBuildSequence(new BuildInfo(buildInfo, methodCall.Arguments[0]));
+			if (buildResult.BuildContext == null)
+				return buildResult;
+			var sequence = buildResult.BuildContext;
+
 			var sql      = sequence.SelectQuery;
-
 			if (sql.Select.TakeValue != null || sql.Select.SkipValue != null)
+			{
 				sequence = new SubQueryContext(sequence);
+			}
 
-			sequence.SelectQuery.Select.IsDistinct = true;
+			var subQueryContext = new SubQueryContext(sequence);
+
+			subQueryContext.SelectQuery.Select.IsDistinct = true;
+
+			var outerSubqueryContext = new SubQueryContext(subQueryContext);
 
 			// We do not need all fields for SelectDistinct
 			//
 			if (methodCall.IsSameGenericMethod(Methods.LinqToDB.SelectDistinct))
 			{
-				sequence.SelectQuery.Select.OptimizeDistinct = true;
+				subQueryContext.SelectQuery.Select.OptimizeDistinct = true;
 			}
 			else
 			{
-				sequence.ConvertToIndex(null, 0, ConvertFlags.All);
+				// create all columns
+				var sqlExpr = builder.BuildSqlExpression(
+					outerSubqueryContext,
+					new ContextRefExpression(
+						methodCall.Method.GetGenericArguments()[0],
+						subQueryContext
+					)
+				);
+
+				SequenceHelper.EnsureNoErrors(sqlExpr);
+				sqlExpr = builder.UpdateNesting(outerSubqueryContext, sqlExpr);
 			}
 
-			return sequence;
+			return BuildSequenceResult.FromContext(new DistinctContext(outerSubqueryContext));
 		}
 
-		protected override SequenceConvertInfo? Convert(
-			ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo, ParameterExpression? param)
+		class DistinctContext : PassThroughContext
 		{
-			return null;
+			public DistinctContext(IBuildContext context) : base(context)
+			{
+			}
+
+			public override Expression MakeExpression(Expression path, ProjectFlags flags)
+			{
+				if (SequenceHelper.IsSameContext(path, this) && (flags.IsRoot() || flags.IsAssociationRoot()))
+					return path;
+
+				var corrected = SequenceHelper.CorrectExpression(path, this, Context);
+
+				if (flags.IsTable() || flags.IsTraverse() || flags.IsSubquery())
+					return corrected;
+
+				Expression result;
+				if (flags.IsSql() || flags.IsExpression())
+				{
+					result = Builder.BuildSqlExpression(Context, corrected);
+					result = Builder.UpdateNesting(Context, result);
+				}
+				else
+				{
+					result = Builder.BuildExpression(Context, corrected);
+				}
+
+				return result;
+			}
+
+			public override IBuildContext Clone(CloningContext context)
+			{
+				return new DistinctContext(context.CloneContext(Context));
+			}
 		}
 	}
 }

@@ -5,7 +5,7 @@
 // </auto-generated>
 //---------------------------------------------------------------------------------------------------
 
-#pragma warning disable 1591
+#pragma warning disable 1573, 1591
 #nullable enable
 
 using System;
@@ -14,9 +14,9 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Xml.Serialization;
 
-using Tests.T4.Model;
+using Tests.T4.Models;
 
-namespace Tests.T4.Model
+namespace Tests.T4.Models
 {
 	[CustomValidation(typeof(TestClass1.CustomValidator), "ValidateEditableString1")]
 	[CustomValidation(typeof(TestClass1.CustomValidator), "ValidateEditableString2")]
@@ -923,7 +923,7 @@ namespace Tests.T4.Model
 				{
 					foreach (var result in list)
 						foreach (var name in result.MemberNames)
-							obj.AddError(name, result.ErrorMessage);
+							obj.AddError(name, result.ErrorMessage ?? "");
 
 					return list[0];
 				}
@@ -947,7 +947,7 @@ namespace Tests.T4.Model
 				{
 					foreach (var result in list)
 						foreach (var name in result.MemberNames)
-							obj.AddError(name, result.ErrorMessage);
+							obj.AddError(name, result.ErrorMessage ?? "");
 
 					return list[0];
 				}
@@ -971,7 +971,7 @@ namespace Tests.T4.Model
 				{
 					foreach (var result in list)
 						foreach (var name in result.MemberNames)
-							obj.AddError(name, result.ErrorMessage);
+							obj.AddError(name, result.ErrorMessage ?? "");
 
 					return list[0];
 				}
@@ -995,7 +995,7 @@ namespace Tests.T4.Model
 				{
 					foreach (var result in list)
 						foreach (var name in result.MemberNames)
-							obj.AddError(name, result.ErrorMessage);
+							obj.AddError(name, result.ErrorMessage ?? "");
 
 					return list[0];
 				}
@@ -1046,5 +1046,3 @@ namespace Tests.T4.Model
 #endif
 	}
 }
-
-#pragma warning restore 1591

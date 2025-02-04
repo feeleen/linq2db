@@ -10,30 +10,34 @@ namespace LinqToDB.SchemaProvider
 		/// <summary>
 		/// When set to true, will prefer generation of provider-specific types instead of general types.
 		/// </summary>
-		public bool PreferProviderSpecificTypes;
+		public bool     PreferProviderSpecificTypes;
 
 		/// <summary>
 		/// Enable or disable read of table schema. Default - enabled (<c>true</c>).
 		/// </summary>
-		public bool     GetTables               = true;
+		public bool     GetTables      = true;
 		/// <summary>
 		/// Enable or disable read of foreign keys. Default - enabled (<c>true</c>).
 		/// Disabe could be useful at least for Access, as it could <a href="https://github.com/linq2db/linq2db.LINQPad/issues/23">crash</a> on some database files.
 		/// </summary>
-		public bool     GetForeignKeys          = true;
+		public bool     GetForeignKeys = true;
 		/// <summary>
 		/// Enable or disable read of procedures and functions metadata. Default - enabled (<c>true</c>).
 		/// </summary>
-		public bool     GetProcedures           = true;
+		public bool     GetProcedures  = true;
 		/// <summary>
 		/// Should linq2db use <see cref="string"/> for char(1) type or <see cref="char"/>. Default type: <see cref="char"/> (<c>false</c>).
 		/// </summary>
 		public bool     GenerateChar1AsString;
+		/// <summary>
+		/// Only for SQL Server. Doesn't return history table schema for temporal tables.
+		/// </summary>
+		public bool     IgnoreSystemHistoryTables;
 
 		/// <summary>
 		/// Default Schema name.
 		/// </summary>
-		public string? DefaultSchema;
+		public string?  DefaultSchema;
 
 		/// <summary>
 		/// List of allowed schemas/owners.

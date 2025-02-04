@@ -1,5 +1,6 @@
-using System;
-using System.Runtime.Serialization;
+﻿using System;
+using System.ComponentModel;
+using System.Globalization;
 
 namespace LinqToDB.Linq
 {
@@ -10,6 +11,8 @@ namespace LinqToDB.Linq
 	/// This class is the base class for exceptions that may occur during
 	/// execution of the namespace members.
 	/// </remarks>
+	// TODO: Remove in v7
+	[Obsolete($"This exception type is not used anymore. Please update your code to handle {nameof(LinqToDBException)}."), EditorBrowsable(EditorBrowsableState.Never)]
 	[Serializable]
 	public class LinqException : Exception
 	{
@@ -32,11 +35,22 @@ namespace LinqToDB.Linq
 		/// with the specified error message.
 		/// </summary>
 		/// <param name="message">The message to display to the client when the exception is thrown.</param>
+		/// <seealso cref="Exception.Message"/>
+		public LinqException(string message)
+			: base(message)
+		{
+		}
+
+		/// <summary>
+		/// Initializes a new instance of the <see cref="LinqException"/> class
+		/// with the specified error message.
+		/// </summary>
+		/// <param name="message">The message to display to the client when the exception is thrown.</param>
 		/// <param name="args">An <see cref="System.Object"/> array containing zero or more objects to format.</param>
 		/// <seealso cref="Exception.Message"/>
 		[JetBrains.Annotations.StringFormatMethod("message")]
 		public LinqException(string message, params object?[] args)
-			: base(string.Format(message, args))
+			: base(string.Format(CultureInfo.InvariantCulture, message, args))
 		{
 		}
 
@@ -63,21 +77,5 @@ namespace LinqToDB.Linq
 			: base(innerException.Message, innerException)
 		{
 		}
-
-		/// <summary>
-		/// Initializes a new instance of the <see cref="LinqException"/> class
-		/// with serialized data.
-		/// </summary>
-		/// <param name="info">The object that holds the serialized object data.</param>
-		/// <param name="context">The contextual information about the source or destination.</param>
-		/// <remarks>
-		/// This constructor is called during deserialization to
-		/// reconstitute the exception object transmitted over a stream.
-		/// </remarks>
-		protected LinqException(SerializationInfo info, StreamingContext context)
-			: base(info, context)
-		{
-		}
 	}
 }
-
